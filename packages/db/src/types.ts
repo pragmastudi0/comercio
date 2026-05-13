@@ -1,0 +1,280 @@
+// Tipos de dominio. Estos deben coincidir con el schema Supabase del día 4.
+// Si modelamos algo distinto en los mocks, ajustar el SQL antes de aplicar migraciones.
+
+import type { PermisosConfig } from '@comercio/business/permisos';
+
+export type ID = string;
+export type ISODate = string;
+
+export type Empresa = {
+  id: ID;
+  nombre: string;
+  cuit?: string;
+  direccion?: string;
+  telefono?: string;
+  email?: string;
+};
+
+export type Local = {
+  id: ID;
+  empresa_id: ID;
+  nombre: string;
+  direccion?: string;
+  activo: boolean;
+};
+
+export type TipoDeposito = 'central' | 'local' | 'web';
+
+export type Deposito = {
+  id: ID;
+  empresa_id: ID;
+  nombre: string;
+  tipo: TipoDeposito;
+  local_id?: ID; // si tipo='local', a qué local pertenece
+  activo: boolean;
+};
+
+export type Caja = {
+  id: ID;
+  local_id: ID;
+  nombre: string;
+  activa: boolean;
+};
+
+export type Rol = {
+  id: ID;
+  nombre: string;
+  preset: boolean; // si es un rol de sistema (Admin/Encargado/Cajero/Catálogo)
+  permisos: PermisosConfig;
+};
+
+export type Empleado = {
+  id: ID;
+  empresa_id: ID;
+  nombre: string;
+  apellido: string;
+  email: string;
+  rol_id: ID;
+  local_id?: ID;
+  deposito_id?: ID;
+  permisos_override?: PermisosConfig;
+  activo: boolean;
+  creado_en: ISODate;
+};
+
+export type Categoria = {
+  id: ID;
+  nombre: string;
+  parent_id?: ID;
+  // Atributos dinámicos: clave -> tipo (string|number|boolean|enum) — definidos por categoría.
+  atributos?: Record<string, { tipo: 'string' | 'number' | 'boolean' | 'enum'; opciones?: string[] }>;
+};
+
+export type Proveedor = {
+  id: ID;
+  nombre: string;
+  cuit?: string;
+  telefono?: string;
+  email?: string;
+  contacto?: string;
+  activo: boolean;
+};
+
+export type EscalaPrecio = {
+  desde: number;
+  precio: number;
+};
+
+export type ListaPrecio = {
+  id: ID;
+  nombre: string;
+  default: boolean;
+  activa: boolean;
+};
+
+export type ProductoListaPrecio = {
+  producto_id: ID;
+  lista_precio_id: ID;
+  escalas: EscalaPrecio[]; // si solo hay una escala con desde=1, es precio plano
+};
+
+export type ProductoImagen = {
+  id: ID;
+  producto_id: ID;
+  url: string;
+  orden: number;
+};
+
+export type Producto = {
+  id: ID;
+  codigo_interno: string; // 4-5 dígitos, único por empresa
+  nombre: string;
+  descripcion?: string;
+  descripcion_larga?: string;
+  categoria_id: ID;
+  proveedor_id?: ID;
+  costo: number;
+  // Atributos dinámicos según la categoría
+  atributos?: Record<string, string | number | boolean>;
+  publicado_web: boolean;
+  activo: boolean;
+  creado_en: ISODate;
+};
+
+export type Variante = {
+  id: ID;
+  producto_id: ID;
+  // Combinación de atributos que define la variante (ej: {color:'rojo', talle:'M'})
+  atributos: Record<string, string>;
+  codigo_interno?: string; // opcional, override
+};
+
+export type StockItem = {
+  producto_id: ID;
+  variante_id?: ID;
+  deposito_id: ID;
+  cantidad: number;
+  minimo?: number;
+};
+
+export type MovimientoStock = {
+  id: ID;
+  producto_id: ID;
+  variante_id?: ID;
+  deposito_id: ID;
+  tipo: 'venta' | 'devolucion' | 'ajuste' | 'merma' | 'transferencia_salida' | 'transferencia_entrada';
+  cantidad: number; // siempre positiva; el tipo determina el signo
+  motivo?: string;
+  referencia_id?: ID; // venta_id, transferencia_id, etc.
+  empleado_id: ID;
+  fecha: ISODate;
+};
+
+export type Transferencia = {
+  id: ID;
+  deposito_origen_id: ID;
+  deposito_destino_id: ID;
+  estado: 'borrador' | 'emitida' | 'recibida' | 'anulada';
+  items: { producto_id: ID; variante_id?: ID; cantidad: number }[];
+  emitida_por?: ID;
+  recibida_por?: ID;
+  emitida_en?: ISODate;
+  recibida_en?: ISODate;
+  creada_en: ISODate;
+};
+
+export type Cliente = {
+  id: ID;
+  nombre: string;
+  apellido: string;
+  dni?: string;
+  cuit?: string;
+  direccion?: string;
+  codigo_postal?: string;
+  telefono?: string;
+  email?: string;
+  lista_precio_id: ID;
+  limite_credito?: number;
+  saldo: number; // positivo = nos debe, negativo = saldo a favor
+  suspendido: boolean;
+  activo: boolean;
+  creado_en: ISODate;
+};
+
+export type MovimientoCtaCte = {
+  id: ID;
+  cliente_id: ID;
+  tipo: 'cargo' | 'pago' | 'condonacion' | 'ajuste';
+  monto: number;
+  metodo_pago?: string; // si es un pago
+  venta_id?: ID;
+  fecha: ISODate;
+  empleado_id: ID;
+  nota?: string;
+};
+
+export type MetodoPago = 'efectivo' | 'transferencia' | 'debito' | 'credito' | 'qr' | 'cta_cte';
+
+export type ItemVenta = {
+  producto_id: ID;
+  variante_id?: ID;
+  cantidad: number;
+  precio_unitario: number;
+  descuento_pct?: number;
+  subtotal: number;
+};
+
+export type PagoVenta = {
+  metodo: MetodoPago;
+  monto: number;
+  cuotas?: number; // si crédito
+  recargo_pct?: number;
+};
+
+export type Venta = {
+  id: ID;
+  numero: string;
+  caja_id: ID;
+  sesion_caja_id: ID;
+  local_id: ID;
+  deposito_id: ID;
+  empleado_id: ID;
+  cliente_id?: ID; // null = consumidor final sin identificar
+  items: ItemVenta[];
+  pagos: PagoVenta[];
+  subtotal: number;
+  descuento_total: number;
+  recargo_total: number;
+  total: number;
+  estado: 'completada' | 'anulada' | 'presupuesto';
+  anulada_por?: ID;
+  anulada_en?: ISODate;
+  motivo_anulacion?: string;
+  fecha: ISODate;
+};
+
+export type SesionCaja = {
+  id: ID;
+  caja_id: ID;
+  empleado_id: ID;
+  saldo_inicial: number;
+  saldo_final_declarado?: number;
+  abierta_en: ISODate;
+  cerrada_en?: ISODate;
+  estado: 'abierta' | 'cerrada';
+};
+
+export type MovimientoCaja = {
+  id: ID;
+  sesion_caja_id: ID;
+  tipo: 'venta' | 'ingreso' | 'egreso' | 'retiro' | 'anulacion';
+  metodo: MetodoPago;
+  monto: number;
+  motivo?: string;
+  venta_id?: ID;
+  empleado_id: ID;
+  fecha: ISODate;
+};
+
+export type CuotaRecargo = {
+  cuotas: number;
+  recargo_pct: number;
+};
+
+export type ConfiguracionEmpresa = {
+  empresa_id: ID;
+  descuento_efectivo_pct: number;
+  cuotas: CuotaRecargo[];
+  validez_presupuesto_dias: number;
+  permitir_venta_sin_stock_default: boolean;
+};
+
+export type LogAuditoria = {
+  id: ID;
+  empleado_id: ID;
+  accion: string; // 'cambio_permisos' | 'creacion_empleado' | etc.
+  entidad: string;
+  entidad_id?: ID;
+  detalle?: Record<string, unknown>;
+  fecha: ISODate;
+};
