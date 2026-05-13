@@ -42,7 +42,6 @@ export function Login() {
     <main className="container mx-auto max-w-md px-4 py-16">
       <div className="mb-8 text-center">
         <h1 className="text-4xl font-bold tracking-tight">{BRAND.nombreCorto}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{BRAND.tagline}</p>
       </div>
 
       <Card>

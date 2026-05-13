@@ -4,30 +4,35 @@ import type { Producto } from '@comercio/db';
 export type ItemCarrito = {
   producto: Producto;
   cantidad: number;
-  precio_unitario: number; // editable inline
-  precio_base: number; // precio original sin modificar
+  precio_unitario: number;
+  precio_base: number;
   descuento_pct?: number;
 };
+
+export type ModoDescuento = 'pct' | 'monto';
 
 type VentaState = {
   items: ItemCarrito[];
   clienteId: string | null;
-  descuentoGlobalPct: number; // descuento aplicado sobre el subtotal
+  descuentoModo: ModoDescuento;
+  descuentoValor: number;
   motivoDescuento?: string;
   agregar: (producto: Producto, precio: number) => void;
   setCantidad: (productoId: string, cantidad: number) => void;
   setPrecio: (productoId: string, precio: number) => void;
-  setDescuento: (productoId: string, pct: number | undefined) => void;
+  setDescuentoLinea: (productoId: string, pct: number | undefined) => void;
   quitar: (productoId: string) => void;
   setCliente: (id: string | null) => void;
-  setDescuentoGlobal: (pct: number, motivo?: string) => void;
+  setDescuento: (modo: ModoDescuento, valor: number, motivo?: string) => void;
+  limpiarDescuento: () => void;
   limpiar: () => void;
 };
 
 export const useVenta = create<VentaState>((set) => ({
   items: [],
   clienteId: null,
-  descuentoGlobalPct: 0,
+  descuentoModo: 'pct',
+  descuentoValor: 0,
   motivoDescuento: undefined,
   agregar: (producto, precio) =>
     set((state) => {
@@ -58,7 +63,7 @@ export const useVenta = create<VentaState>((set) => ({
         i.producto.id === productoId ? { ...i, precio_unitario: precio } : i,
       ),
     })),
-  setDescuento: (productoId, pct) =>
+  setDescuentoLinea: (productoId, pct) =>
     set((state) => ({
       items: state.items.map((i) =>
         i.producto.id === productoId ? { ...i, descuento_pct: pct } : i,
@@ -67,10 +72,17 @@ export const useVenta = create<VentaState>((set) => ({
   quitar: (productoId) =>
     set((state) => ({ items: state.items.filter((i) => i.producto.id !== productoId) })),
   setCliente: (id) => set({ clienteId: id }),
-  setDescuentoGlobal: (pct, motivo) =>
-    set({ descuentoGlobalPct: Math.max(0, Math.min(100, pct)), motivoDescuento: motivo }),
+  setDescuento: (modo, valor, motivo) =>
+    set({ descuentoModo: modo, descuentoValor: Math.max(0, valor), motivoDescuento: motivo }),
+  limpiarDescuento: () => set({ descuentoValor: 0, motivoDescuento: undefined }),
   limpiar: () =>
-    set({ items: [], clienteId: null, descuentoGlobalPct: 0, motivoDescuento: undefined }),
+    set({
+      items: [],
+      clienteId: null,
+      descuentoModo: 'pct',
+      descuentoValor: 0,
+      motivoDescuento: undefined,
+    }),
 }));
 
 export function calcularSubtotal(items: ItemCarrito[]): number {
@@ -81,11 +93,21 @@ export function calcularSubtotal(items: ItemCarrito[]): number {
   }, 0);
 }
 
-export function calcularDescuentoGlobal(subtotal: number, descuentoGlobalPct: number): number {
-  return subtotal * (descuentoGlobalPct / 100);
+export function calcularDescuentoGlobal(
+  subtotal: number,
+  modo: ModoDescuento,
+  valor: number,
+): number {
+  if (valor <= 0) return 0;
+  if (modo === 'pct') return subtotal * (Math.min(100, valor) / 100);
+  return Math.min(subtotal, valor);
 }
 
-export function calcularBaseVenta(items: ItemCarrito[], descuentoGlobalPct: number): number {
+export function calcularBaseVenta(
+  items: ItemCarrito[],
+  modo: ModoDescuento,
+  valor: number,
+): number {
   const subtotal = calcularSubtotal(items);
-  return subtotal - calcularDescuentoGlobal(subtotal, descuentoGlobalPct);
+  return subtotal - calcularDescuentoGlobal(subtotal, modo, valor);
 }

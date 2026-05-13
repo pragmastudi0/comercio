@@ -50,18 +50,19 @@ export function ModalCobro({
   const sesion = useSesion((s) => s.sesionCaja);
   const items = useVenta((s) => s.items);
   const clienteId = useVenta((s) => s.clienteId);
-  const descuentoGlobalPct = useVenta((s) => s.descuentoGlobalPct);
+  const descuentoModo = useVenta((s) => s.descuentoModo);
+  const descuentoValor = useVenta((s) => s.descuentoValor);
   const motivoDescuento = useVenta((s) => s.motivoDescuento);
   const limpiar = useVenta((s) => s.limpiar);
 
   const subtotal = useMemo(() => calcularSubtotal(items), [items]);
   const descuentoGlobal = useMemo(
-    () => calcularDescuentoGlobal(subtotal, descuentoGlobalPct),
-    [subtotal, descuentoGlobalPct],
+    () => calcularDescuentoGlobal(subtotal, descuentoModo, descuentoValor),
+    [subtotal, descuentoModo, descuentoValor],
   );
   const baseACubrir = useMemo(
-    () => calcularBaseVenta(items, descuentoGlobalPct),
-    [items, descuentoGlobalPct],
+    () => calcularBaseVenta(items, descuentoModo, descuentoValor),
+    [items, descuentoModo, descuentoValor],
   );
 
   const [pagos, setPagos] = useState<PagoVenta[]>([]);
@@ -217,14 +218,15 @@ export function ModalCobro({
       });
 
       // Si hubo descuento global, registrar auditoría
-      if (descuentoGlobalPct > 0) {
+      if (descuentoValor > 0) {
         await db.auditoria.log({
           empleado_id: empleado.id,
           accion: 'descuento_manual',
           entidad: 'venta',
           entidad_id: venta.id,
           detalle: {
-            pct: descuentoGlobalPct,
+            modo: descuentoModo,
+            valor: descuentoValor,
             monto: descuentoGlobal,
             motivo: motivoDescuento ?? null,
           },
@@ -256,10 +258,13 @@ export function ModalCobro({
             <div className="text-xs uppercase text-muted-foreground">Subtotal</div>
             <div className="text-lg tabular-nums">{formatCurrency(subtotal)}</div>
           </div>
-          {descuentoGlobalPct > 0 && (
+          {descuentoValor > 0 && (
             <div>
               <div className="text-xs uppercase text-green-700">
-                Descuento {descuentoGlobalPct}%
+                Descuento{' '}
+                {descuentoModo === 'pct'
+                  ? `${descuentoValor}%`
+                  : formatCurrency(descuentoValor)}
                 {motivoDescuento ? ` · ${motivoDescuento}` : ''}
               </div>
               <div className="text-lg tabular-nums text-green-700">

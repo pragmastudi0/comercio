@@ -12,7 +12,7 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
   const empleado = useSesion((s) => s.empleado);
   const setCantidad = useVenta((s) => s.setCantidad);
   const setPrecio = useVenta((s) => s.setPrecio);
-  const setDescuento = useVenta((s) => s.setDescuento);
+  const setDescuento = useVenta((s) => s.setDescuentoLinea);
   const quitar = useVenta((s) => s.quitar);
 
   const depositoId = empleado?.deposito_id ?? 'dep_central';

@@ -11,6 +11,7 @@ import { Carrito } from '@/components/Carrito';
 import { ResumenVenta } from '@/components/ResumenVenta';
 import { ModalCobro } from '@/components/ModalCobro';
 import { ModalCliente } from '@/components/ModalCliente';
+import { VentasDelDia } from '@/components/VentasDelDia';
 import { SHORTCUTS, SHORTCUT_LABELS } from '@/lib/shortcuts';
 import { Button } from '@comercio/ui/button';
 import type { MetodoPago } from '@comercio/db';
@@ -68,9 +69,7 @@ export function Caja() {
       <header className="border-b">
         <div className="flex h-12 items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <span className="text-sm font-bold tracking-tight">
-              {BRAND.nombreCorto}
-            </span>
+            <span className="text-sm font-bold tracking-tight">{BRAND.nombreCorto}</span>
             <span className="text-xs text-muted-foreground">· {caja.nombre}</span>
             <span className="text-xs text-muted-foreground">
               · {empleado.nombre} {empleado.apellido}
@@ -97,7 +96,7 @@ export function Caja() {
         </div>
       </header>
 
-      <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_360px]">
+      <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_340px] lg:grid-cols-[1fr_340px_260px]">
         <div className="flex flex-col overflow-hidden">
           <div className="border-b p-4">
             <BuscadorProducto />
@@ -106,27 +105,27 @@ export function Caja() {
             <Carrito />
           </div>
           <div className="border-t bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
-            <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <span>
-                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.nuevaVenta}</kbd> Nueva venta
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">
+                  {SHORTCUT_LABELS.nuevaVenta}
+                </kbd>{' '}
+                Nueva venta
               </span>
               <span>
-                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.buscarCliente}</kbd> Cliente
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">
+                  {SHORTCUT_LABELS.buscarCliente}
+                </kbd>{' '}
+                Cliente
               </span>
               <span>
-                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.cobrarEfectivo}</kbd> Efectivo
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">
+                  {SHORTCUT_LABELS.cancelar}
+                </kbd>{' '}
+                Cancelar
               </span>
-              <span>
-                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.cobrarTarjeta}</kbd> Tarjeta
-              </span>
-              <span>
-                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.cobrarQR}</kbd> QR
-              </span>
-              <span>
-                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.cobrarCtaCte}</kbd> Cta cte
-              </span>
-              <span>
-                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.cancelar}</kbd> Cancelar
+              <span className="text-muted-foreground/70">
+                Cobro: F5 Efectivo · F6 Tarjeta · F7 QR · F8 Cta cte
               </span>
             </div>
           </div>
@@ -134,10 +133,14 @@ export function Caja() {
 
         <aside className="border-l">
           <ResumenVenta
-            onCobrar={() => abrirCobro()}
+            onCobrar={(m) => abrirCobro(m)}
             onBuscarCliente={() => setModalCliente(true)}
             onCancelar={cancelarVenta}
           />
+        </aside>
+
+        <aside className="hidden border-l lg:block">
+          <VentasDelDia />
         </aside>
       </div>
 

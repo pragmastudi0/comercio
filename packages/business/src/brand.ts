@@ -3,5 +3,5 @@
 export const BRAND = {
   nombreCorto: '#turisteando',
   nombreCompleto: '#turisteando',
-  tagline: 'Estación Terminal de Ómnibus · Córdoba',
+  tagline: '',
 };

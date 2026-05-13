@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ScrollText } from 'lucide-react';
+import { ScrollText, Receipt } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { formatCurrency } from '@comercio/ui/utils';
@@ -21,41 +21,65 @@ export function VentasDelDia() {
           })
         : Promise.resolve([]),
     enabled: !!sesion,
-    refetchInterval: 5000, // re-fetch cada 5s para reflejar nuevas ventas
+    refetchInterval: 5000,
   });
 
-  const ventas = (ventasQ.data ?? []).slice().reverse().slice(0, 10);
+  const ventas = (ventasQ.data ?? []).slice().reverse();
   const totalDia = (ventasQ.data ?? []).reduce((acc, v) => acc + v.total, 0);
   const cantidad = (ventasQ.data ?? []).length;
 
   return (
-    <div className="border-t bg-muted/20 p-3 text-xs">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-1 font-medium text-muted-foreground">
+    <div className="flex h-full flex-col bg-muted/20">
+      <div className="border-b bg-background p-4">
+        <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
           <ScrollText className="h-3 w-3" />
-          Tu turno
+          Tus ventas del turno
         </div>
-        <div className="text-right">
-          <div className="font-semibold tabular-nums">{formatCurrency(totalDia)}</div>
-          <div className="text-[10px] text-muted-foreground">{cantidad} ventas</div>
+        <div className="mt-2 text-2xl font-bold tabular-nums">
+          {formatCurrency(totalDia)}
         </div>
+        <div className="text-xs text-muted-foreground">{cantidad} ventas · refresh c/5s</div>
       </div>
-      {ventas.length === 0 ? (
-        <p className="text-muted-foreground">Sin ventas todavía.</p>
-      ) : (
-        <div className="space-y-1">
-          {ventas.map((v) => (
-            <Link
-              key={v.id}
-              to={`/ticket/${v.id}`}
-              className="flex items-center justify-between rounded px-2 py-1 hover:bg-accent"
-            >
-              <span className="font-mono text-[10px] text-muted-foreground">{v.numero}</span>
-              <span className="tabular-nums">{formatCurrency(v.total)}</span>
-            </Link>
-          ))}
-        </div>
-      )}
+      <div className="flex-1 overflow-y-auto p-2 text-xs">
+        {ventas.length === 0 ? (
+          <p className="px-2 py-6 text-center text-muted-foreground">
+            Sin ventas todavía.
+            <br />
+            Empezá la primera con F2.
+          </p>
+        ) : (
+          ventas.map((v) => {
+            const hora = new Date(v.fecha).toLocaleTimeString('es-AR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+            const metodos = Array.from(new Set(v.pagos.map((p) => p.metodo)))
+              .map((m) => m.replace('_', ' '))
+              .join(' + ');
+            return (
+              <Link
+                key={v.id}
+                to={`/ticket/${v.id}`}
+                className="block rounded px-2 py-2 transition hover:bg-accent"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1 font-mono text-muted-foreground">
+                    <Receipt className="h-3 w-3" />
+                    {v.numero}
+                  </span>
+                  <span className="font-semibold tabular-nums">
+                    {formatCurrency(v.total)}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
+                  <span>{hora}</span>
+                  <span className="capitalize">{metodos}</span>
+                </div>
+              </Link>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
