@@ -25,9 +25,10 @@ export function makeEmpleadosRepo(store: Store): EmpleadosRepo {
       const e = store.empleados.find((x) => x.id === id);
       return e ? clone(e) : null;
     },
-    async create(input) {
+    async create(input, password) {
       const e: Empleado = { ...input, id: makeId('emp'), creado_en: now() };
       store.empleados.push(e);
+      store.passwords[e.id] = password;
       return clone(e);
     },
     async update(id, patch) {
@@ -51,8 +52,18 @@ export function makeEmpleadosRepo(store: Store): EmpleadosRepo {
       store.empleados[idx] = { ...store.empleados[idx]!, rol_id: rolId };
       return clone(store.empleados[idx]!);
     },
-    async resetearPassword(_id) {
-      // En mock no hay password real; futuro: integración con Supabase Auth.
+    async setPassword(id, password) {
+      const exists = store.empleados.find((e) => e.id === id);
+      if (!exists) throw notFound('Empleado', id);
+      store.passwords[id] = password;
+    },
+    async autenticar(email, password) {
+      const empleado = store.empleados.find(
+        (e) => e.email.toLowerCase() === email.toLowerCase() && e.activo,
+      );
+      if (!empleado) return null;
+      if (store.passwords[empleado.id] !== password) return null;
+      return clone(empleado);
     },
   };
 }

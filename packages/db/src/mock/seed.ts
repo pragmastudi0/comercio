@@ -296,5 +296,11 @@ export function buildSeed(): Store {
     },
     auditoria: [],
     contadorVentas: 0,
+    passwords: {
+      emp_admin: 'admin123',
+      emp_enc: 'encargado123',
+      emp_caj1: 'cajero123',
+      emp_cat: 'catalogo123',
+    },
   };
 }

@@ -1,10 +1,20 @@
-import { useVenta, calcularSubtotal } from '@/stores/venta';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Tag } from 'lucide-react';
+import {
+  calcularBaseVenta,
+  calcularDescuentoGlobal,
+  calcularSubtotal,
+  useVenta,
+} from '@/stores/venta';
+import { useSesion } from '@/stores/sesion';
+import { getDb } from '@/lib/db';
 import { Button } from '@comercio/ui/button';
+import { Input } from '@comercio/ui/input';
+import { Label } from '@comercio/ui/label';
 import { formatCurrency } from '@comercio/ui/utils';
 import { SHORTCUT_LABELS } from '@/lib/shortcuts';
-import { useQuery } from '@tanstack/react-query';
-import { getDb } from '@/lib/db';
-import { useSesion } from '@/stores/sesion';
+import { VentasDelDia } from './VentasDelDia';
 
 export function ResumenVenta({
   onCobrar,
@@ -18,7 +28,13 @@ export function ResumenVenta({
   const db = getDb();
   const items = useVenta((s) => s.items);
   const clienteId = useVenta((s) => s.clienteId);
+  const descuentoGlobalPct = useVenta((s) => s.descuentoGlobalPct);
+  const motivoDescuento = useVenta((s) => s.motivoDescuento);
+  const setDescuentoGlobal = useVenta((s) => s.setDescuentoGlobal);
+
   const subtotal = calcularSubtotal(items);
+  const descuentoGlobal = calcularDescuentoGlobal(subtotal, descuentoGlobalPct);
+  const baseVenta = calcularBaseVenta(items, descuentoGlobalPct);
   const cant = items.reduce((acc, i) => acc + i.cantidad, 0);
 
   const empleado = useSesion((s) => s.empleado);
@@ -30,6 +46,8 @@ export function ResumenVenta({
     queryFn: () => (clienteId ? db.clientes.get(clienteId) : Promise.resolve(null)),
     enabled: !!clienteId,
   });
+
+  const [editDto, setEditDto] = useState(false);
 
   return (
     <div className="flex h-full flex-col bg-muted/30">
@@ -58,11 +76,7 @@ export function ResumenVenta({
         ) : (
           <div className="text-sm text-muted-foreground">Consumidor final</div>
         )}
-        <Button
-          variant="link"
-          className="mt-1 h-auto p-0 text-xs"
-          onClick={onBuscarCliente}
-        >
+        <Button variant="link" className="mt-1 h-auto p-0 text-xs" onClick={onBuscarCliente}>
           {clienteQ.data ? 'Cambiar' : 'Identificar cliente'} ·{' '}
           {SHORTCUT_LABELS.buscarCliente}
         </Button>
@@ -78,13 +92,76 @@ export function ResumenVenta({
             <span>Subtotal</span>
             <span>{formatCurrency(subtotal)}</span>
           </div>
+          {descuentoGlobalPct > 0 && (
+            <div className="flex justify-between text-green-700">
+              <span>Descuento {descuentoGlobalPct}%</span>
+              <span>-{formatCurrency(descuentoGlobal)}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4">
+          {editDto ? (
+            <div className="rounded-md border p-3">
+              <div className="grid grid-cols-[1fr_80px] gap-2">
+                <div>
+                  <Label className="mb-1 block text-xs">Motivo</Label>
+                  <Input
+                    placeholder="ej: Promo terminal"
+                    value={motivoDescuento ?? ''}
+                    onChange={(e) => setDescuentoGlobal(descuentoGlobalPct, e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1 block text-xs">%</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={descuentoGlobalPct}
+                    onChange={(e) =>
+                      setDescuentoGlobal(parseFloat(e.target.value) || 0, motivoDescuento)
+                    }
+                  />
+                </div>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setDescuentoGlobal(0);
+                    setEditDto(false);
+                  }}
+                >
+                  Quitar
+                </Button>
+                <Button size="sm" onClick={() => setEditDto(false)}>
+                  OK
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => setEditDto(true)}
+              disabled={items.length === 0}
+            >
+              <Tag className="mr-1 h-3 w-3" />
+              {descuentoGlobalPct > 0
+                ? `Descuento ${descuentoGlobalPct}% aplicado`
+                : 'Agregar descuento'}
+            </Button>
+          )}
         </div>
 
         <div className="mt-6 border-t pt-4">
-          <div className="text-xs uppercase text-muted-foreground">Total</div>
-          <div className="text-4xl font-semibold tabular-nums">{formatCurrency(subtotal)}</div>
+          <div className="text-xs uppercase text-muted-foreground">Total a cobrar</div>
+          <div className="text-4xl font-semibold tabular-nums">{formatCurrency(baseVenta)}</div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Descuentos y recargos se aplican al elegir método de pago.
+            Recargo/descuento por forma de pago se aplica en el cobro.
           </p>
         </div>
       </div>
@@ -98,12 +175,18 @@ export function ResumenVenta({
         >
           Cobrar · {SHORTCUT_LABELS.cobrarEfectivo}
         </Button>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <Button variant="outline" size="sm" disabled={items.length === 0} onClick={onCancelar}>
-            Cancelar venta · {SHORTCUT_LABELS.cancelar}
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          disabled={items.length === 0}
+          onClick={onCancelar}
+        >
+          Cancelar venta · {SHORTCUT_LABELS.cancelar}
+        </Button>
       </div>
+
+      <VentasDelDia />
     </div>
   );
 }

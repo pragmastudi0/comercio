@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { Caja, Empleado, SesionCaja } from '@comercio/db';
 
 type SesionState = {
@@ -11,12 +12,20 @@ type SesionState = {
   logout: () => void;
 };
 
-export const useSesion = create<SesionState>((set) => ({
-  empleado: null,
-  caja: null,
-  sesionCaja: null,
-  setEmpleado: (empleado) => set({ empleado }),
-  setCaja: (caja) => set({ caja }),
-  setSesionCaja: (sesionCaja) => set({ sesionCaja }),
-  logout: () => set({ empleado: null, caja: null, sesionCaja: null }),
-}));
+export const useSesion = create<SesionState>()(
+  persist(
+    (set) => ({
+      empleado: null,
+      caja: null,
+      sesionCaja: null,
+      setEmpleado: (empleado) => set({ empleado }),
+      setCaja: (caja) => set({ caja }),
+      setSesionCaja: (sesionCaja) => set({ sesionCaja }),
+      logout: () => set({ empleado: null, caja: null, sesionCaja: null }),
+    }),
+    {
+      name: 'turisteando-pos-sesion',
+      partialize: (s) => ({ empleado: s.empleado, caja: s.caja, sesionCaja: s.sesionCaja }),
+    },
+  ),
+);

@@ -1,76 +1,132 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { LogIn } from 'lucide-react';
+import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { getDb } from '@/lib/db';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@comercio/ui/card';
-import { Skeleton } from '@comercio/ui/skeleton';
-import { Badge } from '@comercio/ui/badge';
-import { User } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
+import { Input } from '@comercio/ui/input';
+import { Label } from '@comercio/ui/label';
+import { Button } from '@comercio/ui/button';
 
 export function Login() {
   const db = getDb();
   const navigate = useNavigate();
   const setEmpleado = useSesion((s) => s.setEmpleado);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
+  // Sólo en demo: lista los emails seed para que sea fácil probar.
   const empleadosQ = useQuery({
-    queryKey: ['empleados-pos'],
+    queryKey: ['empleados-demo'],
     queryFn: () => db.empleados.list({ activo: true }),
   });
-  const rolesQ = useQuery({ queryKey: ['roles'], queryFn: () => db.roles.list() });
 
-  function seleccionar(empleadoId: string) {
-    const empleado = (empleadosQ.data ?? []).find((e) => e.id === empleadoId);
-    if (!empleado) return;
-    setEmpleado(empleado);
-    navigate('/abrir-caja');
-  }
+  const loginMut = useMutation({
+    mutationFn: async () => {
+      const emp = await db.empleados.autenticar(email.trim(), password);
+      if (!emp) throw new Error('Email o contraseña incorrectos');
+      return emp;
+    },
+    onSuccess: (emp) => {
+      setEmpleado(emp);
+      toast.success(`Hola ${emp.nombre}`);
+      navigate('/abrir-caja');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   return (
-    <main className="container mx-auto max-w-2xl px-4 py-16">
+    <main className="container mx-auto max-w-md px-4 py-16">
       <div className="mb-8 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">Comercio · PoS</h1>
-        <p className="mt-2 text-muted-foreground">Elegí tu usuario para empezar el turno</p>
+        <h1 className="text-4xl font-bold tracking-tight">{BRAND.nombreCorto}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{BRAND.tagline}</p>
       </div>
 
-      {empleadosQ.isLoading || rolesQ.isLoading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-        </div>
-      ) : (
-        <div className="grid gap-3">
-          {(empleadosQ.data ?? []).map((emp) => {
-            const rol = rolesQ.data?.find((r) => r.id === emp.rol_id);
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <LogIn className="h-5 w-5" />
+            Iniciar turno
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              loginMut.mutate();
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <Label htmlFor="email" className="mb-1 block">
+                Email
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                autoFocus
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="cajero@comercio.local"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="password" className="mb-1 block">
+                Contraseña
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loginMut.isPending}>
+              {loginMut.isPending ? 'Verificando…' : 'Entrar'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Bloque demo: lista de usuarios de prueba. Quitar cuando pase a producción. */}
+      <div className="mt-6 rounded-md border border-dashed bg-muted/30 p-3 text-xs">
+        <div className="mb-2 font-medium text-muted-foreground">Usuarios demo</div>
+        <div className="space-y-1">
+          {(empleadosQ.data ?? []).map((e) => {
+            const passwordDemo =
+              e.id === 'emp_admin'
+                ? 'admin123'
+                : e.id === 'emp_enc'
+                  ? 'encargado123'
+                  : e.id === 'emp_caj1'
+                    ? 'cajero123'
+                    : e.id === 'emp_cat'
+                      ? 'catalogo123'
+                      : '—';
             return (
               <button
-                key={emp.id}
-                onClick={() => seleccionar(emp.id)}
-                className="text-left transition hover:scale-[1.01]"
+                key={e.id}
+                type="button"
+                onClick={() => {
+                  setEmail(e.email);
+                  setPassword(passwordDemo);
+                }}
+                className="block w-full rounded px-2 py-1 text-left hover:bg-accent"
               >
-                <Card className="hover:border-primary">
-                  <CardHeader className="flex flex-row items-center gap-4 space-y-0">
-                    <div className="rounded-full bg-primary/10 p-3">
-                      <User className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <CardTitle className="text-lg">
-                        {emp.nombre} {emp.apellido}
-                      </CardTitle>
-                      <CardDescription>{emp.email}</CardDescription>
-                    </div>
-                    {rol && <Badge variant="secondary">{rol.nombre}</Badge>}
-                  </CardHeader>
-                </Card>
+                <span className="font-mono">{e.email}</span>
+                <span className="text-muted-foreground"> · {passwordDemo}</span>
               </button>
             );
           })}
         </div>
-      )}
-
-      <p className="mt-8 text-center text-xs text-muted-foreground">
-        Demo con datos en memoria. En producción cada cajero entra con su email + contraseña.
-      </p>
+      </div>
     </main>
   );
 }

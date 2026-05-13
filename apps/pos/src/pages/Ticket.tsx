@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { BRAND } from '@comercio/business';
 import { getDb } from '@/lib/db';
 import { Button } from '@comercio/ui/button';
 import { Skeleton } from '@comercio/ui/skeleton';
@@ -79,8 +80,8 @@ export function Ticket() {
       <main className="container mx-auto max-w-md p-6 print:p-2">
         <div className="ticket rounded border border-dashed bg-white p-6 font-mono text-sm text-black print:border-0 print:p-0">
           <div className="mb-3 text-center">
-            <div className="font-bold uppercase">Comercio Terminal Córdoba</div>
-            <div className="text-xs">Estación Terminal de Ómnibus</div>
+            <div className="font-bold uppercase">{BRAND.nombreCompleto}</div>
+            <div className="text-xs">{BRAND.tagline}</div>
             <div className="mt-2 text-xs">
               {venta.estado === 'presupuesto' ? 'PRESUPUESTO' : 'COMPROBANTE NO FISCAL'}
             </div>

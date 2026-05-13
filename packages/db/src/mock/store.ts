@@ -49,4 +49,6 @@ export type Store = {
   configuracion: ConfiguracionEmpresa;
   auditoria: LogAuditoria[];
   contadorVentas: number;
+  /** Passwords mock (en producción esto vive en Supabase Auth). */
+  passwords: Record<string, string>; // empleadoId -> password plano (solo demo)
 };

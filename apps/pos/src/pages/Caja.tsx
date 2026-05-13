@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
+import { LogOut } from 'lucide-react';
+import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { useVenta } from '@/stores/venta';
 import { BuscadorProducto } from '@/components/BuscadorProducto';
@@ -66,14 +68,30 @@ export function Caja() {
       <header className="border-b">
         <div className="flex h-12 items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <span className="text-sm font-semibold">PoS · {caja.nombre}</span>
+            <span className="text-sm font-bold tracking-tight">
+              {BRAND.nombreCorto}
+            </span>
+            <span className="text-xs text-muted-foreground">· {caja.nombre}</span>
             <span className="text-xs text-muted-foreground">
-              {empleado.nombre} {empleado.apellido}
+              · {empleado.nombre} {empleado.apellido}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" onClick={() => navigate('/cerrar-caja')}>
               Cerrar caja
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (confirm('¿Cerrar sesión sin cerrar la caja? Volverás al login.')) {
+                  navigate('/login');
+                }
+              }}
+              title="Salir sin cerrar caja"
+            >
+              <LogOut className="mr-1 h-3 w-3" />
+              Salir
             </Button>
           </div>
         </div>

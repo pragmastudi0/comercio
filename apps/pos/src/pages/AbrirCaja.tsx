@@ -2,6 +2,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { getDb } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
@@ -68,6 +69,9 @@ export function AbrirCaja() {
   return (
     <main className="container mx-auto max-w-xl px-4 py-12">
       <div className="mb-6 text-center">
+        <div className="text-sm font-medium tracking-tight text-muted-foreground">
+          {BRAND.nombreCorto}
+        </div>
         <h1 className="text-2xl font-semibold">Apertura de caja</h1>
         <p className="text-sm text-muted-foreground">
           Hola <span className="font-medium">{empleado.nombre}</span>, vas a abrir tu sesión.
