@@ -1,92 +1,135 @@
-import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { getDb } from '@/lib/db';
-import { Button } from '@comercio/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
-import { Input } from '@comercio/ui/input';
-import { Skeleton } from '@comercio/ui/skeleton';
-import { formatCurrency } from '@comercio/ui/utils';
 import { toast } from 'sonner';
+import { useSesion } from '@/stores/sesion';
+import { useVenta } from '@/stores/venta';
+import { BuscadorProducto } from '@/components/BuscadorProducto';
+import { Carrito } from '@/components/Carrito';
+import { ResumenVenta } from '@/components/ResumenVenta';
+import { ModalCobro } from '@/components/ModalCobro';
+import { ModalCliente } from '@/components/ModalCliente';
+import { SHORTCUTS, SHORTCUT_LABELS } from '@/lib/shortcuts';
+import { Button } from '@comercio/ui/button';
+import type { MetodoPago } from '@comercio/db';
 
 export function Caja() {
-  const db = getDb();
-  const [busqueda, setBusqueda] = useState('');
+  const navigate = useNavigate();
+  const empleado = useSesion((s) => s.empleado);
+  const caja = useSesion((s) => s.caja);
+  const items = useVenta((s) => s.items);
+  const limpiar = useVenta((s) => s.limpiar);
 
-  const productosQ = useQuery({
-    queryKey: ['pos-productos-search', busqueda],
-    queryFn: () => db.productos.buscarRapido(busqueda, 8),
-    enabled: busqueda.trim().length > 0,
+  const [modalCobro, setModalCobro] = useState<{ open: boolean; metodo?: MetodoPago }>({
+    open: false,
   });
+  const [modalCliente, setModalCliente] = useState(false);
 
-  useHotkeys('f2', (e) => {
-    e.preventDefault();
-    toast.info('F2 — Nueva venta. (Flujo completo: día 11-12)');
-  });
+  function abrirCobro(metodo?: MetodoPago) {
+    if (items.length === 0) {
+      toast.error('Carrito vacío');
+      return;
+    }
+    setModalCobro({ open: true, metodo });
+  }
+
+  function cancelarVenta() {
+    if (items.length === 0) return;
+    if (confirm('¿Cancelar la venta actual? Se vaciará el carrito.')) {
+      limpiar();
+      toast.info('Venta cancelada');
+    }
+  }
+
+  useHotkeys(
+    SHORTCUTS.nuevaVenta,
+    (e) => {
+      e.preventDefault();
+      if (items.length > 0 && !confirm('Hay items en el carrito. ¿Vaciar e iniciar nueva venta?')) {
+        return;
+      }
+      limpiar();
+    },
+    { enableOnFormTags: true },
+  );
+  useHotkeys(SHORTCUTS.buscarCliente, (e) => { e.preventDefault(); setModalCliente(true); }, { enableOnFormTags: true });
+  useHotkeys(SHORTCUTS.cobrarEfectivo, (e) => { e.preventDefault(); abrirCobro('efectivo'); }, { enableOnFormTags: true });
+  useHotkeys(SHORTCUTS.cobrarTarjeta, (e) => { e.preventDefault(); abrirCobro('credito'); }, { enableOnFormTags: true });
+  useHotkeys(SHORTCUTS.cobrarQR, (e) => { e.preventDefault(); abrirCobro('qr'); }, { enableOnFormTags: true });
+  useHotkeys(SHORTCUTS.cobrarCtaCte, (e) => { e.preventDefault(); abrirCobro('cta_cte'); }, { enableOnFormTags: true });
+  useHotkeys(SHORTCUTS.cancelar, () => cancelarVenta(), { enableOnFormTags: true });
+
+  if (!empleado || !caja) return null;
 
   return (
-    <main className="container mx-auto px-4 py-8">
-      <h1 className="mb-6 text-2xl font-semibold">Caja</h1>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Buscar producto</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4">
-              <Input
-                autoFocus
-                placeholder="Código (ej: 1000) o nombre"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">F2 = nueva venta</p>
-            </div>
-            {busqueda.trim().length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Escribí el código interno o parte del nombre para empezar.
-              </p>
-            )}
-            {productosQ.isLoading && <Skeleton className="h-32 w-full" />}
-            {productosQ.data && productosQ.data.length === 0 && (
-              <p className="text-sm text-muted-foreground">Sin resultados.</p>
-            )}
-            <div className="grid grid-cols-1 gap-2">
-              {productosQ.data?.map((p) => (
-                <button
-                  key={p.id}
-                  className="flex items-center justify-between rounded border bg-card p-3 text-left hover:bg-accent"
-                  onClick={() => toast.success(`Agregado: ${p.nombre} (mock)`)}
-                >
-                  <div>
-                    <div className="font-mono text-xs text-muted-foreground">
-                      {p.codigo_interno}
-                    </div>
-                    <div className="font-medium">{p.nombre}</div>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Costo {formatCurrency(p.costo)}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Carrito</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Carrito vacío. Flujo completo de venta (pagos, cuotas, ticket) en día 11-13.
-            </p>
-            <Button disabled className="w-full">
-              Cobrar
+    <div className="flex h-screen flex-col bg-background">
+      <header className="border-b">
+        <div className="flex h-12 items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold">PoS · {caja.nombre}</span>
+            <span className="text-xs text-muted-foreground">
+              {empleado.nombre} {empleado.apellido}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/cerrar-caja')}>
+              Cerrar caja
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+      </header>
+
+      <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_360px]">
+        <div className="flex flex-col overflow-hidden">
+          <div className="border-b p-4">
+            <BuscadorProducto />
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <Carrito />
+          </div>
+          <div className="border-t bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <span>
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.nuevaVenta}</kbd> Nueva venta
+              </span>
+              <span>
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.buscarCliente}</kbd> Cliente
+              </span>
+              <span>
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.cobrarEfectivo}</kbd> Efectivo
+              </span>
+              <span>
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.cobrarTarjeta}</kbd> Tarjeta
+              </span>
+              <span>
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.cobrarQR}</kbd> QR
+              </span>
+              <span>
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.cobrarCtaCte}</kbd> Cta cte
+              </span>
+              <span>
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">{SHORTCUT_LABELS.cancelar}</kbd> Cancelar
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <aside className="border-l">
+          <ResumenVenta
+            onCobrar={() => abrirCobro()}
+            onBuscarCliente={() => setModalCliente(true)}
+            onCancelar={cancelarVenta}
+          />
+        </aside>
       </div>
-    </main>
+
+      <ModalCobro
+        open={modalCobro.open}
+        onOpenChange={(v) => setModalCobro((m) => ({ ...m, open: v }))}
+        metodoInicial={modalCobro.metodo}
+        onCobrado={(ventaId) => navigate(`/ticket/${ventaId}`)}
+      />
+      <ModalCliente open={modalCliente} onOpenChange={setModalCliente} />
+    </div>
   );
 }
