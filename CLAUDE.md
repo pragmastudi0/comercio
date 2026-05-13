@@ -191,8 +191,28 @@ comercio/
 - `apps/admin` (Next.js 14): landing con grid de secciones, listado de productos con TanStack Query, listado de empleados.
 - `apps/pos` (Vite + React + PWA): landing, pantalla de caja con búsqueda rápida por código/nombre, F2 hotkey stub.
 
+### 2026-05-13 — Sesión 2 (PoS funcional + branding + admin core)
+- **PoS end-to-end**: Login (email+password con mocks), apertura de caja, pantalla de venta con buscador autofocus, carrito con cantidad/precio/descuento por línea, descuento global a la venta (con motivo, queda en auditoría), modal de cobro multi-método con cuotas + recargo + descuento efectivo + pago mixto con barra de progreso + cálculo de vuelto, ticket imprimible 80mm con auto-print, cierre de caja con totales por método y arqueo.
+- **Branding "#turisteando"** en todas las pantallas visibles. Carpetas/DB siguen como `comercio`.
+- **Persistencia de sesión** en localStorage (zustand persist).
+- **Atajos completos**: F2 nueva venta, F3 cliente, F5 efectivo, F6 tarjeta, F7 QR, F8 cta cte, Esc cancelar.
+- **Stock visible** en cada línea del carrito con alerta cuando va a quedar negativo.
+- **Sidebar de ventas del turno** en el PoS, refresh cada 5s.
+- **Admin con shell de sidebar** (General, Catálogo, Stock, Personas, Sistema).
+- **Dashboard** con KPIs (ventas hoy, cajas abiertas, sin stock, deudores), top productos del día, últimas ventas.
+- **/configuracion**: editar descuento efectivo, validez presupuesto, permitir-sin-stock default, cuotas + recargos.
+- **/empleados**: ABM completo con creación (email+password+rol+local+depósito) y edición con tabs Datos / Permisos.
+- **/roles**: ABM con dialog de creación copiando preset + matriz de permisos editable. Validación de no eliminar roles asignados a empleados.
+- **/ventas**: historial con filtros (fecha desde/hasta, cajero, local, método).
+- **/caja**: sesiones abiertas con totales por método en tiempo real + 10 últimas cerradas con diferencia de arqueo.
+- **/reportes**: KPIs de período (total, tickets, ticket promedio), ventas por día (barras), métodos, ranking de cajeros, ranking de locales.
+- **packages/business**: nuevo `brand.ts` (BRAND.nombreCorto). Exportado en el barrel.
+- **packages/db**: nuevo `empleados.autenticar(email, password)` + `empleados.setPassword(id, password)`. Mock guarda passwords en `store.passwords`. Día 4 se reemplaza por Supabase Auth.
+- **packages/ui**: `Button` ahora soporta `asChild` (clona el child y aplica las clases) para wrappear `<Link>` de Next.
+
 **Pendiente próxima sesión**:
-- Verificar `pnpm dev` levanta admin (`:3000`) y pos (`:3100`) sin errores.
-- ABM productos completo con sheet de creación/edición + extracción del patrón `<DataTable>`/`<EntityFormSheet>`/`useCrud<T>()`.
-- Matriz de permisos editable en `/admin/empleados/[id]` (paso del prompt — tab "Permisos" con tri-estado por acción).
-- Definir `Supabase_Migrations.sql` (lo trae Gonzalo o lo derivamos de `packages/db/src/types.ts`).
+- Conectar Supabase: aplicar `Supabase_Migrations.sql`, generar tipos, reemplazar mocks por implementación real. Cuando Gonzalo me avise.
+- ABM productos completo (sheet de edición, ABM categorías/proveedores/clientes/depósitos/listas con el mismo patrón).
+- Promociones programables por categoría/producto/fecha.
+- Devoluciones parciales (no anulación total).
+- Limpieza: quitar el panel "Usuarios demo" del login del PoS antes de pasar a producción.
