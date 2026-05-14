@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Button } from '@comercio/ui/button';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { SITE } from '@/lib/config';
+import { visualDeCategoria } from '@/lib/imagenes';
 
 export default function HomePage() {
   const db = getDb();
@@ -70,13 +71,24 @@ export default function HomePage() {
           </div>
           <div className="hidden md:block">
             <div className="grid grid-cols-3 gap-3">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div
-                  key={i}
-                  className="aspect-square rounded-lg border bg-background"
-                  style={{ opacity: 0.4 + i * 0.08 }}
-                />
-              ))}
+              {(Object.keys({
+                cat_tec: 1,
+                cat_baz: 1,
+                cat_bel: 1,
+                cat_jug: 1,
+                cat_pap: 1,
+                cat_via: 1,
+              }) as string[]).map((id) => {
+                const v = visualDeCategoria(id);
+                return (
+                  <div
+                    key={id}
+                    className={`flex aspect-square items-center justify-center rounded-lg border text-5xl ${v.bg}`}
+                  >
+                    {v.emojiPrincipal}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -104,24 +116,34 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {categoriasConProductos.map((c) => (
-              <Link key={c.id} href={`/catalogo?cat=${c.id}`}>
-                <Card className="h-full transition hover:border-foreground">
-                  <CardHeader className="flex flex-row items-start justify-between space-y-0">
-                    <div>
-                      <CardTitle className="text-lg">{c.nombre}</CardTitle>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {conteoPorCat.get(c.id)} productos
-                      </p>
+            {categoriasConProductos.map((c) => {
+              const v = visualDeCategoria(c.id);
+              return (
+                <Link key={c.id} href={`/catalogo?cat=${c.id}`}>
+                  <Card className="h-full overflow-hidden transition hover:border-foreground">
+                    <div className={`grid grid-cols-2 gap-1 p-3 ${v.bg}`}>
+                      {v.emojis.slice(0, 4).map((e, i) => (
+                        <div
+                          key={i}
+                          className="flex aspect-square items-center justify-center rounded text-3xl"
+                        >
+                          {e}
+                        </div>
+                      ))}
                     </div>
-                    <Layers className="h-5 w-5 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">
-                    Ver productos →
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+                    <CardHeader className="flex flex-row items-start justify-between space-y-0">
+                      <div>
+                        <CardTitle className="text-lg">{c.nombre}</CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {conteoPorCat.get(c.id)} productos
+                        </p>
+                      </div>
+                      <Layers className="h-5 w-5 text-muted-foreground" />
+                    </CardHeader>
+                  </Card>
+                </Link>
+              );
+            })}
           </div>
         )}
       </section>

@@ -25,6 +25,7 @@ import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { formatCurrency } from '@comercio/ui/utils';
+import { emojiProducto } from '@/lib/imagenes';
 
 export default function CarritoPage() {
   const router = useRouter();
@@ -118,8 +119,8 @@ export default function CarritoPage() {
             return (
               <Card key={item.productoId}>
                 <CardContent className="flex items-start gap-3 p-4">
-                  <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-md bg-muted/40">
-                    <Package className="h-8 w-8 text-muted-foreground/40" />
+                  <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-md bg-muted/40 text-3xl">
+                    <span aria-hidden>{emojiProducto(item.nombre)}</span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-mono text-xs text-muted-foreground">

@@ -12,6 +12,7 @@ import { Input } from '@comercio/ui/input';
 import { Badge } from '@comercio/ui/badge';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
+import { emojiProducto, visualDeCategoria } from '@/lib/imagenes';
 
 function CatalogoInner() {
   const db = getDb();
@@ -114,9 +115,11 @@ function CatalogoInner() {
             return (
               <Link key={p.id} href={`/catalogo/${p.id}`}>
                 <Card className="h-full overflow-hidden transition hover:border-foreground">
-                  {/* Placeholder de imagen */}
-                  <div className="flex aspect-square items-center justify-center bg-muted/40 text-muted-foreground">
-                    <Package className="h-12 w-12 opacity-30" />
+                  {/* Placeholder visual con emoji representativo del producto */}
+                  <div
+                    className={`flex aspect-square items-center justify-center text-6xl ${visualDeCategoria(p.categoria_id).bg}`}
+                  >
+                    <span aria-hidden>{emojiProducto(p.nombre, p.categoria_id)}</span>
                   </div>
                   <CardContent className="space-y-1 p-4">
                     <Badge variant="secondary" className="mb-1">

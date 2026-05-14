@@ -15,6 +15,7 @@ import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
+import { emojiProducto, visualDeCategoria } from '@/lib/imagenes';
 
 export default function ProductoPage() {
   const params = useParams<{ id: string }>();
@@ -80,10 +81,12 @@ export default function ProductoPage() {
       </Button>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_1fr]">
-        {/* Imagen placeholder */}
+        {/* Imagen placeholder con emoji representativo */}
         <Card className="overflow-hidden">
-          <div className="flex aspect-square items-center justify-center bg-muted/40">
-            <Package className="h-20 w-20 text-muted-foreground/30" />
+          <div
+            className={`flex aspect-square items-center justify-center text-[10rem] ${visualDeCategoria(p.categoria_id).bg}`}
+          >
+            <span aria-hidden>{emojiProducto(p.nombre, p.categoria_id)}</span>
           </div>
         </Card>
 
