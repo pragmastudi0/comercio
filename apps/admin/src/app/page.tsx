@@ -67,21 +67,19 @@ export default function DashboardPage() {
     productosLookupQ.data?.find((p) => p.id === id)?.nombre ?? id;
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="mb-6 flex items-end justify-between">
+    <div className="container mx-auto px-4 py-6 sm:py-8">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Hola, {BRAND.nombreCorto}</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">Hola, {BRAND.nombreCorto}</h1>
           <p className="text-sm text-muted-foreground">
-            Resumen del día · actualiza solo cada 10s
+            Resumen del día · actualiza cada 10s
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/ventas">
-              Ver ventas <ArrowRight className="ml-1 h-3 w-3" />
-            </Link>
-          </Button>
-        </div>
+        <Button asChild variant="outline" size="sm" className="self-start sm:self-auto">
+          <Link href="/ventas">
+            Ver ventas <ArrowRight className="ml-1 h-3 w-3" />
+          </Link>
+        </Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

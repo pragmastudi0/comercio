@@ -53,9 +53,11 @@ export function VentasDelDia() {
               hour: '2-digit',
               minute: '2-digit',
             });
-            const metodos = Array.from(new Set(v.pagos.map((p) => p.metodo)))
-              .map((m) => m.replace('_', ' '))
-              .join(' + ');
+            const metodosUnicos = Array.from(new Set(v.pagos.map((p) => p.metodo)));
+            const esMixto = metodosUnicos.length > 1;
+            const metodos = esMixto
+              ? `Mixto · ${metodosUnicos.map((m) => m.replace('_', ' ')).join(' + ')}`
+              : metodosUnicos[0]?.replace('_', ' ') ?? '';
             return (
               <Link
                 key={v.id}

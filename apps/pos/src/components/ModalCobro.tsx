@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Banknote, CreditCard, Smartphone, ArrowLeftRight, Wallet, X, Check } from 'lucide-react';
 import { Dialog, DialogFooter, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
@@ -45,6 +45,7 @@ export function ModalCobro({
   onCobrado: (ventaId: string) => void;
 }) {
   const db = getDb();
+  const qc = useQueryClient();
   const empleado = useSesion((s) => s.empleado);
   const caja = useSesion((s) => s.caja);
   const sesion = useSesion((s) => s.sesionCaja);
@@ -236,6 +237,9 @@ export function ModalCobro({
     },
     onSuccess: (v) => {
       toast.success(`Venta ${v.numero} confirmada`);
+      // Refrescar inmediato el listado del turno, sin esperar el poll de 5s.
+      qc.invalidateQueries({ queryKey: ['ventas-sesion'] });
+      qc.invalidateQueries({ queryKey: ['stock'] });
       limpiar();
       onOpenChange(false);
       onCobrado(v.id);

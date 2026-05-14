@@ -168,7 +168,18 @@ export default function VentasPage() {
                     <TableCell>{localNombre(v.local_id)}</TableCell>
                     <TableCell>{v.items.reduce((a, i) => a + i.cantidad, 0)}</TableCell>
                     <TableCell className="text-xs">
-                      {v.pagos.map((p) => LABEL_METODO[p.metodo]).join(' + ')}
+                      {(() => {
+                        const ms = Array.from(new Set(v.pagos.map((p) => p.metodo)));
+                        const labels = ms.map((m) => LABEL_METODO[m]).join(' + ');
+                        return ms.length > 1 ? (
+                          <span>
+                            <span className="font-medium">Mixto</span>
+                            <span className="text-muted-foreground"> · {labels}</span>
+                          </span>
+                        ) : (
+                          labels
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       {formatCurrency(v.total)}

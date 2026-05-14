@@ -39,3 +39,4 @@ test-results/
 
 # misc
 *.local
+.vercel
