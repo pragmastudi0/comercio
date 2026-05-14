@@ -102,8 +102,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-background',
           'transition-[width,transform] duration-300 ease-out',
-          // Desktop: ancho variable según expanded
-          expanded ? 'lg:w-60' : 'lg:w-16',
+          // Desktop: ancho variable según expanded. Cuando está colapsado
+          // dejamos overflow visible para que el tooltip al hover pueda
+          // salir por la derecha sin que lo recorte el ancho del sidebar.
+          expanded ? 'lg:w-60' : 'lg:w-16 lg:overflow-visible',
           'lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
           // Mobile: drawer
           mobileOpen ? 'w-60 translate-x-0' : 'w-60 -translate-x-full',
@@ -158,8 +160,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
-        {/* Nav */}
-        <nav className={cn('flex-1 overflow-y-auto py-3', expanded ? 'px-2' : 'px-1.5')}>
+        {/* Nav. Cuando está colapsado dejamos overflow visible para que el
+            tooltip que sale por la derecha no quede recortado. Cuando está
+            expandido, overflow-y-auto normal por si la lista crece. */}
+        <nav
+          className={cn(
+            'flex-1 py-3',
+            expanded ? 'overflow-y-auto px-2' : 'overflow-visible px-1.5',
+          )}
+        >
           {NAV_GROUPS.map((grupo) => (
             <div key={grupo.titulo} className="mb-4">
               {expanded ? (
