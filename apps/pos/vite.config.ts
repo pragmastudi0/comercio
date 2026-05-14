@@ -8,20 +8,22 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.png'],
       manifest: {
-        name: 'Comercio · PoS',
-        short_name: 'PoS',
+        name: '#turisteando · PoS',
+        short_name: '#turisteando',
         description: 'Punto de venta',
-        theme_color: '#0f172a',
+        theme_color: '#E93BA1',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',
         icons: [
-          { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' },
+          { src: '/favicon.png', sizes: '400x400', type: 'image/png' },
+          { src: '/favicon.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/favicon.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,woff2}'] },
+      workbox: { globPatterns: ['**/*.{js,css,html,png,woff2}'] },
     }),
   ],
   resolve: {
