@@ -81,7 +81,7 @@ function seedProductos(): { productos: Store['productos']; precios: Store['produ
       nombre: m.nombre,
       categoria_id: m.cat,
       costo: m.costo,
-      publicado_web: false,
+      publicado_web: true,
       activo: true,
       creado_en: NOW,
     });

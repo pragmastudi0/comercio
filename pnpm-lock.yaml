@@ -197,6 +197,79 @@ importers:
         specifier: ^0.21.1
         version: 0.21.2(vite@6.4.2(@types/node@22.19.19)(jiti@1.21.7)(terser@5.47.1))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1)
 
+  apps/web:
+    dependencies:
+      '@comercio/business':
+        specifier: workspace:*
+        version: link:../../packages/business
+      '@comercio/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@comercio/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@tanstack/react-query':
+        specifier: ^5.62.11
+        version: 5.100.10(react@18.3.1)
+      class-variance-authority:
+        specifier: ^0.7.1
+        version: 0.7.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      lucide-react:
+        specifier: ^0.469.0
+        version: 0.469.0(react@18.3.1)
+      next:
+        specifier: ^14.2.18
+        version: 14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+      sonner:
+        specifier: ^1.7.1
+        version: 1.7.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      tailwind-merge:
+        specifier: ^2.5.5
+        version: 2.6.1
+      zustand:
+        specifier: ^5.0.2
+        version: 5.0.13(@types/react@18.3.28)(react@18.3.1)
+    devDependencies:
+      '@comercio/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.19
+      '@types/react':
+        specifier: ^18.3.18
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.5
+        version: 18.3.7(@types/react@18.3.28)
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.5.0(postcss@8.5.14)
+      eslint:
+        specifier: ^9.17.0
+        version: 9.39.4(jiti@1.21.7)
+      eslint-config-next:
+        specifier: ^14.2.18
+        version: 14.2.35(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
+      postcss:
+        specifier: ^8.4.49
+        version: 8.5.14
+      tailwindcss:
+        specifier: ^3.4.17
+        version: 3.4.19
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
   packages/business:
     dependencies:
       zod:
