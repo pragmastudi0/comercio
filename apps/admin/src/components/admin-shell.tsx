@@ -189,9 +189,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     >
                       <Icon className="h-4 w-4 flex-shrink-0" />
                       {expanded && <span className="truncate">{item.label}</span>}
-                      {/* Tooltip visual cuando está colapsado (en hover) */}
+                      {/* Tooltip deslizante cuando está colapsado */}
                       {!expanded && (
-                        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-xs text-background opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100">
+                        <span
+                          className={cn(
+                            'pointer-events-none absolute left-full top-1/2 z-50 ml-1 flex h-9 -translate-y-1/2 items-center overflow-hidden whitespace-nowrap rounded-md text-sm font-medium shadow-md',
+                            // Estado base (oculto, escalado hacia la izquierda)
+                            'max-w-0 origin-left scale-x-0 px-0 opacity-0',
+                            // Hover: se despliega horizontalmente desde el icono
+                            'group-hover:max-w-[220px] group-hover:scale-x-100 group-hover:px-3 group-hover:opacity-100',
+                            'transition-all duration-300 ease-out group-hover:delay-75',
+                            active
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-foreground text-background',
+                          )}
+                        >
                           {item.label}
                         </span>
                       )}
