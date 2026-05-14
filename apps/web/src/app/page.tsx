@@ -33,18 +33,28 @@ export default function HomePage() {
 
   return (
     <>
-      {/* Hero */}
-      <section className="border-b bg-muted/30">
-        <div className="container mx-auto grid items-center gap-8 px-4 py-12 md:grid-cols-2 md:py-20">
+      {/* Hero con imagen de fondo */}
+      <section className="relative overflow-hidden border-b">
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: 'url(/bg.png)' }}
+          aria-hidden
+        />
+        {/* Overlay para que el texto sea legible sobre la foto */}
+        <div
+          className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/85 to-background/40"
+          aria-hidden
+        />
+        <div className="container relative mx-auto grid items-center gap-8 px-4 py-12 md:grid-cols-2 md:py-24">
           <div>
-            <div className="mb-3 inline-flex items-center gap-1 rounded-full border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
+            <div className="mb-3 inline-flex items-center gap-1 rounded-full border bg-background/90 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
               <Tag className="h-3 w-3" />
               Catálogo mayorista
             </div>
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
               {SITE.nombre}
             </h1>
-            <p className="mt-4 max-w-prose text-muted-foreground">
+            <p className="mt-4 max-w-prose text-foreground/80">
               Tecnología, bazar, belleza y artículos de viaje. Precios por cantidad,
               pedido directo por WhatsApp.
             </p>
@@ -69,28 +79,8 @@ export default function HomePage() {
               </Button>
             </div>
           </div>
-          <div className="hidden md:block">
-            <div className="grid grid-cols-3 gap-3">
-              {(Object.keys({
-                cat_tec: 1,
-                cat_baz: 1,
-                cat_bel: 1,
-                cat_jug: 1,
-                cat_pap: 1,
-                cat_via: 1,
-              }) as string[]).map((id) => {
-                const v = visualDeCategoria(id);
-                return (
-                  <div
-                    key={id}
-                    className={`flex aspect-square items-center justify-center rounded-lg border text-5xl ${v.bg}`}
-                  >
-                    {v.emojiPrincipal}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* Columna derecha vacía: deja respirar la imagen del fondo */}
+          <div aria-hidden />
         </div>
       </section>
 
