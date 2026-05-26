@@ -5,11 +5,15 @@ import Image from 'next/image';
 import { useCarrito } from '@/stores/carrito';
 import { SITE } from '@/lib/config';
 import { ShoppingBag } from 'lucide-react';
+import { useHasMounted } from '@/lib/hydration';
 
 export function Header() {
+  const mounted = useHasMounted();
   const cantidad = useCarrito((s) =>
     s.items.reduce((acc, i) => acc + i.cantidad, 0),
   );
+  // Hasta que hidrate, mostrar 0 para evitar mismatch con localStorage.
+  const cantidadVisible = mounted ? cantidad : 0;
 
   return (
     <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
@@ -43,9 +47,9 @@ export function Header() {
         >
           <ShoppingBag className="h-4 w-4" />
           <span className="hidden sm:inline">Carrito</span>
-          {cantidad > 0 && (
+          {cantidadVisible > 0 && (
             <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-semibold text-background">
-              {cantidad}
+              {cantidadVisible}
             </span>
           )}
         </Link>

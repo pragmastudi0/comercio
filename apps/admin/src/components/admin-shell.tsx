@@ -20,6 +20,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Globe,
 } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { cn } from '@comercio/ui/utils';
@@ -45,6 +46,10 @@ const NAV_GROUPS: { titulo: string; items: NavItem[] }[] = [
       { href: '/listas-precio', label: 'Listas de precio', icon: TagsIcon },
       { href: '/proveedores', label: 'Proveedores', icon: Truck },
     ],
+  },
+  {
+    titulo: 'Online',
+    items: [{ href: '/web', label: 'E-commerce', icon: Globe }],
   },
   {
     titulo: 'Stock',
