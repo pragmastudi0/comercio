@@ -16,6 +16,9 @@ export type ProductoFormValues = {
   costo: number;
   publicado_web: boolean;
   activo: boolean;
+  solo_por_bulto: boolean;
+  cantidad_minima_web: number;
+  incremento_web: number;
 };
 
 export function productoToForm(p: Producto): ProductoFormValues {
@@ -29,6 +32,9 @@ export function productoToForm(p: Producto): ProductoFormValues {
     costo: p.costo,
     publicado_web: p.publicado_web,
     activo: p.activo,
+    solo_por_bulto: p.solo_por_bulto ?? false,
+    cantidad_minima_web: p.cantidad_minima_web ?? 0,
+    incremento_web: p.incremento_web ?? 1,
   };
 }
 
@@ -152,8 +158,52 @@ export function ProductoFormFields({
               onChange={(e) => set('publicado_web', e.target.checked)}
               className="h-4 w-4"
             />
-            Publicado en e-commerce (futuro)
+            Publicado en e-commerce
           </label>
+        </div>
+
+        {/* Reglas de venta web (sólo aplican a la web mayorista) */}
+        <div className="mt-2 rounded-md border bg-muted/30 p-3">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Reglas para el e-commerce mayorista
+          </div>
+          <label className="mb-3 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={values.solo_por_bulto}
+              onChange={(e) => set('solo_por_bulto', e.target.checked)}
+              className="h-4 w-4"
+            />
+            Solo se vende por bulto (no admite unidad suelta)
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="mb-1 block text-xs">Cantidad mínima de compra</Label>
+              <Input
+                type="number"
+                min={0}
+                value={values.cantidad_minima_web}
+                onChange={(e) =>
+                  set('cantidad_minima_web', Math.max(0, parseInt(e.target.value) || 0))
+                }
+              />
+              <p className="mt-1 text-[10px] text-muted-foreground">0 = sin mínimo</p>
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Incremento (de a cuántas u)</Label>
+              <Input
+                type="number"
+                min={1}
+                value={values.incremento_web}
+                onChange={(e) =>
+                  set('incremento_web', Math.max(1, parseInt(e.target.value) || 1))
+                }
+              />
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Ej: 12 obliga a comprar en docenas
+              </p>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -284,6 +334,9 @@ export function useProductoForm(initial?: ProductoFormValues) {
       costo: 0,
       publicado_web: false,
       activo: true,
+      solo_por_bulto: false,
+      cantidad_minima_web: 0,
+      incremento_web: 1,
     },
   );
 }

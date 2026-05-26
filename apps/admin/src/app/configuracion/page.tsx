@@ -22,6 +22,14 @@ export default function ConfiguracionPage() {
   const [validezPresup, setValidezPresup] = useState(7);
   const [permitirSinStock, setPermitirSinStock] = useState(false);
   const [cuotas, setCuotas] = useState<{ cuotas: number; recargo_pct: number }[]>([]);
+  const [razonSocial, setRazonSocial] = useState('');
+  const [cuit, setCuit] = useState('');
+  const [direccion, setDireccion] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [emailComercio, setEmailComercio] = useState('');
+  const [horario, setHorario] = useState('');
+  const [pedidoMinimo, setPedidoMinimo] = useState(0);
+  const [waTemplate, setWaTemplate] = useState('');
 
   useEffect(() => {
     if (configQ.data) {
@@ -29,6 +37,14 @@ export default function ConfiguracionPage() {
       setValidezPresup(configQ.data.validez_presupuesto_dias);
       setPermitirSinStock(configQ.data.permitir_venta_sin_stock_default);
       setCuotas(configQ.data.cuotas);
+      setRazonSocial(configQ.data.comercio?.razon_social ?? '');
+      setCuit(configQ.data.comercio?.cuit ?? '');
+      setDireccion(configQ.data.comercio?.direccion ?? '');
+      setTelefono(configQ.data.comercio?.telefono ?? '');
+      setEmailComercio(configQ.data.comercio?.email ?? '');
+      setHorario(configQ.data.comercio?.horario ?? '');
+      setPedidoMinimo(configQ.data.pedido_minimo_web ?? 0);
+      setWaTemplate(configQ.data.mensaje_wa_template ?? '');
     }
   }, [configQ.data]);
 
@@ -39,6 +55,16 @@ export default function ConfiguracionPage() {
         validez_presupuesto_dias: validezPresup,
         permitir_venta_sin_stock_default: permitirSinStock,
         cuotas: [...cuotas].sort((a, b) => a.cuotas - b.cuotas),
+        comercio: {
+          razon_social: razonSocial,
+          cuit,
+          direccion,
+          telefono,
+          email: emailComercio,
+          horario,
+        },
+        pedido_minimo_web: pedidoMinimo,
+        mensaje_wa_template: waTemplate,
       }),
     onSuccess: () => {
       toast.success('Configuración guardada');
@@ -184,6 +210,93 @@ export default function ConfiguracionPage() {
               <Plus className="mr-1 h-3 w-3" />
               Agregar opción de cuota
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Datos del comercio (aparecen en ticket y página de contacto) */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Datos del comercio</CardTitle>
+            <CardDescription>
+              Se muestran en el ticket impreso y en la página de contacto del sitio web.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label className="mb-1 block">Razón social / Nombre</Label>
+              <Input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} />
+            </div>
+            <div>
+              <Label className="mb-1 block">CUIT</Label>
+              <Input value={cuit} onChange={(e) => setCuit(e.target.value)} />
+            </div>
+            <div className="sm:col-span-2">
+              <Label className="mb-1 block">Dirección</Label>
+              <Input value={direccion} onChange={(e) => setDireccion(e.target.value)} />
+            </div>
+            <div>
+              <Label className="mb-1 block">Teléfono</Label>
+              <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+            </div>
+            <div>
+              <Label className="mb-1 block">Email</Label>
+              <Input
+                type="email"
+                value={emailComercio}
+                onChange={(e) => setEmailComercio(e.target.value)}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label className="mb-1 block">Horario</Label>
+              <Input
+                value={horario}
+                onChange={(e) => setHorario(e.target.value)}
+                placeholder="Lun a Sáb 8:00 a 22:00"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* E-commerce: mínimo de pedido + template WhatsApp */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>E-commerce mayorista</CardTitle>
+            <CardDescription>
+              Reglas que aplica el sitio web cuando el cliente arma su pedido.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label className="mb-1 block">Pedido mínimo (en $)</Label>
+              <Input
+                type="number"
+                min={0}
+                step={1000}
+                value={pedidoMinimo}
+                onChange={(e) => setPedidoMinimo(parseFloat(e.target.value) || 0)}
+                className="max-w-xs"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                0 = sin mínimo. Por debajo de este monto la web no deja enviar el pedido.
+              </p>
+            </div>
+            <div>
+              <Label className="mb-1 block">
+                Plantilla del mensaje de WhatsApp (opcional)
+              </Label>
+              <textarea
+                value={waTemplate}
+                onChange={(e) => setWaTemplate(e.target.value)}
+                rows={6}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                placeholder="Dejar vacío para usar el formato por defecto. Variables disponibles: {fecha}, {cliente.razonSocial}, {cliente.contacto}, {cliente.telefono}, {items}, {total}, {metodoPago}, {entrega}, {notas}"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Si querés controlar exactamente el mensaje que se manda, escribilo acá usando
+                las variables entre llaves. Si lo dejás vacío, se usa un formato razonable
+                por defecto.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -58,6 +58,9 @@ export default function NuevoProductoPage() {
         costo: values.costo,
         publicado_web: values.publicado_web,
         activo: values.activo,
+        solo_por_bulto: values.solo_por_bulto || undefined,
+        cantidad_minima_web: values.cantidad_minima_web || undefined,
+        incremento_web: values.incremento_web > 1 ? values.incremento_web : undefined,
       });
       for (const x of precios) {
         if (x.escalas.some((e) => e.precio > 0)) {

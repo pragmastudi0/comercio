@@ -117,6 +117,12 @@ export type Producto = {
   // Atributos dinámicos según la categoría
   atributos?: Record<string, string | number | boolean>;
   publicado_web: boolean;
+  /** Si true, se vende solo por bulto (no admite unidad suelta). Sólo afecta al e-commerce. */
+  solo_por_bulto?: boolean;
+  /** Cantidad mínima de compra (e-commerce). 0/undefined = sin mínimo. */
+  cantidad_minima_web?: number;
+  /** Incremento permitido (e-commerce). 1 = unidad, 6 = de a media docena, 12 = de a docena. */
+  incremento_web?: number;
   activo: boolean;
   creado_en: ISODate;
 };
@@ -267,6 +273,23 @@ export type ConfiguracionEmpresa = {
   cuotas: CuotaRecargo[];
   validez_presupuesto_dias: number;
   permitir_venta_sin_stock_default: boolean;
+  /** Datos del comercio mostrados en ticket y página de contacto. */
+  comercio?: {
+    razon_social?: string;
+    cuit?: string;
+    direccion?: string;
+    telefono?: string;
+    email?: string;
+    horario?: string;
+  };
+  /** Monto mínimo de un pedido por el sitio web (en pesos). 0 = sin mínimo. */
+  pedido_minimo_web?: number;
+  /** Template del mensaje de WhatsApp que se manda desde la web.
+   *  Si está vacío, se usa el template por defecto. Soporta variables:
+   *  {fecha}, {cliente.razonSocial}, {cliente.contacto}, {cliente.telefono},
+   *  {cliente.cuit}, {cliente.email}, {cliente.direccion}, {items}, {total},
+   *  {metodoPago}, {entrega}, {notas}. */
+  mensaje_wa_template?: string;
 };
 
 export type LogAuditoria = {

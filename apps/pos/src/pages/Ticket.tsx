@@ -28,6 +28,11 @@ export function Ticket() {
     enabled: !!id,
   });
   const productosQ = useQuery({ queryKey: ['productos-all'], queryFn: () => db.productos.list() });
+  const configQ = useQuery({
+    queryKey: ['config-ticket'],
+    queryFn: () => db.configuracion.get('emp_demo'),
+  });
+  const empleadosQ = useQuery({ queryKey: ['empleados-ticket'], queryFn: () => db.empleados.list() });
 
   // Auto-print al cargar la primera vez (después de cobrar)
   useEffect(() => {
@@ -80,13 +85,31 @@ export function Ticket() {
       <main className="container mx-auto max-w-md p-6 print:p-2">
         <div className="ticket rounded border border-dashed bg-white p-6 font-mono text-sm text-black print:border-0 print:p-0">
           <div className="mb-3 text-center">
-            <div className="font-bold uppercase">{BRAND.nombreCompleto}</div>
-            <div className="text-xs">{BRAND.tagline}</div>
+            <div className="font-bold uppercase">
+              {configQ.data?.comercio?.razon_social || BRAND.nombreCompleto}
+            </div>
+            {configQ.data?.comercio?.direccion && (
+              <div className="text-xs">{configQ.data.comercio.direccion}</div>
+            )}
+            {configQ.data?.comercio?.cuit && (
+              <div className="text-xs">CUIT {configQ.data.comercio.cuit}</div>
+            )}
+            {configQ.data?.comercio?.telefono && (
+              <div className="text-xs">Tel: {configQ.data.comercio.telefono}</div>
+            )}
             <div className="mt-2 text-xs">
               {venta.estado === 'presupuesto' ? 'PRESUPUESTO' : 'COMPROBANTE NO FISCAL'}
             </div>
             <div className="text-xs">N° {venta.numero}</div>
             <div className="text-xs">{formatDate(venta.fecha)}</div>
+            {(() => {
+              const emp = empleadosQ.data?.find((e) => e.id === venta.empleado_id);
+              return emp ? (
+                <div className="text-xs">
+                  Cajero: {emp.nombre} {emp.apellido}
+                </div>
+              ) : null;
+            })()}
           </div>
 
           <div className="my-3 border-t border-dashed pt-2">

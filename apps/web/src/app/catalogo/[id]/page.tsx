@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -36,6 +36,17 @@ export default function ProductoPage() {
   const categoriasQ = useQuery({ queryKey: ['categorias'], queryFn: () => db.categorias.list() });
 
   const [cantidad, setCantidad] = useState(1);
+  // Cuando carga el producto, ajustar la cantidad inicial al mínimo / incremento.
+  useEffect(() => {
+    if (productoQ.data) {
+      const minimo = Math.max(
+        1,
+        productoQ.data.cantidad_minima_web ?? 0,
+        productoQ.data.incremento_web ?? 1,
+      );
+      setCantidad((c) => (c < minimo ? minimo : c));
+    }
+  }, [productoQ.data]);
 
   if (productoQ.isLoading) {
     return (
@@ -101,6 +112,23 @@ export default function ProductoPage() {
             <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
               {p.descripcion_larga}
             </p>
+          )}
+
+          {/* Reglas de venta (sólo bulto / mínimo) */}
+          {(p.solo_por_bulto || (p.cantidad_minima_web ?? 0) > 0 || (p.incremento_web ?? 1) > 1) && (
+            <div className="mt-3 rounded-md border border-orange-300 bg-orange-50 p-3 text-sm text-orange-800">
+              {p.solo_por_bulto && (
+                <div>
+                  <strong>Venta solo por bulto</strong> de {p.incremento_web ?? 1} unidades.
+                </div>
+              )}
+              {!p.solo_por_bulto && (p.incremento_web ?? 1) > 1 && (
+                <div>Se vende en múltiplos de {p.incremento_web} unidades.</div>
+              )}
+              {(p.cantidad_minima_web ?? 0) > 0 && (
+                <div>Compra mínima: {p.cantidad_minima_web} unidades.</div>
+              )}
+            </div>
           )}
 
           {/* Escalas de precio */}

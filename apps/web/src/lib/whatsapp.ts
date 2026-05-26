@@ -1,6 +1,10 @@
+import type { ConfiguracionEmpresa } from '@comercio/db';
 import type { ItemCarritoWeb } from '@/stores/carrito';
 import { precioPorCantidad, totalCarrito } from '@/stores/carrito';
 import { SITE } from './config';
+
+export type FormaEntrega = 'retiro' | 'envio_local' | 'transporte_externo';
+export type MetodoPagoWeb = 'transferencia' | 'efectivo' | 'cta_cte' | 'a_definir';
 
 export type DatosPedido = {
   razonSocial: string;
@@ -9,22 +13,26 @@ export type DatosPedido = {
   cuit?: string;
   email?: string;
   direccion?: string;
-  metodoPago: 'transferencia' | 'efectivo' | 'cta_cte' | 'a_definir';
-  formaEntrega: 'retiro' | 'envio';
+  metodoPago: MetodoPagoWeb;
+  formaEntrega: FormaEntrega;
   zonaEnvio?: string;
+  /** Datos del transporte externo elegido. */
+  transporte?: string;
+  urgencia?: 'normal' | 'urgente';
   notas?: string;
 };
 
-const LABEL_PAGO: Record<DatosPedido['metodoPago'], string> = {
+const LABEL_PAGO: Record<MetodoPagoWeb, string> = {
   transferencia: 'Transferencia bancaria',
   efectivo: 'Efectivo (al retirar)',
   cta_cte: 'Cuenta corriente',
   a_definir: 'A definir',
 };
 
-const LABEL_ENTREGA: Record<DatosPedido['formaEntrega'], string> = {
+const LABEL_ENTREGA: Record<FormaEntrega, string> = {
   retiro: 'Retiro en local',
-  envio: 'Envío a domicilio',
+  envio_local: 'Envío a domicilio',
+  transporte_externo: 'Transporte externo',
 };
 
 function ars(n: number): string {
@@ -35,8 +43,72 @@ function ars(n: number): string {
   }).format(n);
 }
 
-/** Construye el mensaje de WhatsApp completo en texto plano legible. */
-export function buildMensaje(items: ItemCarritoWeb[], datos: DatosPedido): string {
+/** Template por defecto si el admin no configuró uno custom. */
+function defaultTemplate(): string {
+  return [
+    '*Pedido mayorista — {comercio}*',
+    '📅 {fecha}',
+    '',
+    '*Datos del cliente*',
+    '{cliente}',
+    '',
+    '*Productos*',
+    '{items}',
+    '',
+    '*TOTAL: {total}*',
+    '',
+    '*Forma de pago*',
+    '{metodoPago}',
+    '',
+    '*Entrega*',
+    '{entrega}',
+    '{notas}',
+  ].join('\n');
+}
+
+function renderCliente(d: DatosPedido): string {
+  const lineas: string[] = [];
+  lineas.push(`• Razón social: ${d.razonSocial}`);
+  lineas.push(`• Contacto: ${d.contacto}`);
+  lineas.push(`• Teléfono: ${d.telefono}`);
+  if (d.cuit) lineas.push(`• CUIT: ${d.cuit}`);
+  if (d.email) lineas.push(`• Email: ${d.email}`);
+  if (d.direccion) lineas.push(`• Dirección: ${d.direccion}`);
+  return lineas.join('\n');
+}
+
+function renderItems(items: ItemCarritoWeb[]): string {
+  return items
+    .map((item, i) => {
+      const precio = precioPorCantidad(item.escalas, item.cantidad);
+      const sub = precio * item.cantidad;
+      return `${i + 1}. ${item.nombre} (cód ${item.codigo})\n   ${item.cantidad}u × ${ars(precio)} = ${ars(sub)}`;
+    })
+    .join('\n');
+}
+
+function renderEntrega(d: DatosPedido): string {
+  const lineas: string[] = [`• ${LABEL_ENTREGA[d.formaEntrega]}`];
+  if (d.formaEntrega === 'envio_local' && d.zonaEnvio) lineas.push(`• Zona: ${d.zonaEnvio}`);
+  if (d.formaEntrega === 'transporte_externo' && d.transporte) {
+    lineas.push(`• Transporte: ${d.transporte}`);
+  }
+  if (d.urgencia === 'urgente') lineas.push('• ⚡ Urgente');
+  return lineas.join('\n');
+}
+
+function renderNotas(d: DatosPedido): string {
+  return d.notas?.trim() ? `\n*Notas*\n${d.notas.trim()}` : '';
+}
+
+/** Construye el mensaje de WhatsApp. Si la config trae un template custom, lo usa. */
+export function buildMensaje(
+  items: ItemCarritoWeb[],
+  datos: DatosPedido,
+  config?: ConfiguracionEmpresa | null,
+): string {
+  const template = config?.mensaje_wa_template?.trim() || defaultTemplate();
+  const comercioNombre = config?.comercio?.razon_social || SITE.nombre;
   const total = totalCarrito(items);
   const fecha = new Date().toLocaleDateString('es-AR', {
     day: '2-digit',
@@ -44,45 +116,21 @@ export function buildMensaje(items: ItemCarritoWeb[], datos: DatosPedido): strin
     year: 'numeric',
   });
 
-  const lineas: string[] = [];
-  lineas.push(`*Pedido mayorista — ${SITE.nombre}*`);
-  lineas.push(`📅 ${fecha}`);
-  lineas.push('');
-  lineas.push('*Datos del cliente*');
-  lineas.push(`• Razón social: ${datos.razonSocial}`);
-  lineas.push(`• Contacto: ${datos.contacto}`);
-  lineas.push(`• Teléfono: ${datos.telefono}`);
-  if (datos.cuit) lineas.push(`• CUIT: ${datos.cuit}`);
-  if (datos.email) lineas.push(`• Email: ${datos.email}`);
-  if (datos.direccion) lineas.push(`• Dirección: ${datos.direccion}`);
-  lineas.push('');
-  lineas.push('*Productos*');
-  items.forEach((item, i) => {
-    const precio = precioPorCantidad(item.escalas, item.cantidad);
-    const sub = precio * item.cantidad;
-    lineas.push(
-      `${i + 1}. ${item.nombre} (cód ${item.codigo})`,
-    );
-    lineas.push(`   ${item.cantidad}u × ${ars(precio)} = ${ars(sub)}`);
-  });
-  lineas.push('');
-  lineas.push(`*TOTAL: ${ars(total)}*`);
-  lineas.push('');
-  lineas.push('*Forma de pago*');
-  lineas.push(`• ${LABEL_PAGO[datos.metodoPago]}`);
-  lineas.push('');
-  lineas.push('*Entrega*');
-  lineas.push(`• ${LABEL_ENTREGA[datos.formaEntrega]}`);
-  if (datos.formaEntrega === 'envio' && datos.zonaEnvio) {
-    lineas.push(`• Zona: ${datos.zonaEnvio}`);
-  }
-  if (datos.notas?.trim()) {
-    lineas.push('');
-    lineas.push('*Notas*');
-    lineas.push(datos.notas.trim());
-  }
-
-  return lineas.join('\n');
+  return template
+    .replaceAll('{comercio}', comercioNombre)
+    .replaceAll('{fecha}', fecha)
+    .replaceAll('{cliente}', renderCliente(datos))
+    .replaceAll('{cliente.razonSocial}', datos.razonSocial)
+    .replaceAll('{cliente.contacto}', datos.contacto)
+    .replaceAll('{cliente.telefono}', datos.telefono)
+    .replaceAll('{cliente.cuit}', datos.cuit ?? '')
+    .replaceAll('{cliente.email}', datos.email ?? '')
+    .replaceAll('{cliente.direccion}', datos.direccion ?? '')
+    .replaceAll('{items}', renderItems(items))
+    .replaceAll('{total}', ars(total))
+    .replaceAll('{metodoPago}', `• ${LABEL_PAGO[datos.metodoPago]}`)
+    .replaceAll('{entrega}', renderEntrega(datos))
+    .replaceAll('{notas}', renderNotas(datos));
 }
 
 /** Construye la URL `wa.me` con el mensaje encoded. */
