@@ -239,6 +239,18 @@ export type Venta = {
   fecha: ISODate;
 };
 
+export type NotaCredito = {
+  id: ID;
+  numero: string;
+  venta_id: ID;
+  empleado_id: ID;
+  motivo: string;
+  /** Subset de items de la venta que se devuelven, con cantidad parcial permitida. */
+  items: { producto_id: ID; cantidad: number; precio_unitario: number; subtotal: number }[];
+  monto_total: number;
+  fecha: ISODate;
+};
+
 export type SesionCaja = {
   id: ID;
   caja_id: ID;
@@ -281,6 +293,8 @@ export type ConfiguracionEmpresa = {
     telefono?: string;
     email?: string;
     horario?: string;
+    /** URL pública del logo (PNG/SVG). Se muestra en el header del ticket. */
+    logo_url?: string;
   };
   /** Monto mínimo de un pedido por el sitio web (en pesos). 0 = sin mínimo. */
   pedido_minimo_web?: number;

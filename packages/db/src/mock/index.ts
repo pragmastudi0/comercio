@@ -15,6 +15,7 @@ import { makeStockRepo } from './repos/stock.repo';
 import { makeTransferenciasRepo } from './repos/transferencias.repo';
 import { makeListasPrecioRepo } from './repos/listas-precio.repo';
 import { makeVentasRepo } from './repos/ventas.repo';
+import { makeNotasCreditoRepo } from './repos/notas-credito.repo';
 import { makeConfiguracionRepo } from './repos/configuracion.repo';
 import { makeAuditoriaRepo } from './repos/auditoria.repo';
 
@@ -40,6 +41,7 @@ export function createMockClient(): DbClient {
     transferencias: makeTransferenciasRepo(store),
     listasPrecio: makeListasPrecioRepo(store),
     ventas: makeVentasRepo(store),
+    notasCredito: makeNotasCreditoRepo(store),
     configuracion: makeConfiguracionRepo(store),
     auditoria: makeAuditoriaRepo(store),
   };

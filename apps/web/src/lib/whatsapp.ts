@@ -15,8 +15,13 @@ export type DatosPedido = {
   direccion?: string;
   metodoPago: MetodoPagoWeb;
   formaEntrega: FormaEntrega;
+  /** Provincia (para envío local o transporte externo). */
+  provincia?: string;
+  /** Localidad / Ciudad. */
+  localidad?: string;
+  /** Dirección completa para envío local. */
   zonaEnvio?: string;
-  /** Datos del transporte externo elegido. */
+  /** Empresa de transporte externo. */
   transporte?: string;
   urgencia?: 'normal' | 'urgente';
   notas?: string;
@@ -89,7 +94,11 @@ function renderItems(items: ItemCarritoWeb[]): string {
 
 function renderEntrega(d: DatosPedido): string {
   const lineas: string[] = [`• ${LABEL_ENTREGA[d.formaEntrega]}`];
-  if (d.formaEntrega === 'envio_local' && d.zonaEnvio) lineas.push(`• Zona: ${d.zonaEnvio}`);
+  if (d.provincia) lineas.push(`• Provincia: ${d.provincia}`);
+  if (d.localidad) lineas.push(`• Localidad: ${d.localidad}`);
+  if (d.formaEntrega === 'envio_local' && d.zonaEnvio) {
+    lineas.push(`• Dirección: ${d.zonaEnvio}`);
+  }
   if (d.formaEntrega === 'transporte_externo' && d.transporte) {
     lineas.push(`• Transporte: ${d.transporte}`);
   }

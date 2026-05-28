@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { TrendingUp } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { Badge } from '@comercio/ui/badge';
+import { Button } from '@comercio/ui/button';
 import { AbmDialogFooter, AbmSimple } from '@/components/abm-simple';
+import { AumentoMasivoDialog } from '@/components/aumento-masivo-dialog';
 import type { ListaPrecio } from '@comercio/db';
 
 export default function ListasPrecioPage() {
@@ -17,6 +20,7 @@ export default function ListasPrecioPage() {
     queryKey: ['listas-precio'],
     queryFn: () => db.listasPrecio.list(),
   });
+  const [aumentoOpen, setAumentoOpen] = useState<ListaPrecio | null>(null);
 
   const crearMut = useMutation({
     mutationFn: (input: { nombre: string; default: boolean; activa: boolean }) =>
@@ -75,6 +79,20 @@ export default function ListasPrecioPage() {
                 <Badge variant="destructive">Inactiva</Badge>
               ),
           },
+          {
+            header: 'Aumento',
+            cell: (r) => (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAumentoOpen(r)}
+                disabled={!r.activa}
+              >
+                <TrendingUp className="mr-1 h-3 w-3" />
+                Aumento masivo
+              </Button>
+            ),
+          },
         ]}
         buildCreate={(close) => (
           <ListaForm
@@ -96,6 +114,12 @@ export default function ListasPrecioPage() {
           />
         )}
         onDelete={(r) => eliminarMut.mutateAsync(r.id)}
+      />
+
+      <AumentoMasivoDialog
+        lista={aumentoOpen}
+        open={!!aumentoOpen}
+        onOpenChange={(v) => !v && setAumentoOpen(null)}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { BRAND } from '@comercio/business';
@@ -6,7 +6,8 @@ import { getDb } from '@/lib/db';
 import { Button } from '@comercio/ui/button';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency, formatDate } from '@comercio/ui/utils';
-import { Printer, ArrowLeft } from 'lucide-react';
+import { Printer, ArrowLeft, Receipt } from 'lucide-react';
+import { ModalNotaCredito } from '@/components/ModalNotaCredito';
 
 const LABEL_METODO: Record<string, string> = {
   efectivo: 'Efectivo',
@@ -21,6 +22,7 @@ export function Ticket() {
   const { id } = useParams();
   const navigate = useNavigate();
   const db = getDb();
+  const [ncOpen, setNcOpen] = useState(false);
 
   const ventaQ = useQuery({
     queryKey: ['venta', id],
@@ -70,21 +72,43 @@ export function Ticket() {
   return (
     <>
       <header className="no-print border-b bg-background">
-        <div className="container mx-auto flex h-14 items-center justify-between px-4">
+        <div className="container mx-auto flex h-14 items-center justify-between gap-2 px-4">
           <Button variant="ghost" size="sm" onClick={() => navigate('/caja')}>
             <ArrowLeft className="mr-1 h-4 w-4" />
             Nueva venta
           </Button>
-          <Button onClick={() => window.print()} size="sm">
-            <Printer className="mr-1 h-4 w-4" />
-            Imprimir
-          </Button>
+          <div className="flex gap-2">
+            {venta.estado === 'completada' && (
+              <Button variant="outline" size="sm" onClick={() => setNcOpen(true)}>
+                <Receipt className="mr-1 h-4 w-4" />
+                Nota de crédito
+              </Button>
+            )}
+            <Button onClick={() => window.print()} size="sm">
+              <Printer className="mr-1 h-4 w-4" />
+              Imprimir
+            </Button>
+          </div>
         </div>
       </header>
+
+      <ModalNotaCredito
+        venta={venta}
+        open={ncOpen}
+        onOpenChange={setNcOpen}
+      />
 
       <main className="container mx-auto max-w-md p-6 print:p-2">
         <div className="ticket rounded border border-dashed bg-white p-6 font-mono text-sm text-black print:border-0 print:p-0">
           <div className="mb-3 text-center">
+            {configQ.data?.comercio?.logo_url && (
+              // eslint-disable-next-line jsx-a11y/alt-text
+              <img
+                src={configQ.data.comercio.logo_url}
+                alt=""
+                className="mx-auto mb-1 h-12 w-12 object-contain"
+              />
+            )}
             <div className="font-bold uppercase">
               {configQ.data?.comercio?.razon_social || BRAND.nombreCompleto}
             </div>

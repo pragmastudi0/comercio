@@ -12,6 +12,7 @@ import type {
   MovimientoCaja,
   MovimientoCtaCte,
   MovimientoStock,
+  NotaCredito,
   Producto,
   ProductoImagen,
   ProductoListaPrecio,
@@ -46,6 +47,8 @@ export type Store = {
   sesionesCaja: SesionCaja[];
   movimientosCaja: MovimientoCaja[];
   ventas: Venta[];
+  notasCredito: NotaCredito[];
+  contadorNotasCredito: number;
   configuracion: ConfiguracionEmpresa;
   auditoria: LogAuditoria[];
   contadorVentas: number;

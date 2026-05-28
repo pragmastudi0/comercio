@@ -304,6 +304,8 @@ export function buildSeed(): Store {
       pedido_minimo_web: 0,
       mensaje_wa_template: '',
     },
+    notasCredito: [],
+    contadorNotasCredito: 0,
     auditoria: [],
     contadorVentas: 0,
     passwords: {

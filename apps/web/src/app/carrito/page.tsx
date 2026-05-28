@@ -33,6 +33,7 @@ import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { formatCurrency } from '@comercio/ui/utils';
 import { emojiProducto } from '@/lib/imagenes';
+import { PROVINCIAS_AR } from '@/lib/provincias';
 
 export default function CarritoPage() {
   const db = getDb();
@@ -79,6 +80,8 @@ export default function CarritoPage() {
     direccion: '',
     metodoPago: 'transferencia',
     formaEntrega: 'retiro',
+    provincia: '',
+    localidad: '',
     zonaEnvio: '',
     transporte: '',
     urgencia: 'normal',
@@ -114,8 +117,14 @@ export default function CarritoPage() {
     if (!datos.razonSocial.trim()) return 'Falta la razón social.';
     if (!datos.contacto.trim()) return 'Falta el nombre de contacto.';
     if (!datos.telefono.trim()) return 'Falta el teléfono.';
+    if (datos.formaEntrega !== 'retiro' && !datos.provincia?.trim()) {
+      return 'Elegí la provincia de entrega.';
+    }
+    if (datos.formaEntrega !== 'retiro' && !datos.localidad?.trim()) {
+      return 'Indicá la localidad.';
+    }
     if (datos.formaEntrega === 'envio_local' && !datos.zonaEnvio?.trim()) {
-      return 'Si es envío a domicilio, indicá la zona.';
+      return 'Indicá la dirección de envío.';
     }
     if (datos.formaEntrega === 'transporte_externo' && !datos.transporte?.trim()) {
       return 'Indicá el transporte externo (empresa/persona).';
@@ -394,28 +403,58 @@ export default function CarritoPage() {
                 </select>
               </div>
 
-              {datos.formaEntrega === 'envio_local' && (
-                <div>
-                  <Label className="mb-1 block text-xs">Zona / Dirección de envío</Label>
-                  <Input
-                    value={datos.zonaEnvio}
-                    onChange={(e) => setDatos({ ...datos, zonaEnvio: e.target.value })}
-                    placeholder="Localidad, calle, número"
-                  />
-                </div>
-              )}
+              {datos.formaEntrega !== 'retiro' && (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="mb-1 block text-xs">Provincia *</Label>
+                      <select
+                        value={datos.provincia}
+                        onChange={(e) => setDatos({ ...datos, provincia: e.target.value })}
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="">— Elegir —</option>
+                        {PROVINCIAS_AR.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="mb-1 block text-xs">Localidad *</Label>
+                      <Input
+                        value={datos.localidad}
+                        onChange={(e) => setDatos({ ...datos, localidad: e.target.value })}
+                        placeholder="Ej: Villa Carlos Paz"
+                      />
+                    </div>
+                  </div>
 
-              {datos.formaEntrega === 'transporte_externo' && (
-                <div>
-                  <Label className="mb-1 block text-xs">
-                    Transporte externo (empresa / agencia)
-                  </Label>
-                  <Input
-                    value={datos.transporte}
-                    onChange={(e) => setDatos({ ...datos, transporte: e.target.value })}
-                    placeholder="Ej: Andreani, OCA, transporte propio"
-                  />
-                </div>
+                  {datos.formaEntrega === 'envio_local' && (
+                    <div>
+                      <Label className="mb-1 block text-xs">Dirección de envío *</Label>
+                      <Input
+                        value={datos.zonaEnvio}
+                        onChange={(e) => setDatos({ ...datos, zonaEnvio: e.target.value })}
+                        placeholder="Calle, número, piso/depto"
+                      />
+                    </div>
+                  )}
+
+                  {datos.formaEntrega === 'transporte_externo' && (
+                    <div>
+                      <Label className="mb-1 block text-xs">
+                        Transporte externo (empresa / agencia) *
+                      </Label>
+                      <Input
+                        value={datos.transporte}
+                        onChange={(e) => setDatos({ ...datos, transporte: e.target.value })}
+                        placeholder="Ej: Andreani, OCA, transporte propio"
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               <div>

@@ -19,6 +19,7 @@ export type ProductoFormValues = {
   solo_por_bulto: boolean;
   cantidad_minima_web: number;
   incremento_web: number;
+  atributos: Record<string, string | number | boolean>;
 };
 
 export function productoToForm(p: Producto): ProductoFormValues {
@@ -35,8 +36,15 @@ export function productoToForm(p: Producto): ProductoFormValues {
     solo_por_bulto: p.solo_por_bulto ?? false,
     cantidad_minima_web: p.cantidad_minima_web ?? 0,
     incremento_web: p.incremento_web ?? 1,
+    atributos: (p.atributos ?? {}) as Record<string, string | number | boolean>,
   };
 }
+
+type CategoriaConAttrs = {
+  id: string;
+  nombre: string;
+  atributos?: Record<string, { tipo: 'string' | 'number' | 'boolean' | 'enum'; opciones?: string[] }>;
+};
 
 export function ProductoFormFields({
   values,
@@ -46,9 +54,13 @@ export function ProductoFormFields({
 }: {
   values: ProductoFormValues;
   onChange: (next: ProductoFormValues) => void;
-  categorias: { id: string; nombre: string }[];
+  categorias: CategoriaConAttrs[];
   proveedores: { id: string; nombre: string }[];
 }) {
+  const catActual = categorias.find((c) => c.id === values.categoria_id);
+  const atrDefs = catActual?.atributos
+    ? Object.entries(catActual.atributos)
+    : [];
   function set<K extends keyof ProductoFormValues>(key: K, v: ProductoFormValues[K]) {
     onChange({ ...values, [key]: v });
   }
@@ -205,6 +217,85 @@ export function ProductoFormFields({
             </div>
           </div>
         </div>
+
+        {/* Atributos dinámicos definidos por la categoría */}
+        {atrDefs.length > 0 && (
+          <div className="mt-2 rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Atributos de la categoría
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {atrDefs.map(([clave, def]) => {
+                const valor = values.atributos[clave];
+                const label = clave.replace(/_/g, ' ');
+                if (def.tipo === 'boolean') {
+                  return (
+                    <label key={clave} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={valor === true}
+                        onChange={(e) =>
+                          set('atributos', { ...values.atributos, [clave]: e.target.checked })
+                        }
+                        className="h-4 w-4"
+                      />
+                      <span className="capitalize">{label}</span>
+                    </label>
+                  );
+                }
+                if (def.tipo === 'enum') {
+                  return (
+                    <div key={clave}>
+                      <Label className="mb-1 block text-xs capitalize">{label}</Label>
+                      <select
+                        value={typeof valor === 'string' ? valor : ''}
+                        onChange={(e) =>
+                          set('atributos', { ...values.atributos, [clave]: e.target.value })
+                        }
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="">—</option>
+                        {(def.opciones ?? []).map((o) => (
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                }
+                if (def.tipo === 'number') {
+                  return (
+                    <div key={clave}>
+                      <Label className="mb-1 block text-xs capitalize">{label}</Label>
+                      <Input
+                        type="number"
+                        value={typeof valor === 'number' ? valor : ''}
+                        onChange={(e) =>
+                          set('atributos', {
+                            ...values.atributos,
+                            [clave]: parseFloat(e.target.value) || 0,
+                          })
+                        }
+                      />
+                    </div>
+                  );
+                }
+                return (
+                  <div key={clave}>
+                    <Label className="mb-1 block text-xs capitalize">{label}</Label>
+                    <Input
+                      value={typeof valor === 'string' ? valor : ''}
+                      onChange={(e) =>
+                        set('atributos', { ...values.atributos, [clave]: e.target.value })
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -337,6 +428,7 @@ export function useProductoForm(initial?: ProductoFormValues) {
       solo_por_bulto: false,
       cantidad_minima_web: 0,
       incremento_web: 1,
+      atributos: {},
     },
   );
 }

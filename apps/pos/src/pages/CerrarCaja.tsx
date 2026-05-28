@@ -51,6 +51,30 @@ export function CerrarCaja() {
   const totalEfectivoEsperado = (sesion?.saldo_inicial ?? 0) + totales.efectivo;
   const diferencia = parseFloat(saldoFinal || '0') - totalEfectivoEsperado;
 
+  // Ventas y anulaciones del turno (para detalle)
+  const ventasQ = useQuery({
+    queryKey: ['ventas-cierre', sesion?.id],
+    queryFn: () =>
+      sesion
+        ? db.ventas.list({
+            empleado_id: sesion.empleado_id,
+            desde: sesion.abierta_en,
+          })
+        : Promise.resolve([]),
+    enabled: !!sesion,
+  });
+  const ventasCompletadas = (ventasQ.data ?? []).filter((v) => v.estado === 'completada');
+  const ventasAnuladas = (ventasQ.data ?? []).filter((v) => v.estado === 'anulada');
+  const descuentosAplicados = ventasCompletadas.reduce(
+    (acc, v) => acc + (v.descuento_total ?? 0),
+    0,
+  );
+  const recargosAplicados = ventasCompletadas.reduce(
+    (acc, v) => acc + (v.recargo_total ?? 0),
+    0,
+  );
+  const montoAnulado = ventasAnuladas.reduce((acc, v) => acc + v.total, 0);
+
   const cerrarMut = useMutation({
     mutationFn: async () => {
       if (!sesion) throw new Error('No hay sesión activa');
@@ -101,6 +125,77 @@ export function CerrarCaja() {
               <div className="flex justify-between border-t pt-2 text-sm font-semibold">
                 <span>Efectivo esperado (saldo inicial + ventas - retiros)</span>
                 <span className="tabular-nums">{formatCurrency(totalEfectivoEsperado)}</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Descuentos, recargos y anulaciones</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {ventasQ.isLoading ? (
+            <Skeleton className="h-20" />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border bg-green-50 p-3">
+                <div className="text-xs font-semibold uppercase text-green-800">
+                  Descuentos aplicados
+                </div>
+                <div className="mt-1 text-xl font-bold tabular-nums text-green-800">
+                  {formatCurrency(descuentosAplicados)}
+                </div>
+                <div className="text-[10px] text-green-700">
+                  Total descontado en las ventas del turno
+                </div>
+              </div>
+              <div className="rounded-md border bg-orange-50 p-3">
+                <div className="text-xs font-semibold uppercase text-orange-800">
+                  Recargos cobrados
+                </div>
+                <div className="mt-1 text-xl font-bold tabular-nums text-orange-800">
+                  {formatCurrency(recargosAplicados)}
+                </div>
+                <div className="text-[10px] text-orange-700">
+                  Recargos por cuotas u otros
+                </div>
+              </div>
+              <div className="rounded-md border bg-red-50 p-3">
+                <div className="text-xs font-semibold uppercase text-red-800">
+                  Anulaciones
+                </div>
+                <div className="mt-1 text-xl font-bold tabular-nums text-red-800">
+                  {ventasAnuladas.length}
+                </div>
+                <div className="text-[10px] text-red-700">
+                  Monto: {formatCurrency(montoAnulado)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {ventasAnuladas.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
+                Detalle de anulaciones
+              </div>
+              <div className="space-y-1">
+                {ventasAnuladas.map((v) => (
+                  <div
+                    key={v.id}
+                    className="flex items-center justify-between rounded border px-2 py-1 text-xs"
+                  >
+                    <span className="font-mono">{v.numero}</span>
+                    <span className="text-muted-foreground">
+                      {v.motivo_anulacion ?? '—'}
+                    </span>
+                    <span className="font-medium tabular-nums">
+                      {formatCurrency(v.total)}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           )}

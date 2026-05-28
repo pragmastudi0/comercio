@@ -13,5 +13,6 @@ export * from './stock.repo';
 export * from './transferencias.repo';
 export * from './listas-precio.repo';
 export * from './ventas.repo';
+export * from './notas-credito.repo';
 export * from './configuracion.repo';
 export * from './auditoria.repo';

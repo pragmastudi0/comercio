@@ -14,6 +14,7 @@ import type {
   TransferenciasRepo,
   ListasPrecioRepo,
   VentasRepo,
+  NotasCreditoRepo,
   ConfiguracionRepo,
   AuditoriaRepo,
 } from './repos';
@@ -39,6 +40,7 @@ export type DbClient = {
   transferencias: TransferenciasRepo;
   listasPrecio: ListasPrecioRepo;
   ventas: VentasRepo;
+  notasCredito: NotasCreditoRepo;
   configuracion: ConfiguracionRepo;
   auditoria: AuditoriaRepo;
 };

@@ -28,6 +28,7 @@ export default function ConfiguracionPage() {
   const [telefono, setTelefono] = useState('');
   const [emailComercio, setEmailComercio] = useState('');
   const [horario, setHorario] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
   const [pedidoMinimo, setPedidoMinimo] = useState(0);
   const [waTemplate, setWaTemplate] = useState('');
 
@@ -43,6 +44,7 @@ export default function ConfiguracionPage() {
       setTelefono(configQ.data.comercio?.telefono ?? '');
       setEmailComercio(configQ.data.comercio?.email ?? '');
       setHorario(configQ.data.comercio?.horario ?? '');
+      setLogoUrl(configQ.data.comercio?.logo_url ?? '');
       setPedidoMinimo(configQ.data.pedido_minimo_web ?? 0);
       setWaTemplate(configQ.data.mensaje_wa_template ?? '');
     }
@@ -62,6 +64,7 @@ export default function ConfiguracionPage() {
           telefono,
           email: emailComercio,
           horario,
+          logo_url: logoUrl,
         },
         pedido_minimo_web: pedidoMinimo,
         mensaje_wa_template: waTemplate,
@@ -253,6 +256,28 @@ export default function ConfiguracionPage() {
                 onChange={(e) => setHorario(e.target.value)}
                 placeholder="Lun a Sáb 8:00 a 22:00"
               />
+            </div>
+            <div className="sm:col-span-2">
+              <Label className="mb-1 block">Logo (URL pública)</Label>
+              <div className="flex items-start gap-3">
+                <Input
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  placeholder="https://… o /logo.png"
+                  className="flex-1"
+                />
+                {logoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={logoUrl}
+                    alt="logo"
+                    className="h-10 w-10 rounded border bg-background object-contain"
+                  />
+                )}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Aparece en el header del ticket. PNG cuadrado funciona mejor.
+              </p>
             </div>
           </CardContent>
         </Card>
