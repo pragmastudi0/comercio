@@ -21,6 +21,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Globe,
+  Receipt,
 } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { cn } from '@comercio/ui/utils';
@@ -34,6 +35,7 @@ const NAV_GROUPS: { titulo: string; items: NavItem[] }[] = [
     items: [
       { href: '/', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/ventas', label: 'Ventas', icon: ShoppingCart },
+      { href: '/notas-credito', label: 'Notas de crédito', icon: Receipt },
       { href: '/caja', label: 'Cajas', icon: Wallet },
       { href: '/reportes', label: 'Reportes', icon: BarChart3 },
     ],
