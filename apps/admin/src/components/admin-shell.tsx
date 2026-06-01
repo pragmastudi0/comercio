@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useSesion } from '@/stores/sesion';
 import {
   LayoutDashboard,
   Package,
@@ -22,6 +23,7 @@ import {
   PanelLeftOpen,
   Globe,
   Receipt,
+  LogOut,
 } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { cn } from '@comercio/ui/utils';
@@ -75,6 +77,11 @@ const NAV_GROUPS: { titulo: string; items: NavItem[] }[] = [
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const empleado = useSesion((s) => s.empleado);
+  const logout = useSesion((s) => s.logout);
+  const isLoginRoute = pathname === '/login';
+
   // Desktop: expandido vs rail colapsado con iconos. Mobile: overlay drawer.
   const [expanded, setExpanded] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -92,6 +99,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  // Guard de auth: si no hay sesión y la ruta no es /login, redirigir.
+  useEffect(() => {
+    if (!empleado && !isLoginRoute) {
+      router.replace('/login');
+    }
+  }, [empleado, isLoginRoute, router]);
+
+  // En la ruta /login, no renderizamos el shell (login fullscreen).
+  if (isLoginRoute) return <>{children}</>;
+  // Mientras carga el redirect, no renderizamos nada (evita flash).
+  if (!empleado) return null;
 
   return (
     <div className="flex min-h-screen bg-muted/20">
@@ -230,6 +249,64 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </div>
           ))}
         </nav>
+
+        {/* Footer del sidebar con el usuario logueado + logout */}
+        <div className={cn('border-t', expanded ? 'px-3 py-3' : 'px-2 py-3')}>
+          {expanded ? (
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                {empleado.nombre.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-medium">
+                  {empleado.nombre} {empleado.apellido}
+                </div>
+                <div className="truncate text-[10px] text-muted-foreground">
+                  {empleado.email}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 flex-shrink-0"
+                onClick={async () => {
+                  if (!confirm('¿Cerrar sesión?')) return;
+                  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+                  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+                  if (url && key) {
+                    const { createSupabaseRaw } = await import('@comercio/db');
+                    await createSupabaseRaw(url, key).auth.signOut();
+                  }
+                  logout();
+                  router.push('/login');
+                }}
+                title="Cerrar sesión"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10"
+              onClick={async () => {
+                if (!confirm('¿Cerrar sesión?')) return;
+                const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+                const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+                if (url && key) {
+                  const { createSupabaseRaw } = await import('@comercio/db');
+                  await createSupabaseRaw(url, key).auth.signOut();
+                }
+                logout();
+                router.push('/login');
+              }}
+              title="Cerrar sesión"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
