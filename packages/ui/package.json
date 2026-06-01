@@ -11,6 +11,7 @@
     "./utils": "./src/lib/utils.ts",
     "./button": "./src/components/button.tsx",
     "./input": "./src/components/input.tsx",
+    "./password-input": "./src/components/password-input.tsx",
     "./label": "./src/components/label.tsx",
     "./card": "./src/components/card.tsx",
     "./sheet": "./src/components/sheet.tsx",

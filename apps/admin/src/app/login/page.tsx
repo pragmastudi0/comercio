@@ -10,6 +10,7 @@ import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Input } from '@comercio/ui/input';
+import { PasswordInput } from '@comercio/ui/password-input';
 import { Label } from '@comercio/ui/label';
 import { Button } from '@comercio/ui/button';
 
@@ -75,9 +76,8 @@ export default function LoginPage() {
               <Label htmlFor="password" className="mb-1 block">
                 Contraseña
               </Label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
