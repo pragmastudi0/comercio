@@ -1,0 +1,94 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SesionesCajaRepo } from '../../repos/sesiones-caja.repo';
+import type { MovimientoCaja, SesionCaja } from '../../types';
+import { ok, okList, okMaybe } from '../helpers';
+
+export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
+  return {
+    async abrir({ caja_id, empleado_id, saldo_inicial }) {
+      // Validar que no haya otra abierta para esa caja
+      const { data: existing } = await sb
+        .from('sesiones_caja')
+        .select('id')
+        .eq('caja_id', caja_id)
+        .eq('estado', 'abierta')
+        .maybeSingle();
+      if (existing) throw new Error('Ya hay una sesión abierta para esta caja');
+
+      return ok<SesionCaja>(
+        await sb
+          .from('sesiones_caja')
+          .insert({ caja_id, empleado_id, saldo_inicial, estado: 'abierta' })
+          .select('*')
+          .single(),
+        'sesiones_caja.abrir',
+      );
+    },
+    async cerrar(id, saldoFinalDeclarado) {
+      return ok<SesionCaja>(
+        await sb
+          .from('sesiones_caja')
+          .update({
+            estado: 'cerrada',
+            cerrada_en: new Date().toISOString(),
+            saldo_final_declarado: saldoFinalDeclarado,
+          })
+          .eq('id', id)
+          .select('*')
+          .single(),
+        'sesiones_caja.cerrar',
+      );
+    },
+    async sesionActivaDe(empleadoId, cajaId) {
+      return okMaybe<SesionCaja>(
+        await sb
+          .from('sesiones_caja')
+          .select('*')
+          .eq('empleado_id', empleadoId)
+          .eq('caja_id', cajaId)
+          .eq('estado', 'abierta')
+          .maybeSingle(),
+        'sesiones_caja.sesionActivaDe',
+      );
+    },
+    async list(filtro = {}) {
+      let q = sb.from('sesiones_caja').select('*').order('abierta_en', { ascending: false });
+      if (filtro.caja_id) q = q.eq('caja_id', filtro.caja_id);
+      if (filtro.empleado_id) q = q.eq('empleado_id', filtro.empleado_id);
+      if (filtro.desde) q = q.gte('abierta_en', filtro.desde);
+      if (filtro.hasta) q = q.lte('abierta_en', filtro.hasta);
+      let rows = okList<SesionCaja>(await q, 'sesiones_caja.list');
+      if (filtro.local_id) {
+        const { data: cajas } = await sb
+          .from('cajas')
+          .select('id')
+          .eq('local_id', filtro.local_id);
+        const ids = new Set((cajas ?? []).map((c) => c.id));
+        rows = rows.filter((s) => ids.has(s.caja_id));
+      }
+      return rows;
+    },
+    async get(id) {
+      return okMaybe<SesionCaja>(
+        await sb.from('sesiones_caja').select('*').eq('id', id).maybeSingle(),
+        'sesiones_caja.get',
+      );
+    },
+    async movimientos(sesionId) {
+      return okList<MovimientoCaja>(
+        await sb
+          .from('movimientos_caja')
+          .select('*')
+          .eq('sesion_caja_id', sesionId)
+          .order('fecha'),
+        'sesiones_caja.movimientos',
+      );
+    },
+    async registrarMovimiento(input) {
+      return ok<MovimientoCaja>(
+        await sb.from('movimientos_caja').insert(input).select('*').single(),
+        'sesiones_caja.registrarMovimiento',
+      );
+    },
+  };
+}
