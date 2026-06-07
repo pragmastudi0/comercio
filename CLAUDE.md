@@ -216,3 +216,23 @@ comercio/
 - Promociones programables por categoría/producto/fecha.
 - Devoluciones parciales (no anulación total).
 - Limpieza: quitar el panel "Usuarios demo" del login del PoS antes de pasar a producción.
+
+### 2026-06-02 — Sesión: datos reales + backup + responsive admin
+- Datos reales del cliente cargados en Supabase: empresa (CUIT 30-71523852-3, dirección, WhatsApp 3512299959, horario), 2 locales reales (#Turisteando B12 y C11), 3 depósitos (uno por local + Central Terminal Nueva), 1 caja por local, cuotas y recargos confirmados (1c 10%, 3c/6c/12c 20%).
+- Usuarios admin creados en Supabase Auth + tabla empleados: Agus dueño (`agustinicikson@hotmail.com`, rol Admin), Diego Rodriguez y Gregorio Icikson (rol Encargado, emails placeholder hasta que los confirmen). Password temporal `Turisteando2026`. Admin demo (`admin@turisteando.local`) sigue activo como backup.
+- **Formulario público de datos** publicado en `apps/web/public/datos.html` y servido en `https://turisteando-web.vercel.app/datos.html`. Form con autoguardado en localStorage + modal de envío con Copiar/Compartir/Descargar. Diseñado para abrir desde link de WhatsApp (no como archivo adjunto).
+- **Backup descargable** en `/admin/backup` (solo rol Admin): genera ZIP con CSVs de ventas, items, pagos, sesiones y movimientos de caja, movimientos de stock, notas de crédito y snapshot de clientes. Selector de rango con presets. Usa `jszip` en cliente.
+- **Responsive del admin**: `@comercio/ui` Table con padding denso en mobile y `whitespace-nowrap` para garantizar scroll horizontal; Dialog/Sheet con padding adaptativo y `max-h-[90vh] overflow-y-auto`. Replace masivo en todas las pages: `container mx-auto py-8` → `container mx-auto px-4 py-6 sm:px-6 sm:py-8`, headers `flex items-center justify-between` → `flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`, títulos `text-2xl` → `text-xl sm:text-2xl`. E-commerce ya estaba responsive desde antes.
+- Item "Backup" agregado al menú lateral del admin (grupo Sistema, ícono Database).
+
+**Pendiente próxima sesión** (cliente):
+- Email comercial real, descuento por efectivo, cajeros fijos con nombres/emails, emails reales de Diego y Gregorio.
+- Nombre real del dominio (`#turisteando` no sirve como dominio).
+- Confirmar Plan Z = 12 cuotas o cuál.
+- Export de catálogo + stock en Excel/CSV.
+- Logo (tienen? si no, especificaciones).
+
+**Pendiente próxima sesión** (técnico):
+- Importador de catálogo + stock desde Excel/CSV (cuando lleguen los datos).
+- Edge Function para que el admin pueda resetear password de otro empleado vía service_role.
+- Migración AFIP cuando corresponda: agregar `tipo_comprobante`, `pto_vta`, `cae`, `cae_vto` en ventas, `condicion_iva` en clientes, refactorizar numeración + Edge Function WSAA/WSFEv1.
