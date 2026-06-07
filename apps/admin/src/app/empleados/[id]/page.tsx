@@ -93,21 +93,21 @@ export default function EditarEmpleadoPage() {
 
   if (empQ.isLoading) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
         <Skeleton className="h-96" />
       </div>
     );
   }
   if (!empQ.data) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
         <p>Empleado no encontrado.</p>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link href="/empleados">
           <ArrowLeft className="mr-1 h-4 w-4" />
@@ -117,7 +117,7 @@ export default function EditarEmpleadoPage() {
 
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">
+          <h1 className="text-xl font-semibold sm:text-2xl">
             {nombre} {apellido}
           </h1>
           <p className="text-sm text-muted-foreground">{email}</p>

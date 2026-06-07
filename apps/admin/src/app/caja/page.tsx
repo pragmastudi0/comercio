@@ -33,9 +33,9 @@ export default function CajasPage() {
   const cerradas = sesiones.filter((s) => s.estado === 'cerrada').slice(0, 10);
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Cajas</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">Cajas</h1>
         <p className="text-sm text-muted-foreground">
           Sesiones abiertas y cerradas. Las abiertas se actualizan cada 10s.
         </p>

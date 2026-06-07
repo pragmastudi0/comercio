@@ -23,6 +23,7 @@ import {
   PanelLeftOpen,
   Globe,
   Receipt,
+  Database,
   LogOut,
 } from 'lucide-react';
 import { BRAND } from '@comercio/business';
@@ -71,7 +72,10 @@ const NAV_GROUPS: { titulo: string; items: NavItem[] }[] = [
   },
   {
     titulo: 'Sistema',
-    items: [{ href: '/configuracion', label: 'Configuración', icon: Settings }],
+    items: [
+      { href: '/configuracion', label: 'Configuración', icon: Settings },
+      { href: '/backup', label: 'Backup', icon: Database },
+    ],
   },
 ];
 

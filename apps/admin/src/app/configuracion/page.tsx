@@ -92,16 +92,16 @@ export default function ConfiguracionPage() {
 
   if (configQ.isLoading) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
         <Skeleton className="h-96 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Configuración</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">Configuración</h1>
         <p className="text-sm text-muted-foreground">
           Recargos, descuentos y parámetros que afectan a toda la operación.
         </p>

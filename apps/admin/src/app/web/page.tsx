@@ -361,7 +361,7 @@ function KpiCard({
         {loading ? (
           <Skeleton className="h-7 w-16" />
         ) : (
-          <div className="text-3xl font-bold tabular-nums">{valor}</div>
+          <div className="text-2xl font-bold tabular-nums sm:text-3xl">{valor}</div>
         )}
         <p className="text-xs text-muted-foreground">{sub}</p>
       </CardContent>

@@ -21,7 +21,7 @@ export function Dialog({ open, onOpenChange, children, className }: DialogProps)
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
       <div
         className="absolute inset-0 bg-black/50"
         onClick={() => onOpenChange(false)}
@@ -31,7 +31,7 @@ export function Dialog({ open, onOpenChange, children, className }: DialogProps)
         role="dialog"
         aria-modal="true"
         className={cn(
-          'relative z-10 w-full max-w-lg rounded-lg border bg-background p-6 shadow-lg',
+          'relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border bg-background p-4 shadow-lg sm:p-6',
           className,
         )}
       >
@@ -46,9 +46,11 @@ export function DialogHeader({ children }: { children: ReactNode }) {
 }
 
 export function DialogTitle({ children }: { children: ReactNode }) {
-  return <h2 className="text-lg font-semibold">{children}</h2>;
+  return <h2 className="text-base font-semibold sm:text-lg">{children}</h2>;
 }
 
 export function DialogFooter({ children }: { children: ReactNode }) {
-  return <div className="mt-6 flex justify-end gap-2">{children}</div>;
+  return (
+    <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">{children}</div>
+  );
 }

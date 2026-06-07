@@ -33,7 +33,7 @@ export function Sheet({ open, onOpenChange, side = 'right', children, className 
         role="dialog"
         aria-modal="true"
         className={cn(
-          'absolute top-0 h-full w-full max-w-md bg-background shadow-lg p-6 overflow-y-auto',
+          'absolute top-0 h-full w-full max-w-md overflow-y-auto bg-background p-4 shadow-lg sm:p-6',
           side === 'right' ? 'right-0' : 'left-0',
           className,
         )}

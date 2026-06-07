@@ -109,14 +109,14 @@ export default function EditarProductoPage() {
 
   if (prodQ.isLoading || !values) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
         <Skeleton className="h-96" />
       </div>
     );
   }
   if (!prodQ.data) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
         <p>Producto no encontrado.</p>
       </div>
     );
@@ -132,7 +132,7 @@ export default function EditarProductoPage() {
       </Button>
 
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{prodQ.data.nombre}</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">{prodQ.data.nombre}</h1>
         <div className="flex gap-2">
           <Button
             variant="outline"

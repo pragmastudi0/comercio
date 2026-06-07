@@ -24,9 +24,9 @@ import type { Deposito, TipoDeposito } from '@comercio/db';
 
 export default function DepositosPage() {
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Depósitos y stock</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">Depósitos y stock</h1>
         <p className="text-sm text-muted-foreground">
           Vista del stock consolidado por producto y depósito + administración de depósitos.
         </p>

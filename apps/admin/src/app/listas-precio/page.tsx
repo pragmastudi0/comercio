@@ -50,9 +50,9 @@ export default function ListasPrecioPage() {
   });
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Listas de precio</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">Listas de precio</h1>
         <p className="text-sm text-muted-foreground">
           Definí listas (Consumidor final, Mayorista, etc.). Cada producto puede tener un precio
           distinto por lista y escalas por cantidad.

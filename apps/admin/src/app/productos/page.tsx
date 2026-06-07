@@ -62,10 +62,10 @@ export default function ProductosPage() {
     categoriasQ.data?.find((c) => c.id === id)?.nombre ?? '—';
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Productos</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">Productos</h1>
           <p className="text-sm text-muted-foreground">
             Catálogo del comercio. Click en un producto para editar precio, stock e info.
           </p>

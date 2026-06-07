@@ -46,9 +46,9 @@ export default function ProveedoresPage() {
     (productosQ.data ?? []).filter((p) => p.proveedor_id === id).length;
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Proveedores</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">Proveedores</h1>
       </div>
 
       <AbmSimple<Proveedor>

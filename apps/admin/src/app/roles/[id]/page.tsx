@@ -68,14 +68,14 @@ export default function EditarRolPage() {
 
   if (rolQ.isLoading) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
         <Skeleton className="h-96" />
       </div>
     );
   }
   if (!rolQ.data) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
         <p>Rol no encontrado.</p>
       </div>
     );
@@ -84,7 +84,7 @@ export default function EditarRolPage() {
   const usados = (empleadosQ.data ?? []).filter((e) => e.rol_id === id).length;
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link href="/roles">
           <ArrowLeft className="mr-1 h-4 w-4" />
@@ -94,7 +94,7 @@ export default function EditarRolPage() {
 
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">{rolQ.data.nombre}</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">{rolQ.data.nombre}</h1>
           {rolQ.data.preset && <Badge variant="secondary">preset del sistema</Badge>}
         </div>
         <div className="flex gap-2">

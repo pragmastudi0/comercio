@@ -55,9 +55,9 @@ export default function CategoriasPage() {
     (productosQ.data ?? []).filter((p) => p.categoria_id === id).length;
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Categorías</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">Categorías</h1>
         <p className="text-sm text-muted-foreground">
           Las categorías agrupan productos y definen atributos opcionales por tipo (color,
           talle, etc.).

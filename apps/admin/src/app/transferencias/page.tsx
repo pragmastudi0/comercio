@@ -71,10 +71,10 @@ export default function TransferenciasPage() {
   const transferencias = (transferenciasQ.data ?? []).slice().reverse();
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Transferencias</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">Transferencias</h1>
           <p className="text-sm text-muted-foreground">
             Movimiento de stock entre depósitos. Flujo: borrador → emitida (descuenta de origen) →
             recibida (suma en destino).

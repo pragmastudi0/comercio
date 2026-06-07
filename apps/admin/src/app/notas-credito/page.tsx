@@ -60,9 +60,9 @@ export default function NotasCreditoPage() {
   const totalDevuelto = visibles.reduce((acc, n) => acc + n.monto_total, 0);
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Notas de crédito</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">Notas de crédito</h1>
         <p className="text-sm text-muted-foreground">
           Devoluciones emitidas desde el PoS. Cada nota reintegra el stock al depósito de
           origen y deja registro del motivo.
