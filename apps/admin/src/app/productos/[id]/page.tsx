@@ -123,7 +123,7 @@ export default function EditarProductoPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-3xl py-8">
+    <div className="container mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link href="/productos">
           <ArrowLeft className="mr-1 h-4 w-4" />

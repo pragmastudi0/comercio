@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
+import { PRESET_IDS } from '@comercio/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@comercio/ui/table';
 import { Badge } from '@comercio/ui/badge';
@@ -43,14 +44,16 @@ export default function ProductosPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // Precios CF cargados por separado para mostrar en la tabla
+  // Precios CF cargados por separado para mostrar en la tabla.
+  // Acepta tanto el ID real (UUID de Supabase) como el ID legacy del mock 'lp_cf'.
+  const LISTA_CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
   const preciosQ = useQuery({
     queryKey: ['precios-cf', productosQ.data?.map((p) => p.id).join(',')],
     queryFn: async () => {
       const map = new Map<string, number>();
       for (const p of productosQ.data ?? []) {
         const lp = await db.productos.preciosDe(p.id);
-        const cf = lp.find((x) => x.lista_precio_id === 'lp_cf');
+        const cf = lp.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
         map.set(p.id, cf?.escalas[0]?.precio ?? 0);
       }
       return map;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -34,12 +34,15 @@ export default function NuevoProductoPage() {
     { listaId: string; escalas: { desde: number; precio: number }[] }[]
   >([]);
 
-  // Inicializar precios cuando llegan las listas
-  if (listasQ.data && precios.length === 0) {
-    setPrecios(
-      listasQ.data.map((l) => ({ listaId: l.id, escalas: [{ desde: 1, precio: 0 }] })),
-    );
-  }
+  // Inicializar precios cuando llegan las listas (en useEffect para no
+  // disparar setState durante el render — causaba "Application error" en prod).
+  useEffect(() => {
+    if (listasQ.data && precios.length === 0) {
+      setPrecios(
+        listasQ.data.map((l) => ({ listaId: l.id, escalas: [{ desde: 1, precio: 0 }] })),
+      );
+    }
+  }, [listasQ.data, precios.length]);
 
   const crearMut = useMutation({
     mutationFn: async () => {
@@ -79,7 +82,7 @@ export default function NuevoProductoPage() {
   });
 
   return (
-    <div className="container mx-auto max-w-3xl py-8">
+    <div className="container mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link href="/productos">
           <ArrowLeft className="mr-1 h-4 w-4" />
