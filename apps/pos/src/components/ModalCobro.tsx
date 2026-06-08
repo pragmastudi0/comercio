@@ -15,7 +15,7 @@ import {
   calcularSubtotal,
   useVenta,
 } from '@/stores/venta';
-import type { MetodoPago, PagoVenta } from '@comercio/db';
+import { PRESET_IDS, type MetodoPago, type PagoVenta } from '@comercio/db';
 
 type MetodoConfig = {
   metodo: MetodoPago;
@@ -74,7 +74,7 @@ export function ModalCobro({
 
   const configQ = useQuery({
     queryKey: ['config-empresa'],
-    queryFn: () => db.configuracion.get('emp_demo'),
+    queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
   });
 
   useEffect(() => {

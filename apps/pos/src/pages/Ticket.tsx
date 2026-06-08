@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { BRAND } from '@comercio/business';
+import { PRESET_IDS } from '@comercio/db';
 import { getDb } from '@/lib/db';
 import { Button } from '@comercio/ui/button';
 import { Skeleton } from '@comercio/ui/skeleton';
@@ -32,7 +33,7 @@ export function Ticket() {
   const productosQ = useQuery({ queryKey: ['productos-all'], queryFn: () => db.productos.list() });
   const configQ = useQuery({
     queryKey: ['config-ticket'],
-    queryFn: () => db.configuracion.get('emp_demo'),
+    queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
   });
   const empleadosQ = useQuery({ queryKey: ['empleados-ticket'], queryFn: () => db.empleados.list() });
 

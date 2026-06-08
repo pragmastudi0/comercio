@@ -21,7 +21,7 @@ import {
 } from '@comercio/ui/dialog';
 import { AbmDialogFooter, AbmSimple } from '@/components/abm-simple';
 import { formatCurrency } from '@comercio/ui/utils';
-import type { Deposito, TipoDeposito } from '@comercio/db';
+import { PRESET_IDS, type Deposito, type TipoDeposito } from '@comercio/db';
 
 export default function DepositosPage() {
   return (
@@ -602,7 +602,7 @@ function DepositoForm({
         onSubmit={() =>
           nombre.trim() &&
           onSubmit({
-            empresa_id: 'emp_demo',
+            empresa_id: PRESET_IDS.empresa,
             nombre: nombre.trim(),
             tipo,
             local_id: tipo === 'local' ? localId || undefined : undefined,

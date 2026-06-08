@@ -27,6 +27,7 @@ import {
   type FormaEntrega,
 } from '@/lib/whatsapp';
 import { getDb } from '@/lib/db';
+import { PRESET_IDS } from '@comercio/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -45,7 +46,7 @@ export default function CarritoPage() {
   // Config del comercio (pedido mínimo, template WA, datos)
   const configQ = useQuery({
     queryKey: ['config-web'],
-    queryFn: () => db.configuracion.get('emp_demo'),
+    queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
   });
 
   // Producto detail para validar reglas (solo_por_bulto, incremento)

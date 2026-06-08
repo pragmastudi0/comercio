@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Phone, Mail, Clock, MessageCircle } from 'lucide-react';
 import { getDb } from '@/lib/db';
+import { PRESET_IDS } from '@comercio/db';
 import { SITE } from '@/lib/config';
 import { Card, CardContent } from '@comercio/ui/card';
 import { Button } from '@comercio/ui/button';
@@ -11,7 +12,7 @@ export default function ContactoPage() {
   const db = getDb();
   const configQ = useQuery({
     queryKey: ['config-contacto'],
-    queryFn: () => db.configuracion.get('emp_demo'),
+    queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
   });
   const c = configQ.data?.comercio;
 

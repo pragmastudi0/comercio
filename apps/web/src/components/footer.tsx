@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { getDb } from '@/lib/db';
+import { PRESET_IDS } from '@comercio/db';
 import { SITE } from '@/lib/config';
 
 export function Footer() {
   const db = getDb();
   const configQ = useQuery({
     queryKey: ['config-footer'],
-    queryFn: () => db.configuracion.get('emp_demo'),
+    queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
   });
   const c = configQ.data?.comercio;
 

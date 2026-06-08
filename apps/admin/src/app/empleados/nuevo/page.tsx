@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { getDb } from '@/lib/db';
+import { PRESET_IDS } from '@comercio/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -36,7 +37,7 @@ export default function NuevoEmpleadoPage() {
       }
       return db.empleados.create(
         {
-          empresa_id: 'emp_demo',
+          empresa_id: PRESET_IDS.empresa,
           nombre,
           apellido,
           email,
