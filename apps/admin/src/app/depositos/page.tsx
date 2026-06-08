@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Search, ArrowDownUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, ArrowDownUp, Minus } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
@@ -170,6 +170,7 @@ function StockConsolidado() {
                         return (
                           <td key={d.id} className="px-2 py-2 text-right">
                             <button
+                              type="button"
                               onClick={() =>
                                 setAjustando({
                                   productoId: p.id,
@@ -179,12 +180,13 @@ function StockConsolidado() {
                                   actual: c,
                                 })
                               }
-                              className={`rounded px-2 py-0.5 text-sm tabular-nums hover:bg-accent ${
+                              className={`group inline-flex items-center gap-1.5 rounded border border-transparent px-2 py-1 text-sm tabular-nums transition-colors hover:border-input hover:bg-accent ${
                                 c === 0 ? 'text-muted-foreground' : ''
                               }`}
                               title="Click para ajustar"
                             >
-                              {c}
+                              <span className="font-medium">{c}</span>
+                              <Pencil className="h-3 w-3 opacity-40 transition-opacity group-hover:opacity-100" />
                             </button>
                           </td>
                         );
@@ -223,6 +225,14 @@ function StockConsolidado() {
   );
 }
 
+const MOTIVOS_PRESET = [
+  'Ingreso de mercadería',
+  'Recuento físico',
+  'Rotura / vencido',
+  'Devolución',
+  'Otro',
+];
+
 function AjusteStockDialog({
   item,
   onClose,
@@ -238,85 +248,177 @@ function AjusteStockDialog({
   onClose: () => void;
   onConfirm: (delta: number, motivo: string) => void;
 }) {
-  const [modo, setModo] = useState<'absoluto' | 'delta'>('absoluto');
-  const [valor, setValor] = useState(item.actual);
-  const [motivo, setMotivo] = useState('');
+  const [modo, setModo] = useState<'delta' | 'absoluto'>('delta');
+  // En modo delta: cuánto sumar/restar. En absoluto: cantidad final.
+  const [valor, setValor] = useState(0);
+  const [motivo, setMotivo] = useState('Ingreso de mercadería');
+  const [motivoCustom, setMotivoCustom] = useState('');
 
-  const delta = modo === 'absoluto' ? valor - item.actual : valor;
+  const delta = modo === 'delta' ? valor : valor - item.actual;
   const final = item.actual + delta;
+  const motivoFinal = motivo === 'Otro' ? motivoCustom.trim() : motivo;
+  const sePuedeAplicar = delta !== 0 && !!motivoFinal && final >= 0;
+
+  function sumar(n: number) {
+    if (modo === 'delta') setValor((v) => v + n);
+    else setValor((v) => Math.max(0, v + n));
+  }
 
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogHeader>
-        <DialogTitle>Ajuste de stock</DialogTitle>
+        <DialogTitle>Ajustar stock</DialogTitle>
       </DialogHeader>
-      <div className="space-y-3 text-sm">
-        <div className="rounded bg-muted/30 p-3">
-          <div>
-            <strong>{item.nombreProd}</strong>
-          </div>
-          <div className="text-muted-foreground">{item.nombreDep}</div>
-          <div className="mt-2">
-            Stock actual: <strong>{item.actual}</strong>
+
+      <div className="space-y-4 text-sm">
+        {/* Cabecera con producto, depósito y stock actual */}
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="text-base font-semibold leading-tight">{item.nombreProd}</div>
+          <div className="text-xs text-muted-foreground">{item.nombreDep}</div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-xs text-muted-foreground">Stock actual:</span>
+            <span className="text-xl font-bold tabular-nums">{item.actual}</span>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant={modo === 'absoluto' ? 'default' : 'outline'}
-            onClick={() => {
-              setModo('absoluto');
-              setValor(item.actual);
-            }}
-            className="flex-1"
-          >
-            Setear cantidad absoluta
-          </Button>
-          <Button
-            size="sm"
-            variant={modo === 'delta' ? 'default' : 'outline'}
+
+        {/* Tabs: delta (default) vs absoluto */}
+        <div className="flex rounded-md border p-0.5">
+          <button
+            type="button"
             onClick={() => {
               setModo('delta');
               setValor(0);
             }}
-            className="flex-1"
+            className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              modo === 'delta' ? 'bg-foreground text-background' : 'text-muted-foreground'
+            }`}
           >
-            Sumar/restar
-          </Button>
+            Sumar / restar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setModo('absoluto');
+              setValor(item.actual);
+            }}
+            className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              modo === 'absoluto' ? 'bg-foreground text-background' : 'text-muted-foreground'
+            }`}
+          >
+            Setear cantidad
+          </button>
         </div>
-        <div>
-          <Label className="mb-1 block">
-            {modo === 'absoluto' ? 'Nueva cantidad' : 'Delta (+/-)'}
-          </Label>
-          <Input
-            type="number"
-            value={valor}
-            onChange={(e) => setValor(parseFloat(e.target.value) || 0)}
-            autoFocus
-          />
-          {modo === 'delta' && delta !== 0 && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Quedaría en {final}
-            </p>
+
+        {/* Stepper grande */}
+        <div className="rounded-md border p-3">
+          <div className="mb-2 text-center text-xs text-muted-foreground">
+            {modo === 'delta' ? '¿Cuánto sumar (o restar)?' : 'Nueva cantidad'}
+          </div>
+          <div className="flex items-center justify-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-12 w-12 shrink-0"
+              onClick={() => sumar(-1)}
+              aria-label="Restar 1"
+            >
+              <Minus className="h-5 w-5" />
+            </Button>
+            <Input
+              type="number"
+              inputMode="numeric"
+              value={valor}
+              onChange={(e) => setValor(parseInt(e.target.value || '0', 10))}
+              className="h-12 w-24 text-center text-2xl font-bold tabular-nums"
+              autoFocus
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-12 w-12 shrink-0"
+              onClick={() => sumar(1)}
+              aria-label="Sumar 1"
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
+          </div>
+
+          {/* Botones rápidos */}
+          {modo === 'delta' && (
+            <div className="mt-3 grid grid-cols-3 gap-1.5">
+              {[1, 5, 10, 12, 24, 50].map((n) => (
+                <Button
+                  key={n}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => sumar(n)}
+                >
+                  +{n}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {/* Preview del resultado */}
+          {delta !== 0 && (
+            <div className="mt-3 flex items-center justify-center gap-2 text-sm">
+              <span className="tabular-nums text-muted-foreground">{item.actual}</span>
+              <span className="text-muted-foreground">→</span>
+              <span
+                className={`text-lg font-bold tabular-nums ${
+                  final < 0 ? 'text-destructive' : 'text-foreground'
+                }`}
+              >
+                {final}
+              </span>
+              {final < 0 && (
+                <span className="text-xs text-destructive">(no puede ser negativo)</span>
+              )}
+            </div>
           )}
         </div>
+
+        {/* Motivo: chips + custom si "Otro" */}
         <div>
-          <Label className="mb-1 block">Motivo</Label>
-          <Input
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            placeholder="Recuento, rotura, ingreso de mercadería, etc."
-          />
+          <Label className="mb-2 block">Motivo</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {MOTIVOS_PRESET.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMotivo(m)}
+                className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                  motivo === m
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-input bg-background hover:bg-accent'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          {motivo === 'Otro' && (
+            <Input
+              className="mt-2"
+              value={motivoCustom}
+              onChange={(e) => setMotivoCustom(e.target.value)}
+              placeholder="Describir el motivo del ajuste…"
+            />
+          )}
         </div>
       </div>
+
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>
           Cancelar
         </Button>
         <Button
-          disabled={!motivo.trim() || delta === 0}
+          disabled={!sePuedeAplicar}
           onClick={() => {
-            onConfirm(delta, motivo.trim());
+            onConfirm(delta, motivoFinal);
             onClose();
           }}
         >
