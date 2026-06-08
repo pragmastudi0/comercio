@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Minus, Plus, Trash2, AlertTriangle, Tag } from 'lucide-react';
 import { getDb } from '@/lib/db';
+import { PRESET_IDS } from '@comercio/db';
 import { useSesion } from '@/stores/sesion';
 import { useVenta, type ItemCarrito } from '@/stores/venta';
 import { Button } from '@comercio/ui/button';
@@ -15,7 +16,7 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
   const setDescuento = useVenta((s) => s.setDescuentoLinea);
   const quitar = useVenta((s) => s.quitar);
 
-  const depositoId = empleado?.deposito_id ?? 'dep_central';
+  const depositoId = empleado?.deposito_id ?? PRESET_IDS.depositoCentralFallback;
   const stockQ = useQuery({
     queryKey: ['stock', item.producto.id, depositoId],
     queryFn: () => db.stock.cantidad(item.producto.id, depositoId),

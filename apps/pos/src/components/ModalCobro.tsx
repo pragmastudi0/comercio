@@ -207,7 +207,7 @@ export function ModalCobro({
         caja_id: caja.id,
         sesion_caja_id: sesion.id,
         local_id: caja.local_id,
-        deposito_id: empleado.deposito_id ?? 'dep_central',
+        deposito_id: empleado.deposito_id ?? PRESET_IDS.depositoCentralFallback,
         empleado_id: empleado.id,
         cliente_id: clienteId ?? undefined,
         items: items_payload,
