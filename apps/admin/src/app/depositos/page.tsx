@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Search, ArrowDownUp } from 'lucide-react';
 import { getDb } from '@/lib/db';
+import { useSesion } from '@/stores/sesion';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@comercio/ui/tabs';
 import { Button } from '@comercio/ui/button';
@@ -50,6 +51,7 @@ export default function DepositosPage() {
 function StockConsolidado() {
   const db = getDb();
   const qc = useQueryClient();
+  const empleadoId = useSesion((s) => s.empleado?.id) ?? '';
   const productosQ = useQuery({
     queryKey: ['productos-stock'],
     queryFn: () => db.productos.list({ activo: true }),
@@ -89,7 +91,7 @@ function StockConsolidado() {
         deposito_id: depositoId,
         cantidad: delta,
         motivo,
-        empleado_id: 'emp_admin',
+        empleado_id: empleadoId,
       }),
     onSuccess: () => {
       toast.success('Stock ajustado');

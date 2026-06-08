@@ -2,9 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
+import { PRESET_IDS } from '@comercio/db';
 import { useVenta } from '@/stores/venta';
 import { Input } from '@comercio/ui/input';
 import { formatCurrency } from '@comercio/ui/utils';
+
+// Acepta tanto el UUID real de Supabase como el ID legacy del mock 'lp_cf'.
+const LISTA_CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
 
 export type BuscadorProductoHandle = {
   focus: () => void;
@@ -36,7 +40,7 @@ export function BuscadorProducto() {
       return;
     }
     const precios = await db.productos.preciosDe(p.id);
-    const cf = precios.find((x) => x.lista_precio_id === 'lp_cf');
+    const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
     const precio = cf?.escalas[0]?.precio ?? 0;
     agregar(p, precio);
     setQ('');
@@ -48,7 +52,7 @@ export function BuscadorProducto() {
     const p = (resultadosQ.data ?? []).find((x) => x.id === productoId);
     if (!p) return;
     const precios = await db.productos.preciosDe(p.id);
-    const cf = precios.find((x) => x.lista_precio_id === 'lp_cf');
+    const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
     const precio = cf?.escalas[0]?.precio ?? 0;
     agregar(p, precio);
     setQ('');

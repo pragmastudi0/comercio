@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowRight, Plus, Send, CheckCircle2, X, Trash2 } from 'lucide-react';
 import { getDb } from '@/lib/db';
+import { useSesion } from '@/stores/sesion';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -25,6 +26,7 @@ const ESTADO_COLOR: Record<Transferencia['estado'], 'default' | 'secondary' | 'd
 export default function TransferenciasPage() {
   const db = getDb();
   const qc = useQueryClient();
+  const empleadoId = useSesion((s) => s.empleado?.id) ?? '';
   const transferenciasQ = useQuery({
     queryKey: ['transferencias'],
     queryFn: () => db.transferencias.list(),
@@ -35,7 +37,7 @@ export default function TransferenciasPage() {
   const [openNueva, setOpenNueva] = useState(false);
 
   const emitirMut = useMutation({
-    mutationFn: (id: string) => db.transferencias.emitir(id, 'emp_admin'),
+    mutationFn: (id: string) => db.transferencias.emitir(id, empleadoId),
     onSuccess: () => {
       toast.success('Transferencia emitida');
       qc.invalidateQueries({ queryKey: ['transferencias'] });
@@ -44,7 +46,7 @@ export default function TransferenciasPage() {
     onError: (e: Error) => toast.error(e.message),
   });
   const recibirMut = useMutation({
-    mutationFn: (id: string) => db.transferencias.recibir(id, 'emp_admin'),
+    mutationFn: (id: string) => db.transferencias.recibir(id, empleadoId),
     onSuccess: () => {
       toast.success('Transferencia recibida');
       qc.invalidateQueries({ queryKey: ['transferencias'] });
@@ -54,7 +56,7 @@ export default function TransferenciasPage() {
   });
   const anularMut = useMutation({
     mutationFn: ({ id, motivo }: { id: string; motivo: string }) =>
-      db.transferencias.anular(id, 'emp_admin', motivo),
+      db.transferencias.anular(id, empleadoId, motivo),
     onSuccess: () => {
       toast.success('Transferencia anulada');
       qc.invalidateQueries({ queryKey: ['transferencias'] });
