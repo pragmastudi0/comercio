@@ -17,6 +17,7 @@ import {
   productoToForm,
   type ProductoFormValues,
 } from '@/components/producto-form';
+import { ImagenesProducto } from '@/components/imagenes-producto';
 
 export default function EditarProductoPage() {
   const params = useParams<{ id: string }>();
@@ -158,6 +159,8 @@ export default function EditarProductoPage() {
           proveedores={proveedoresQ.data ?? []}
         />
         <PreciosFields precios={precios} onChange={setPrecios} listas={listasQ.data ?? []} />
+
+        <ImagenesProducto productoId={id} />
 
         <Card>
           <CardHeader>

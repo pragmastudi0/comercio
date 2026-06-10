@@ -31,6 +31,39 @@ export function makeTransferenciasRepo(sb: SupabaseClient): TransferenciasRepo {
         'transferencias.crearBorrador',
       );
     },
+    async actualizarBorrador(id, patch) {
+      const { data: t, error } = await sb
+        .from('transferencias')
+        .select('estado')
+        .eq('id', id)
+        .single();
+      if (error) throw new Error(`transferencias.actualizarBorrador: ${error.message}`);
+      if (t.estado !== 'borrador') {
+        throw new Error('Solo se puede editar una transferencia en borrador');
+      }
+      return ok<Transferencia>(
+        await sb
+          .from('transferencias')
+          .update(patch)
+          .eq('id', id)
+          .select('*')
+          .single(),
+        'transferencias.actualizarBorrador (update)',
+      );
+    },
+    async delete(id) {
+      const { data: t, error } = await sb
+        .from('transferencias')
+        .select('estado')
+        .eq('id', id)
+        .single();
+      if (error) throw new Error(`transferencias.delete: ${error.message}`);
+      if (t.estado !== 'borrador' && t.estado !== 'anulada') {
+        throw new Error('Solo se puede borrar una transferencia en borrador o anulada');
+      }
+      const { error: delError } = await sb.from('transferencias').delete().eq('id', id);
+      if (delError) throw new Error(`transferencias.delete: ${delError.message}`);
+    },
     async emitir(id, empleadoId) {
       const { data: t, error } = await sb
         .from('transferencias')

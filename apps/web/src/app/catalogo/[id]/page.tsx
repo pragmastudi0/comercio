@@ -34,6 +34,11 @@ export default function ProductoPage() {
     },
   });
   const categoriasQ = useQuery({ queryKey: ['categorias'], queryFn: () => db.categorias.list() });
+  const imagenesQ = useQuery({
+    queryKey: ['producto-imgs-web', id],
+    queryFn: () => db.productos.imagenes(id),
+  });
+  const [imgActiva, setImgActiva] = useState(0);
 
   const [cantidad, setCantidad] = useState(1);
   // Cuando carga el producto, ajustar la cantidad inicial al mínimo / incremento.
@@ -92,14 +97,43 @@ export default function ProductoPage() {
       </Button>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_1fr]">
-        {/* Imagen placeholder con emoji representativo */}
-        <Card className="overflow-hidden">
-          <div
-            className={`flex aspect-square items-center justify-center text-[10rem] ${visualDeCategoria(p.categoria_id).bg}`}
-          >
-            <span aria-hidden>{emojiProducto(p.nombre, p.categoria_id)}</span>
-          </div>
-        </Card>
+        {/* Imágenes reales si hay; si no, placeholder con emoji por categoría */}
+        <div className="space-y-3">
+          <Card className="overflow-hidden">
+            {(imagenesQ.data?.length ?? 0) > 0 ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imagenesQ.data![imgActiva]?.url ?? imagenesQ.data![0]!.url}
+                alt={p.nombre}
+                className="aspect-square w-full object-cover"
+              />
+            ) : (
+              <div
+                className={`flex aspect-square items-center justify-center text-[10rem] ${visualDeCategoria(p.categoria_id).bg}`}
+              >
+                <span aria-hidden>{emojiProducto(p.nombre, p.categoria_id)}</span>
+              </div>
+            )}
+          </Card>
+          {(imagenesQ.data?.length ?? 0) > 1 && (
+            <div className="grid grid-cols-3 gap-2">
+              {imagenesQ.data!.map((img, i) => (
+                <button
+                  key={img.id}
+                  type="button"
+                  onClick={() => setImgActiva(i)}
+                  className={`aspect-square overflow-hidden rounded-md border transition ${
+                    i === imgActiva ? 'border-foreground' : 'border-transparent hover:border-input'
+                  }`}
+                  aria-label={`Ver imagen ${i + 1}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={img.url} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div>
           {cat && <Badge variant="secondary">{cat.nombre}</Badge>}

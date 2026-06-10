@@ -64,6 +64,14 @@ export default function TransferenciasPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+  const borrarMut = useMutation({
+    mutationFn: (id: string) => db.transferencias.delete(id),
+    onSuccess: () => {
+      toast.success('Transferencia eliminada');
+      qc.invalidateQueries({ queryKey: ['transferencias'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const depNombre = (id: string) =>
     depositosQ.data?.find((d) => d.id === id)?.nombre ?? id;
@@ -156,6 +164,27 @@ export default function TransferenciasPage() {
                       >
                         <X className="mr-1 h-3 w-3" />
                         Anular
+                      </Button>
+                    )}
+                    {(t.estado === 'borrador' || t.estado === 'anulada') && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              `¿Borrar definitivamente esta transferencia (${t.estado})?`,
+                            )
+                          ) {
+                            borrarMut.mutate(t.id);
+                          }
+                        }}
+                        disabled={borrarMut.isPending}
+                        className="text-destructive"
+                        title="Borrar transferencia"
+                      >
+                        <Trash2 className="mr-1 h-3 w-3" />
+                        Borrar
                       </Button>
                     )}
                   </div>

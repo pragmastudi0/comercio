@@ -23,6 +23,25 @@ export function makeTransferenciasRepo(store: Store): TransferenciasRepo {
       store.transferencias.push(t);
       return clone(t);
     },
+    async actualizarBorrador(id, patch) {
+      const idx = store.transferencias.findIndex((x) => x.id === id);
+      if (idx === -1) throw notFound('Transferencia', id);
+      const t = store.transferencias[idx]!;
+      if (t.estado !== 'borrador') {
+        throw new Error('Solo se puede editar una transferencia en borrador');
+      }
+      store.transferencias[idx] = { ...t, ...patch };
+      return clone(store.transferencias[idx]!);
+    },
+    async delete(id) {
+      const idx = store.transferencias.findIndex((x) => x.id === id);
+      if (idx === -1) throw notFound('Transferencia', id);
+      const t = store.transferencias[idx]!;
+      if (t.estado !== 'borrador' && t.estado !== 'anulada') {
+        throw new Error('Solo se puede borrar una transferencia en borrador o anulada');
+      }
+      store.transferencias.splice(idx, 1);
+    },
     async emitir(id, empleadoId) {
       const idx = store.transferencias.findIndex((x) => x.id === id);
       if (idx === -1) throw notFound('Transferencia', id);
