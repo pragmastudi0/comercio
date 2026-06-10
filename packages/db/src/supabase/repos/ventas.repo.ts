@@ -25,7 +25,7 @@ export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
     async crear(input) {
       // Llama la RPC atómica que: numera, valida y descuenta stock, inserta
       // venta, registra movimientos de caja y carga cta cte si corresponde.
-      const { data, error } = await sb.rpc('rpc_crear_venta', {
+      const params = {
         p_caja_id: input.caja_id,
         p_sesion_caja_id: input.sesion_caja_id,
         p_local_id: input.local_id,
@@ -38,8 +38,17 @@ export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
         p_descuento_total: input.descuento_total,
         p_recargo_total: input.recargo_total,
         p_total: input.total,
-      });
-      if (error) throw new Error(`ventas.crear: ${error.message}`);
+      };
+      // Log temporal para diagnosticar el bug del UUID "1" en producción.
+      // Si vemos qué campo es "1", lo identificamos y arreglamos.
+      // eslint-disable-next-line no-console
+      console.log('[ventas.crear v2] params →', JSON.stringify(params, null, 2));
+      const { data, error } = await sb.rpc('rpc_crear_venta', params);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('[ventas.crear v2] error →', error, 'params:', params);
+        throw new Error(`ventas.crear (v2): ${error.message}`);
+      }
       return data as Venta;
     },
     async anular(id, empleadoId, motivo) {
