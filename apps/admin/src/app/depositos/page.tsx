@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Search, ArrowDownUp, Minus } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, ArrowDownUp, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
@@ -66,6 +66,7 @@ function StockConsolidado() {
   });
 
   const [texto, setTexto] = useState('');
+  const [page, setPage] = useState(0);
   const [ajustando, setAjustando] = useState<{
     productoId: string;
     depositoId: string;
@@ -73,6 +74,12 @@ function StockConsolidado() {
     nombreDep: string;
     actual: number;
   } | null>(null);
+  const PAGE_SIZE = 100;
+
+  // Volver a página 0 cuando cambia el filtro
+  useEffect(() => {
+    setPage(0);
+  }, [texto]);
 
   const ajustarMut = useMutation({
     mutationFn: ({
@@ -123,14 +130,25 @@ function StockConsolidado() {
   }
 
   const loading = productosQ.isLoading || depositosQ.isLoading || stockQ.isLoading;
+  const totalFiltrados = productosFiltrados.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltrados / PAGE_SIZE));
+  const productosPagina = productosFiltrados.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <Card className="mt-4">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+      <CardHeader className="flex flex-col gap-2 space-y-0 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="text-base">
-          {productosFiltrados.length} productos
+          {totalFiltrados === 0 ? (
+            <>0 productos</>
+          ) : (
+            <>
+              {Math.min(page * PAGE_SIZE + 1, totalFiltrados)}–
+              {Math.min((page + 1) * PAGE_SIZE, totalFiltrados)} de{' '}
+              <span className="tabular-nums">{totalFiltrados}</span> productos
+            </>
+          )}
         </CardTitle>
-        <div className="relative w-64">
+        <div className="relative w-full sm:w-64">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar por código o nombre"
@@ -159,7 +177,7 @@ function StockConsolidado() {
                 </tr>
               </thead>
               <tbody>
-                {productosFiltrados.map((p) => {
+                {productosPagina.map((p) => {
                   const t = total(p.id);
                   return (
                     <tr key={p.id} className="border-b last:border-0">
@@ -206,6 +224,32 @@ function StockConsolidado() {
           </div>
         )}
       </CardContent>
+
+      {totalFiltrados > PAGE_SIZE && (
+        <div className="flex flex-col items-center justify-between gap-3 border-t px-4 py-3 text-sm sm:flex-row">
+          <span className="text-muted-foreground">
+            Página {page + 1} de {totalPages}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+            >
+              Siguiente <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {ajustando && (
         <AjusteStockDialog

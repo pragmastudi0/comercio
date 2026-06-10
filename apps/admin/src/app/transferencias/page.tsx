@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowRight, Plus, Send, CheckCircle2, X, Trash2 } from 'lucide-react';
+import { ArrowRight, Plus, Send, CheckCircle2, X, Trash2, Pencil } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { RequierePermiso } from '@/lib/permisos';
@@ -36,6 +36,7 @@ export default function TransferenciasPage() {
   const productosQ = useQuery({ queryKey: ['productos-all'], queryFn: () => db.productos.list() });
 
   const [openNueva, setOpenNueva] = useState(false);
+  const [editando, setEditando] = useState<Transferencia | null>(null);
 
   const emitirMut = useMutation({
     mutationFn: (id: string) => db.transferencias.emitir(id, empleadoId),
@@ -135,14 +136,25 @@ export default function TransferenciasPage() {
                   </div>
                   <div className="mt-2 flex gap-2">
                     {t.estado === 'borrador' && (
-                      <Button
-                        size="sm"
-                        onClick={() => emitirMut.mutate(t.id)}
-                        disabled={emitirMut.isPending}
-                      >
-                        <Send className="mr-1 h-3 w-3" />
-                        Emitir (descuenta origen)
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => emitirMut.mutate(t.id)}
+                          disabled={emitirMut.isPending}
+                        >
+                          <Send className="mr-1 h-3 w-3" />
+                          Emitir (descuenta origen)
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditando(t)}
+                          title="Editar borrador"
+                        >
+                          <Pencil className="mr-1 h-3 w-3" />
+                          Editar
+                        </Button>
+                      </>
                     )}
                     {t.estado === 'emitida' && (
                       <Button
@@ -198,12 +210,28 @@ export default function TransferenciasPage() {
         </CardContent>
       </Card>
 
-      <NuevaTransferenciaDialog open={openNueva} onClose={() => setOpenNueva(false)} />
+      <TransferenciaDialog
+        open={openNueva || !!editando}
+        onClose={() => {
+          setOpenNueva(false);
+          setEditando(null);
+        }}
+        transferencia={editando}
+      />
     </div>
   );
 }
 
-function NuevaTransferenciaDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function TransferenciaDialog({
+  open,
+  onClose,
+  transferencia,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Si se pasa, el dialog edita ese borrador. Si no, crea uno nuevo. */
+  transferencia?: Transferencia | null;
+}) {
   const db = getDb();
   const qc = useQueryClient();
   const depositosQ = useQuery({ queryKey: ['depositos'], queryFn: () => db.depositos.list() });
@@ -212,18 +240,49 @@ function NuevaTransferenciaDialog({ open, onClose }: { open: boolean; onClose: (
     queryFn: () => db.productos.list({ activo: true }),
   });
 
+  const editando = !!transferencia;
+
   const [origenId, setOrigenId] = useState('');
   const [destinoId, setDestinoId] = useState('');
   const [items, setItems] = useState<{ producto_id: string; cantidad: number }[]>([
     { producto_id: '', cantidad: 1 },
   ]);
 
-  const crearMut = useMutation({
+  // Precargar valores al abrir en modo edición.
+  useEffect(() => {
+    if (open) {
+      if (transferencia) {
+        setOrigenId(transferencia.deposito_origen_id);
+        setDestinoId(transferencia.deposito_destino_id);
+        setItems(
+          transferencia.items.length
+            ? transferencia.items.map((it) => ({
+                producto_id: it.producto_id,
+                cantidad: it.cantidad,
+              }))
+            : [{ producto_id: '', cantidad: 1 }],
+        );
+      } else {
+        setOrigenId('');
+        setDestinoId('');
+        setItems([{ producto_id: '', cantidad: 1 }]);
+      }
+    }
+  }, [open, transferencia]);
+
+  const guardarMut = useMutation({
     mutationFn: () => {
       if (!origenId || !destinoId) throw new Error('Elegí origen y destino');
       if (origenId === destinoId) throw new Error('Origen y destino deben ser distintos');
       const validos = items.filter((i) => i.producto_id && i.cantidad > 0);
       if (validos.length === 0) throw new Error('Agregá al menos un producto');
+      if (editando && transferencia) {
+        return db.transferencias.actualizarBorrador(transferencia.id, {
+          deposito_origen_id: origenId,
+          deposito_destino_id: destinoId,
+          items: validos,
+        });
+      }
       return db.transferencias.crearBorrador({
         deposito_origen_id: origenId,
         deposito_destino_id: destinoId,
@@ -231,12 +290,9 @@ function NuevaTransferenciaDialog({ open, onClose }: { open: boolean; onClose: (
       });
     },
     onSuccess: () => {
-      toast.success('Transferencia creada como borrador');
+      toast.success(editando ? 'Cambios guardados' : 'Transferencia creada como borrador');
       qc.invalidateQueries({ queryKey: ['transferencias'] });
       onClose();
-      setOrigenId('');
-      setDestinoId('');
-      setItems([{ producto_id: '', cantidad: 1 }]);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -248,7 +304,7 @@ function NuevaTransferenciaDialog({ open, onClose }: { open: boolean; onClose: (
   return (
     <Dialog open={open} onOpenChange={onClose} className="max-w-2xl">
       <DialogHeader>
-        <DialogTitle>Nueva transferencia</DialogTitle>
+        <DialogTitle>{editando ? 'Editar transferencia' : 'Nueva transferencia'}</DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
@@ -338,8 +394,14 @@ function NuevaTransferenciaDialog({ open, onClose }: { open: boolean; onClose: (
         <Button variant="ghost" onClick={onClose}>
           Cancelar
         </Button>
-        <Button onClick={() => crearMut.mutate()} disabled={crearMut.isPending}>
-          {crearMut.isPending ? 'Creando…' : 'Crear borrador'}
+        <Button onClick={() => guardarMut.mutate()} disabled={guardarMut.isPending}>
+          {guardarMut.isPending
+            ? editando
+              ? 'Guardando…'
+              : 'Creando…'
+            : editando
+              ? 'Guardar cambios'
+              : 'Crear borrador'}
         </Button>
       </DialogFooter>
     </Dialog>

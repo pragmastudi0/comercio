@@ -63,8 +63,14 @@ export default function DashboardPage() {
     queryKey: ['productos-list'],
     queryFn: () => db.productos.list(),
   });
-  const nombreProd = (id: string) =>
-    productosLookupQ.data?.find((p) => p.id === id)?.nombre ?? id;
+  const nombreProd = (id: string) => {
+    if (productosLookupQ.isLoading) return '…';
+    const p = productosLookupQ.data?.find((x) => x.id === id);
+    if (p) return p.nombre;
+    // Producto borrado (la venta sigue en historial). Mostrar etiqueta clara
+    // en vez del UUID crudo, conservando los primeros 8 chars para identificar.
+    return `Producto eliminado (${id.slice(0, 8)}…)`;
+  };
 
   return (
     <div className="container mx-auto px-4 py-6 sm:py-8">
