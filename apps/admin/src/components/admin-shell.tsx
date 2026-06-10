@@ -30,51 +30,67 @@ import { BRAND } from '@comercio/business';
 import { cn } from '@comercio/ui/utils';
 import { Button } from '@comercio/ui/button';
 
-type NavItem = { href: string; label: string; icon: typeof Package };
+import type { AccionPermiso, ModuloPermiso } from '@comercio/business';
+import { usePermisos } from '@/lib/permisos';
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof Package;
+  // Si está, el item solo se muestra al empleado con ese permiso.
+  // Si no, siempre se muestra.
+  requiere?: { modulo: ModuloPermiso; accion: string };
+};
+
+// Helpers para tipar el `requiere`. Como TypeScript pide AccionPermiso<M>
+// específico por módulo, lo casteamos acá para no propagar genéricos a NavItem.
+function req<M extends ModuloPermiso>(modulo: M, accion: AccionPermiso<M>): { modulo: ModuloPermiso; accion: string } {
+  return { modulo, accion: accion as string };
+}
 
 const NAV_GROUPS: { titulo: string; items: NavItem[] }[] = [
   {
     titulo: 'General',
     items: [
       { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/ventas', label: 'Ventas', icon: ShoppingCart },
+      { href: '/ventas', label: 'Ventas', icon: ShoppingCart, requiere: req('ventas', 'crear') },
       { href: '/notas-credito', label: 'Notas de crédito', icon: Receipt },
-      { href: '/caja', label: 'Cajas', icon: Wallet },
-      { href: '/reportes', label: 'Reportes', icon: BarChart3 },
+      { href: '/caja', label: 'Cajas', icon: Wallet, requiere: req('caja', 'ver_propia') },
+      { href: '/reportes', label: 'Reportes', icon: BarChart3, requiere: req('reportes', 'ver_local_propio') },
     ],
   },
   {
     titulo: 'Catálogo',
     items: [
-      { href: '/productos', label: 'Productos', icon: Package },
-      { href: '/categorias', label: 'Categorías', icon: ListTree },
-      { href: '/listas-precio', label: 'Listas de precio', icon: TagsIcon },
-      { href: '/proveedores', label: 'Proveedores', icon: Truck },
+      { href: '/productos', label: 'Productos', icon: Package, requiere: req('productos', 'ver') },
+      { href: '/categorias', label: 'Categorías', icon: ListTree, requiere: req('categorias', 'ver') },
+      { href: '/listas-precio', label: 'Listas de precio', icon: TagsIcon, requiere: req('listas_precio', 'ver') },
+      { href: '/proveedores', label: 'Proveedores', icon: Truck, requiere: req('proveedores', 'ver') },
     ],
   },
   {
     titulo: 'Online',
-    items: [{ href: '/web', label: 'E-commerce', icon: Globe }],
+    items: [{ href: '/web', label: 'E-commerce', icon: Globe, requiere: req('productos', 'publicar_ecommerce') }],
   },
   {
     titulo: 'Stock',
     items: [
-      { href: '/depositos', label: 'Depósitos', icon: Warehouse },
-      { href: '/transferencias', label: 'Transferencias', icon: ArrowLeftRight },
+      { href: '/depositos', label: 'Depósitos', icon: Warehouse, requiere: req('stock', 'ver_todos_depositos') },
+      { href: '/transferencias', label: 'Transferencias', icon: ArrowLeftRight, requiere: req('stock', 'transferir') },
     ],
   },
   {
     titulo: 'Personas',
     items: [
-      { href: '/empleados', label: 'Empleados', icon: Users },
-      { href: '/roles', label: 'Roles y permisos', icon: Shield },
+      { href: '/empleados', label: 'Empleados', icon: Users, requiere: req('empleados', 'ver') },
+      { href: '/roles', label: 'Roles y permisos', icon: Shield, requiere: req('roles', 'ver') },
     ],
   },
   {
     titulo: 'Sistema',
     items: [
-      { href: '/configuracion', label: 'Configuración', icon: Settings },
-      { href: '/backup', label: 'Backup', icon: Database },
+      { href: '/configuracion', label: 'Configuración', icon: Settings, requiere: req('configuracion', 'ver') },
+      { href: '/backup', label: 'Backup', icon: Database, requiere: req('configuracion', 'backup_restore') },
     ],
   },
 ];
@@ -84,7 +100,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const empleado = useSesion((s) => s.empleado);
   const logout = useSesion((s) => s.logout);
+  const { puede, cargando: permisosCargando } = usePermisos();
   const isLoginRoute = pathname === '/login';
+
+  // Filtrar grupos del nav según permisos del empleado logueado.
+  // Si el grupo entero queda vacío, no se muestra.
+  // Mientras los permisos están cargando, mostramos solo items sin `requiere`
+  // para evitar el flash de "no hay nada" → todo aparece.
+  const navGroups = NAV_GROUPS.map((grupo) => ({
+    ...grupo,
+    items: grupo.items.filter((it) => {
+      if (!it.requiere) return true;
+      if (permisosCargando) return false;
+      return puede(it.requiere.modulo as ModuloPermiso, it.requiere.accion as AccionPermiso<ModuloPermiso>);
+    }),
+  })).filter((grupo) => grupo.items.length > 0);
 
   // Desktop: expandido vs rail colapsado con iconos. Mobile: overlay drawer.
   const [expanded, setExpanded] = useState(true);
@@ -199,7 +229,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             expanded ? 'overflow-y-auto px-2' : 'overflow-visible px-1.5',
           )}
         >
-          {NAV_GROUPS.map((grupo) => (
+          {navGroups.map((grupo) => (
             <div key={grupo.titulo} className="mb-4">
               {expanded ? (
                 <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">

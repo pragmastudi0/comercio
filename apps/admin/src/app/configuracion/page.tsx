@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { Plus, Trash2 } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { PRESET_IDS } from '@comercio/db';
-import { RequierePermiso } from '@/lib/permisos';
+import { PaginaProtegida, RequierePermiso } from '@/lib/permisos';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -16,6 +16,14 @@ import { Skeleton } from '@comercio/ui/skeleton';
 const EMPRESA_ID = PRESET_IDS.empresa;
 
 export default function ConfiguracionPage() {
+  return (
+    <PaginaProtegida modulo="configuracion" accion="ver">
+      <ConfiguracionInner />
+    </PaginaProtegida>
+  );
+}
+
+function ConfiguracionInner() {
   const db = getDb();
   const qc = useQueryClient();
   const configQ = useQuery({ queryKey: ['config'], queryFn: () => db.configuracion.get(EMPRESA_ID) });

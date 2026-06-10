@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { PERMISOS_PRESET } from '@comercio/business';
 import { getDb } from '@/lib/db';
-import { RequierePermiso } from '@/lib/permisos';
+import { PaginaProtegida, RequierePermiso } from '@/lib/permisos';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@comercio/ui/table';
 import { Badge } from '@comercio/ui/badge';
@@ -18,6 +18,14 @@ import { Dialog, DialogFooter, DialogHeader, DialogTitle } from '@comercio/ui/di
 import { Skeleton } from '@comercio/ui/skeleton';
 
 export default function RolesPage() {
+  return (
+    <PaginaProtegida modulo="roles" accion="ver">
+      <RolesInner />
+    </PaginaProtegida>
+  );
+}
+
+function RolesInner() {
   const db = getDb();
   const qc = useQueryClient();
   const rolesQ = useQuery({ queryKey: ['roles'], queryFn: () => db.roles.list() });

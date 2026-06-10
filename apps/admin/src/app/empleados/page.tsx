@@ -11,9 +11,17 @@ import { Badge } from '@comercio/ui/badge';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Skeleton } from '@comercio/ui/skeleton';
-import { RequierePermiso } from '@/lib/permisos';
+import { PaginaProtegida, RequierePermiso } from '@/lib/permisos';
 
 export default function EmpleadosPage() {
+  return (
+    <PaginaProtegida modulo="empleados" accion="ver">
+      <EmpleadosInner />
+    </PaginaProtegida>
+  );
+}
+
+function EmpleadosInner() {
   const db = getDb();
   const [q, setQ] = useState('');
 

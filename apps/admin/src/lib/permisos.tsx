@@ -87,3 +87,34 @@ export function RequierePermiso<M extends ModuloPermiso>({
   const ok = usePermiso(modulo, accion);
   return <>{ok ? children : fallback}</>;
 }
+
+/**
+ * Guard a nivel de página completa. Si el usuario no tiene el permiso,
+ * muestra una pantalla "Sin permiso" en lugar del contenido. Usar en
+ * pages que tienen que estar protegidas si el menú las oculta (por si
+ * el usuario entra vía URL directa).
+ */
+export function PaginaProtegida<M extends ModuloPermiso>({
+  modulo,
+  accion,
+  children,
+}: {
+  modulo: M;
+  accion: AccionPermiso<M>;
+  children: ReactNode;
+}) {
+  const { puede, cargando } = usePermisos();
+  if (cargando) return null;
+  if (!puede(modulo, accion)) {
+    return (
+      <main className="container mx-auto max-w-md px-4 py-16 text-center">
+        <h1 className="text-xl font-semibold">Acceso restringido</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          No tenés permiso para ver esta sección. Pedile al dueño que ajuste tu rol
+          si necesitás acceso.
+        </p>
+      </main>
+    );
+  }
+  return <>{children}</>;
+}
