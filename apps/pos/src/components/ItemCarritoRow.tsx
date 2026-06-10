@@ -6,7 +6,8 @@ import { useSesion } from '@/stores/sesion';
 
 // Si el deposito_id de la sesión no es UUID (residuo del modo mock con
 // valores como 'dep_central'), caer al fallback canónico de Supabase.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Regex liberal (cualquier hex 8-4-4-4-12, sin restricción de versión RFC).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { useVenta, type ItemCarrito } from '@/stores/venta';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';

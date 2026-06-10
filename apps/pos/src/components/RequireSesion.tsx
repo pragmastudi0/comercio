@@ -6,7 +6,10 @@ import type { ReactNode } from 'react';
 
 // Defensa contra sesiones residuales del modo mock (IDs como '1', 'emp_admin').
 // Si algo de la sesión persistida no es UUID, hacemos logout y volvemos al login.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Regex liberal "cualquier hex 8-4-4-4-12" — Postgres acepta UUIDs sin restricción
+// de versión/variante (los preset IDs nuestros tipo 00000000-...-0301 no cumplirían
+// el spec RFC 4122 estricto pero sí son UUID válidos en la DB).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function esUuid(v: string | undefined | null): boolean {
   return !!v && UUID_RE.test(v);
 }

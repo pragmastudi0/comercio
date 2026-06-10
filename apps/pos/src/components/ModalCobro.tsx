@@ -17,9 +17,10 @@ import {
 } from '@/stores/venta';
 import { PRESET_IDS, type MetodoPago, type PagoVenta } from '@comercio/db';
 
-// Regex UUID v1-v5. Si el deposito_id de la sesión no es UUID (ej. residuo
-// del modo mock con 'dep_central'), caer al fallback canónico de Supabase.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Regex UUID liberal (formato hex 8-4-4-4-12, sin restricción de versión RFC).
+// Si el deposito_id de la sesión no es UUID (ej. residuo del modo mock con
+// 'dep_central'), caer al fallback canónico de Supabase.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function depositoIdSeguro(id: string | undefined | null): string {
   return id && UUID_RE.test(id) ? id : PRESET_IDS.depositoCentralFallback;
 }
