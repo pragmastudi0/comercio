@@ -26,6 +26,12 @@ export function makeProductosRepo(store: Store): ProductosRepo {
     async list(filtro = {}) {
       return clone(store.productos.filter((p) => match(p, filtro)));
     },
+    async listPaginado(filtro) {
+      const { page, pageSize, ...resto } = filtro;
+      const all = store.productos.filter((p) => match(p, resto));
+      const start = page * pageSize;
+      return { rows: clone(all.slice(start, start + pageSize)), total: all.length };
+    },
     async buscarRapido(q, limit = 10) {
       if (!q.trim()) return [];
       const query = q.trim().toLowerCase();

@@ -28,8 +28,11 @@ import { Label } from '@comercio/ui/label';
 import { Badge } from '@comercio/ui/badge';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
+import { PRESET_IDS } from '@comercio/db';
 
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'https://turisteando-web.vercel.app';
+// Acepta tanto el UUID real como el id legacy del mock.
+const LISTA_MAY_IDS = [PRESET_IDS.listas.mayorista, 'lp_may'];
 
 export default function WebPage() {
   const db = getDb();
@@ -48,8 +51,21 @@ export default function WebPage() {
       const map = new Map<string, number>();
       for (const p of productosQ.data ?? []) {
         const lp = await db.productos.preciosDe(p.id);
-        const lista = lp.find((x) => x.lista_precio_id === 'lp_may');
+        const lista = lp.find((x) => LISTA_MAY_IDS.includes(x.lista_precio_id));
         map.set(p.id, lista?.escalas[0]?.precio ?? 0);
+      }
+      return map;
+    },
+    enabled: !!productosQ.data,
+  });
+  // Stock total por producto — para que el dueño vea si puede publicar.
+  const stockQ = useQuery({
+    queryKey: ['stock-web-admin', productosQ.data?.length],
+    queryFn: async () => {
+      const map = new Map<string, number>();
+      for (const p of productosQ.data ?? []) {
+        const items = await db.stock.porProducto(p.id);
+        map.set(p.id, items.reduce((acc, s) => acc + Number(s.cantidad), 0));
       }
       return map;
     },
@@ -235,12 +251,16 @@ export default function WebPage() {
                   <TableHead>Producto</TableHead>
                   <TableHead>Categoría</TableHead>
                   <TableHead className="text-right">Precio mayorista</TableHead>
+                  <TableHead className="text-right">Stock</TableHead>
                   <TableHead>Desc. larga</TableHead>
                   <TableHead className="w-24 text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {visibles.map((p) => (
+                {visibles.map((p) => {
+                  const stock = stockQ.data?.get(p.id) ?? 0;
+                  const sinStock = stock <= 0;
+                  return (
                   <TableRow key={p.id}>
                     <TableCell>
                       <ToggleSwitch
@@ -256,6 +276,14 @@ export default function WebPage() {
                     <TableCell>{categoriaNombre(p.categoria_id)}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatCurrency(preciosQ.data?.get(p.id) ?? 0)}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right tabular-nums ${
+                        sinStock ? 'font-semibold text-destructive' : ''
+                      }`}
+                      title={sinStock ? 'Sin stock — conviene no publicar' : `${stock} unidades`}
+                    >
+                      {stockQ.isLoading ? '…' : stock}
                     </TableCell>
                     <TableCell>
                       {p.descripcion_larga ? (
@@ -290,7 +318,8 @@ export default function WebPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}

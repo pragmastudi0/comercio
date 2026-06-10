@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
 import { PRESET_IDS } from '@comercio/db';
@@ -16,24 +16,39 @@ import { Label } from '@comercio/ui/label';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
 
+const PAGE_SIZE = 100;
+
 export default function ProductosPage() {
   const db = getDb();
   const qc = useQueryClient();
   const [texto, setTexto] = useState('');
   const [categoriaId, setCategoriaId] = useState('');
   const [sinStock, setSinStock] = useState(false);
+  const [page, setPage] = useState(0);
+
+  // Cuando cambia filtro, volver a página 0.
+  useEffect(() => {
+    setPage(0);
+  }, [texto, categoriaId, sinStock]);
 
   const productosQ = useQuery({
-    queryKey: ['productos-admin', texto, categoriaId, sinStock],
+    queryKey: ['productos-admin', texto, categoriaId, sinStock, page],
     queryFn: () =>
-      db.productos.list({
+      db.productos.listPaginado({
+        page,
+        pageSize: PAGE_SIZE,
         texto: texto || undefined,
         categoria_id: categoriaId || undefined,
         sin_stock: sinStock || undefined,
         activo: true,
       }),
+    placeholderData: (prev) => prev,
   });
   const categoriasQ = useQuery({ queryKey: ['categorias'], queryFn: () => db.categorias.list() });
+
+  const total = productosQ.data?.total ?? 0;
+  const rows = productosQ.data?.rows ?? [];
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const eliminarMut = useMutation({
     mutationFn: (id: string) => db.productos.delete(id),
@@ -44,21 +59,33 @@ export default function ProductosPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // Precios CF cargados por separado para mostrar en la tabla.
-  // Acepta tanto el ID real (UUID de Supabase) como el ID legacy del mock 'lp_cf'.
-  const LISTA_CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
+  // Precios CF y stock total para los productos visibles en la página actual.
+  const LISTA_CF_IDS = useMemo(() => [PRESET_IDS.listas.consumidorFinal, 'lp_cf'], []);
+  const idsVisibles = rows.map((p) => p.id).join(',');
   const preciosQ = useQuery({
-    queryKey: ['precios-cf', productosQ.data?.map((p) => p.id).join(',')],
+    queryKey: ['precios-cf-page', idsVisibles],
     queryFn: async () => {
       const map = new Map<string, number>();
-      for (const p of productosQ.data ?? []) {
+      for (const p of rows) {
         const lp = await db.productos.preciosDe(p.id);
         const cf = lp.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
         map.set(p.id, cf?.escalas[0]?.precio ?? 0);
       }
       return map;
     },
-    enabled: !!productosQ.data,
+    enabled: rows.length > 0,
+  });
+  const stockQ = useQuery({
+    queryKey: ['stock-totales-page', idsVisibles],
+    queryFn: async () => {
+      const map = new Map<string, number>();
+      for (const p of rows) {
+        const items = await db.stock.porProducto(p.id);
+        map.set(p.id, items.reduce((acc, s) => acc + Number(s.cantidad), 0));
+      }
+      return map;
+    },
+    enabled: rows.length > 0,
   });
 
   const categoriaNombre = (id: string) =>
@@ -110,17 +137,21 @@ export default function ProductosPage() {
               ))}
             </select>
           </div>
-          <div className="flex items-end gap-2">
-            <input
-              id="sinstock"
-              type="checkbox"
-              checked={sinStock}
-              onChange={(e) => setSinStock(e.target.checked)}
-              className="h-4 w-4"
-            />
-            <Label htmlFor="sinstock" className="text-sm">
-              Solo sin stock
-            </Label>
+          <div>
+            <Label className="mb-1 block text-xs">&nbsp;</Label>
+            <label
+              htmlFor="sinstock"
+              className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <input
+                id="sinstock"
+                type="checkbox"
+                checked={sinStock}
+                onChange={(e) => setSinStock(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span>Solo sin stock</span>
+            </label>
           </div>
         </CardContent>
       </Card>
@@ -128,11 +159,20 @@ export default function ProductosPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            {productosQ.data?.length ?? 0} productos
+            {productosQ.isLoading ? (
+              <span className="text-muted-foreground">Cargando…</span>
+            ) : total === 0 ? (
+              <>0 productos</>
+            ) : (
+              <>
+                {Math.min(page * PAGE_SIZE + 1, total)}–{Math.min((page + 1) * PAGE_SIZE, total)} de{' '}
+                <span className="tabular-nums">{total}</span> productos
+              </>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {productosQ.isLoading ? (
+          {productosQ.isLoading && rows.length === 0 ? (
             <Skeleton className="h-40" />
           ) : (
             <Table>
@@ -143,54 +183,93 @@ export default function ProductosPage() {
                   <TableHead>Categoría</TableHead>
                   <TableHead className="text-right">Costo</TableHead>
                   <TableHead className="text-right">Precio CF</TableHead>
+                  <TableHead className="text-right">Stock</TableHead>
                   <TableHead>E-commerce</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(productosQ.data ?? []).map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="font-mono text-xs">{p.codigo_interno}</TableCell>
-                    <TableCell className="font-medium">{p.nombre}</TableCell>
-                    <TableCell>{categoriaNombre(p.categoria_id)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatCurrency(p.costo)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatCurrency(preciosQ.data?.get(p.id) ?? 0)}
-                    </TableCell>
-                    <TableCell>
-                      {p.publicado_web ? (
-                        <Badge variant="secondary">publicado</Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button asChild variant="ghost" size="icon">
-                          <Link href={`/productos/${p.id}`}>
-                            <Pencil className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => {
-                            if (confirm(`¿Eliminar "${p.nombre}"?`)) eliminarMut.mutate(p.id);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {rows.map((p) => {
+                  const stock = stockQ.data?.get(p.id) ?? 0;
+                  const sinStockProd = stock <= 0;
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-mono text-xs">{p.codigo_interno}</TableCell>
+                      <TableCell className="font-medium">{p.nombre}</TableCell>
+                      <TableCell>{categoriaNombre(p.categoria_id)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(p.costo)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(preciosQ.data?.get(p.id) ?? 0)}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right tabular-nums ${
+                          sinStockProd ? 'font-semibold text-destructive' : ''
+                        }`}
+                      >
+                        {stockQ.isLoading ? '…' : stock}
+                      </TableCell>
+                      <TableCell>
+                        {p.publicado_web ? (
+                          <Badge variant="secondary">publicado</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button asChild variant="ghost" size="icon">
+                            <Link href={`/productos/${p.id}`}>
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive"
+                            onClick={() => {
+                              if (confirm(`¿Eliminar "${p.nombre}"?`)) eliminarMut.mutate(p.id);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
         </CardContent>
+
+        {/* Paginación */}
+        {total > PAGE_SIZE && (
+          <div className="flex flex-col items-center justify-between gap-3 border-t px-4 py-3 text-sm sm:flex-row">
+            <span className="text-muted-foreground">
+              Página {page + 1} de {totalPages}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0 || productosQ.isFetching}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1 || productosQ.isFetching}
+              >
+                Siguiente <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

@@ -81,16 +81,17 @@ export default function CajasPage() {
           ) : cerradas.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sin sesiones cerradas todavía.</p>
           ) : (
-            <table className="w-full text-sm">
+            <div className="-mx-4 overflow-x-auto sm:mx-0">
+              <table className="w-full min-w-[640px] text-sm">
               <thead className="text-xs uppercase text-muted-foreground">
                 <tr className="border-b">
-                  <th className="py-2 text-left">Caja</th>
-                  <th className="py-2 text-left">Cajero</th>
-                  <th className="py-2 text-left">Apertura</th>
-                  <th className="py-2 text-left">Cierre</th>
-                  <th className="py-2 text-right">Inicial</th>
-                  <th className="py-2 text-right">Declarado</th>
-                  <th className="py-2 text-right">Diferencia</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left">Caja</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left">Cajero</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left">Apertura</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left">Cierre</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right">Inicial</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right">Declarado</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right">Diferencia</th>
                 </tr>
               </thead>
               <tbody>
@@ -101,22 +102,22 @@ export default function CajasPage() {
                       : 0;
                   return (
                     <tr key={s.id} className="border-b last:border-0">
-                      <td className="py-2">{cajaNombre(s.caja_id)}</td>
-                      <td className="py-2">{empleadoNombre(s.empleado_id)}</td>
-                      <td className="py-2 text-xs text-muted-foreground">
+                      <td className="whitespace-nowrap px-3 py-2">{cajaNombre(s.caja_id)}</td>
+                      <td className="whitespace-nowrap px-3 py-2">{empleadoNombre(s.empleado_id)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
                         {formatDate(s.abierta_en)}
                       </td>
-                      <td className="py-2 text-xs text-muted-foreground">
+                      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
                         {s.cerrada_en ? formatDate(s.cerrada_en) : '—'}
                       </td>
-                      <td className="py-2 text-right tabular-nums">
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
                         {formatCurrency(s.saldo_inicial)}
                       </td>
-                      <td className="py-2 text-right tabular-nums">
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
                         {formatCurrency(s.saldo_final_declarado ?? 0)}
                       </td>
                       <td
-                        className={`py-2 text-right tabular-nums ${
+                        className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${
                           dif < 0 ? 'text-destructive' : dif > 0 ? 'text-orange-600' : 'text-green-700'
                         }`}
                       >
@@ -127,6 +128,7 @@ export default function CajasPage() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -26,25 +26,63 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
 
   return {
     async list(filtro = {}) {
-      let q = sb.from('productos').select('*').order('nombre');
-      q = aplicarFiltro(q, filtro);
-      let rows = okList<Producto>(await q, 'productos.list');
+      // Paginar internamente para sortear el límite de 1000 filas de PostgREST.
+      // Traemos chunks de 1000 hasta agotar.
+      const CHUNK = 1000;
+      const acumulado: Producto[] = [];
+      let from = 0;
+      while (true) {
+        let q = sb.from('productos').select('*').order('nombre').range(from, from + CHUNK - 1);
+        q = aplicarFiltro(q, filtro);
+        const chunk = okList<Producto>(await q, 'productos.list');
+        acumulado.push(...chunk);
+        if (chunk.length < CHUNK) break;
+        from += CHUNK;
+      }
+      let rows = acumulado;
       if (filtro.sin_stock) {
         // Filtrar productos cuya suma de stock sea 0 en todos los depósitos.
+        // Hay que paginar también el query de stock_items para no truncar.
         const ids = rows.map((r) => r.id);
         if (ids.length === 0) return rows;
-        const { data: stocks, error } = await sb
-          .from('stock_items')
-          .select('producto_id, cantidad')
-          .in('producto_id', ids);
-        if (error) throw new Error(`productos.list (stock): ${error.message}`);
         const total = new Map<string, number>();
-        for (const s of stocks ?? []) {
-          total.set(s.producto_id, (total.get(s.producto_id) ?? 0) + Number(s.cantidad));
+        for (let i = 0; i < ids.length; i += 200) {
+          const slice = ids.slice(i, i + 200);
+          const { data: stocks, error } = await sb
+            .from('stock_items')
+            .select('producto_id, cantidad')
+            .in('producto_id', slice);
+          if (error) throw new Error(`productos.list (stock): ${error.message}`);
+          for (const s of stocks ?? []) {
+            total.set(s.producto_id, (total.get(s.producto_id) ?? 0) + Number(s.cantidad));
+          }
         }
         rows = rows.filter((p) => (total.get(p.id) ?? 0) <= 0);
       }
       return rows;
+    },
+    async listPaginado(filtro) {
+      const { page, pageSize, ...resto } = filtro;
+      // Si filtra por sin_stock necesitamos saber el set completo de candidatos
+      // primero (para contar bien y paginar sobre el subconjunto). Caemos en la
+      // versión simple: traer todo via list() y paginar en memoria. Es 1 query
+      // extra pero garantiza count exacto.
+      if (resto.sin_stock) {
+        const all = await this.list({ ...resto, sin_stock: true });
+        const start = page * pageSize;
+        return { rows: all.slice(start, start + pageSize), total: all.length };
+      }
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      let q = sb
+        .from('productos')
+        .select('*', { count: 'exact' })
+        .order('nombre')
+        .range(from, to);
+      q = aplicarFiltro(q, resto);
+      const { data, error, count } = await q;
+      if (error) throw new Error(`productos.listPaginado: ${error.message}`);
+      return { rows: (data ?? []) as Producto[], total: count ?? 0 };
     },
     async buscarRapido(query, limit = 10) {
       if (!query.trim()) return [];

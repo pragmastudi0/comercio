@@ -9,8 +9,27 @@ export type FiltroProductos = {
   activo?: boolean;
 };
 
+/** Resultado paginado con total para mostrar "X de N" en la UI. */
+export type ListadoProductos = {
+  rows: Producto[];
+  total: number;
+};
+
 export type ProductosRepo = {
+  /**
+   * Devuelve TODOS los productos que matchean el filtro (paginando internamente
+   * para sortear el límite de 1000 filas del REST de PostgREST). Sigue siendo
+   * compatible con el código viejo que esperaba Producto[].
+   */
   list(filtro?: FiltroProductos): Promise<Producto[]>;
+  /**
+   * Versión paginada para listados con UI. Devuelve solo `pageSize` filas y el
+   * total real (con count exacto). Pensado para no traer 2000 productos cuando
+   * la UI muestra 100 por vez.
+   */
+  listPaginado(
+    filtro: FiltroProductos & { page: number; pageSize: number },
+  ): Promise<ListadoProductos>;
   buscarRapido(query: string, limit?: number): Promise<Producto[]>;
   buscarPorCodigo(codigo: string): Promise<Producto | null>;
   get(id: ID): Promise<Producto | null>;
