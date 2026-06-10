@@ -24,7 +24,9 @@ export const useSesion = create<SesionState>()(
       logout: () => set({ empleado: null, caja: null, sesionCaja: null }),
     }),
     {
-      name: 'turisteando-pos-sesion',
+      // v2: invalidación masiva de sesiones cacheadas del modo mock con IDs no-UUID.
+      // Cambiar el sufijo de versión cuando haga falta volver a limpiar.
+      name: 'turisteando-pos-sesion-v2',
       partialize: (s) => ({ empleado: s.empleado, caja: s.caja, sesionCaja: s.sesionCaja }),
     },
   ),

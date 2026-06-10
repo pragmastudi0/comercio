@@ -181,6 +181,32 @@ export function ModalCobro({
     mutationFn: async () => {
       if (!empleado || !caja || !sesion) throw new Error('Sesión inválida');
       if (pagos.length === 0) throw new Error('No hay pagos');
+
+      // Defensa final: validar que todos los IDs que viajan al RPC sean UUID.
+      // Si algo está roto en la sesión, falla con mensaje claro antes de pegarle
+      // a Supabase (evita el cryptic "invalid input syntax for type uuid").
+      const idsAValidar: { campo: string; valor: string | null | undefined }[] = [
+        { campo: 'empleado.id', valor: empleado.id },
+        { campo: 'empleado.deposito_id', valor: empleado.deposito_id },
+        { campo: 'caja.id', valor: caja.id },
+        { campo: 'caja.local_id', valor: caja.local_id },
+        { campo: 'sesion.id', valor: sesion.id },
+        ...items.map((it, i) => ({
+          campo: `items[${i}].producto_id`,
+          valor: it.producto.id,
+        })),
+      ];
+      const malos = idsAValidar.filter(
+        ({ valor }) => valor != null && !UUID_RE.test(valor),
+      );
+      if (malos.length > 0) {
+        // Forzar relogin: la sesión tiene residuo del modo mock
+        useSesion.getState().logout();
+        throw new Error(
+          `Sesión inválida (${malos[0]!.campo} = "${malos[0]!.valor}"). ` +
+            'Por favor cerrá sesión y volvé a iniciarla.',
+        );
+      }
       const items_payload = items.map((it) => ({
         producto_id: it.producto.id,
         cantidad: it.cantidad,
