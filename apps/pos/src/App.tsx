@@ -4,12 +4,14 @@ import { AbrirCaja } from './pages/AbrirCaja';
 import { Caja } from './pages/Caja';
 import { CerrarCaja } from './pages/CerrarCaja';
 import { Ticket } from './pages/Ticket';
+import { Reset } from './pages/Reset';
 import { RequireEmpleado, RequireSesionAbierta } from './components/RequireSesion';
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/reset" element={<Reset />} />
       <Route path="/login" element={<Login />} />
       <Route
         path="/abrir-caja"

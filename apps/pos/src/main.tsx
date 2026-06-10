@@ -6,6 +6,23 @@ import { Toaster } from 'sonner';
 import App from './App';
 import '@comercio/ui/styles';
 
+// === Limpieza de assets de versiones anteriores ===
+// Borrar localStorage de la vesión v1 (que tenía residuo del modo mock).
+try {
+  localStorage.removeItem('turisteando-pos-sesion');
+} catch {
+  /* navegador con storage bloqueado */
+}
+
+// Forzar update de cualquier service worker viejo que esté sirviendo bundle
+// stale. skipWaiting + clientsClaim del nuevo SW se encarga del resto.
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((regs) => Promise.all(regs.map((r) => r.update())))
+    .catch(() => {});
+}
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, staleTime: 30_000 } },
 });
