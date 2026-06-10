@@ -68,8 +68,11 @@ export default function EditarEmpleadoPage() {
         activo,
       });
       await db.empleados.setOverridePermisos(id, override);
-      if (nuevaPassword) {
-        await db.empleados.setPassword(id, nuevaPassword);
+      // Solo cambiar password si el usuario realmente escribió algo (no usar
+      // valores autocompletados por el navegador con espacios o vacíos).
+      const passLimpia = nuevaPassword.trim();
+      if (passLimpia.length >= 6) {
+        await db.empleados.setPassword(id, passLimpia);
       }
     },
     onSuccess: async () => {
@@ -173,10 +176,18 @@ export default function EditarEmpleadoPage() {
                 <Label className="mb-1 block">Nueva contraseña (opcional)</Label>
                 <Input
                   type="password"
+                  // Evita que Chrome/Safari autocompleten con la contraseña
+                  // del admin logueado y disparen un cambio que no quisimos.
+                  autoComplete="new-password"
+                  name="nuevaPasswordEmpleadoEdit"
                   value={nuevaPassword}
                   onChange={(e) => setNuevaPassword(e.target.value)}
                   placeholder="Dejar vacío para no cambiarla"
+                  minLength={6}
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Solo se cambia si escribís una nueva (mínimo 6 caracteres).
+                </p>
               </div>
               <div>
                 <Label className="mb-1 block">Rol</Label>
