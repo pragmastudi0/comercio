@@ -23,7 +23,13 @@ export default defineConfig({
           { src: '/favicon.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,png,woff2}'] },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,png,woff2}'],
+        // El SW nuevo toma control sin esperar a que se cierren todas las tabs.
+        // Necesario para que los hot-fixes lleguen al cliente sin pasos manuales.
+        skipWaiting: true,
+        clientsClaim: true,
+      },
     }),
   ],
   resolve: {
