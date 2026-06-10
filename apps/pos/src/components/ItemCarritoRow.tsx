@@ -3,6 +3,10 @@ import { Minus, Plus, Trash2, AlertTriangle, Tag } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { PRESET_IDS } from '@comercio/db';
 import { useSesion } from '@/stores/sesion';
+
+// Si el deposito_id de la sesión no es UUID (residuo del modo mock con
+// valores como 'dep_central'), caer al fallback canónico de Supabase.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 import { useVenta, type ItemCarrito } from '@/stores/venta';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -16,7 +20,11 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
   const setDescuento = useVenta((s) => s.setDescuentoLinea);
   const quitar = useVenta((s) => s.quitar);
 
-  const depositoId = empleado?.deposito_id ?? PRESET_IDS.depositoCentralFallback;
+  const depositoIdRaw = empleado?.deposito_id;
+  const depositoId =
+    depositoIdRaw && UUID_RE.test(depositoIdRaw)
+      ? depositoIdRaw
+      : PRESET_IDS.depositoCentralFallback;
   const stockQ = useQuery({
     queryKey: ['stock', item.producto.id, depositoId],
     queryFn: () => db.stock.cantidad(item.producto.id, depositoId),

@@ -17,6 +17,13 @@ import {
 } from '@/stores/venta';
 import { PRESET_IDS, type MetodoPago, type PagoVenta } from '@comercio/db';
 
+// Regex UUID v1-v5. Si el deposito_id de la sesión no es UUID (ej. residuo
+// del modo mock con 'dep_central'), caer al fallback canónico de Supabase.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function depositoIdSeguro(id: string | undefined | null): string {
+  return id && UUID_RE.test(id) ? id : PRESET_IDS.depositoCentralFallback;
+}
+
 type MetodoConfig = {
   metodo: MetodoPago;
   label: string;
@@ -207,7 +214,7 @@ export function ModalCobro({
         caja_id: caja.id,
         sesion_caja_id: sesion.id,
         local_id: caja.local_id,
-        deposito_id: empleado.deposito_id ?? PRESET_IDS.depositoCentralFallback,
+        deposito_id: depositoIdSeguro(empleado.deposito_id),
         empleado_id: empleado.id,
         cliente_id: clienteId ?? undefined,
         items: items_payload,
