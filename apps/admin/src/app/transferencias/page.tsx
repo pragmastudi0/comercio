@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { ArrowRight, Plus, Send, CheckCircle2, X, Trash2 } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
+import { RequierePermiso } from '@/lib/permisos';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -90,10 +91,12 @@ export default function TransferenciasPage() {
             recibida (suma en destino).
           </p>
         </div>
-        <Button onClick={() => setOpenNueva(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Nueva transferencia
-        </Button>
+        <RequierePermiso modulo="stock" accion="transferir">
+          <Button onClick={() => setOpenNueva(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Nueva transferencia
+          </Button>
+        </RequierePermiso>
       </div>
 
       <Card>

@@ -11,6 +11,7 @@ import { Badge } from '@comercio/ui/badge';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Skeleton } from '@comercio/ui/skeleton';
+import { RequierePermiso } from '@/lib/permisos';
 
 export default function EmpleadosPage() {
   const db = getDb();
@@ -36,12 +37,14 @@ export default function EmpleadosPage() {
             Cajeros, encargados y otros usuarios del sistema.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/empleados/nuevo">
-            <Plus className="mr-1 h-4 w-4" />
-            Nuevo empleado
-          </Link>
-        </Button>
+        <RequierePermiso modulo="empleados" accion="crear">
+          <Button asChild>
+            <Link href="/empleados/nuevo">
+              <Plus className="mr-1 h-4 w-4" />
+              Nuevo empleado
+            </Link>
+          </Button>
+        </RequierePermiso>
       </div>
 
       <Card>

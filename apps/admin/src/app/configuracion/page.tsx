@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Plus, Trash2 } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { PRESET_IDS } from '@comercio/db';
+import { RequierePermiso } from '@/lib/permisos';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -328,9 +329,19 @@ export default function ConfiguracionPage() {
       </div>
 
       <div className="mt-6 flex justify-end gap-2">
-        <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
-          {saveMut.isPending ? 'Guardando…' : 'Guardar cambios'}
-        </Button>
+        <RequierePermiso
+          modulo="configuracion"
+          accion="modificar_general"
+          fallback={
+            <p className="text-sm text-muted-foreground">
+              No tenés permiso para modificar la configuración.
+            </p>
+          }
+        >
+          <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+            {saveMut.isPending ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+        </RequierePermiso>
       </div>
     </div>
   );

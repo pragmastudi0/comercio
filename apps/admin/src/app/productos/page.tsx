@@ -15,6 +15,7 @@ import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
+import { RequierePermiso, usePermiso } from '@/lib/permisos';
 
 const PAGE_SIZE = 100;
 
@@ -49,6 +50,9 @@ export default function ProductosPage() {
   const total = productosQ.data?.total ?? 0;
   const rows = productosQ.data?.rows ?? [];
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const puedeEditar = usePermiso('productos', 'editar');
+  const puedeEliminar = usePermiso('productos', 'eliminar');
 
   const eliminarMut = useMutation({
     mutationFn: (id: string) => db.productos.delete(id),
@@ -100,12 +104,14 @@ export default function ProductosPage() {
             Catálogo del comercio. Click en un producto para editar precio, stock e info.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/productos/nuevo">
-            <Plus className="mr-1 h-4 w-4" />
-            Nuevo producto
-          </Link>
-        </Button>
+        <RequierePermiso modulo="productos" accion="crear">
+          <Button asChild>
+            <Link href="/productos/nuevo">
+              <Plus className="mr-1 h-4 w-4" />
+              Nuevo producto
+            </Link>
+          </Button>
+        </RequierePermiso>
       </div>
 
       <Card className="mb-4">
@@ -219,21 +225,25 @@ export default function ProductosPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button asChild variant="ghost" size="icon">
-                            <Link href={`/productos/${p.id}`}>
-                              <Pencil className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive"
-                            onClick={() => {
-                              if (confirm(`¿Eliminar "${p.nombre}"?`)) eliminarMut.mutate(p.id);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {puedeEditar && (
+                            <Button asChild variant="ghost" size="icon">
+                              <Link href={`/productos/${p.id}`}>
+                                <Pencil className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                          )}
+                          {puedeEliminar && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive"
+                              onClick={() => {
+                                if (confirm(`¿Eliminar "${p.nombre}"?`)) eliminarMut.mutate(p.id);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { PERMISOS_PRESET } from '@comercio/business';
 import { getDb } from '@/lib/db';
+import { RequierePermiso } from '@/lib/permisos';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@comercio/ui/table';
 import { Badge } from '@comercio/ui/badge';
@@ -57,10 +58,12 @@ export default function RolesPage() {
             Cada rol define qué pueden hacer los empleados que lo tienen asignado.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Nuevo rol
-        </Button>
+        <RequierePermiso modulo="roles" accion="crear">
+          <Button onClick={() => setOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Nuevo rol
+          </Button>
+        </RequierePermiso>
       </div>
 
       <Card>
