@@ -14,15 +14,29 @@ function esUuid(v: string | undefined | null): boolean {
   return !!v && UUID_RE.test(v);
 }
 
+// Acepta null/undefined (campos opcionales) pero rechaza cualquier string
+// no-UUID (residuo del modo mock con IDs tipo '1', 'emp_admin', etc).
+function esUuidOpcional(v: string | null | undefined): boolean {
+  return v === null || v === undefined || esUuid(v);
+}
+
 function useLimpiarSesionMockResidual(): boolean {
   const empleado = useSesion((s) => s.empleado);
   const caja = useSesion((s) => s.caja);
   const sesionCaja = useSesion((s) => s.sesionCaja);
   const logout = useSesion((s) => s.logout);
 
-  const empleadoInvalido = empleado && !esUuid(empleado.id);
-  const cajaInvalida = caja && !esUuid(caja.id);
-  const sesionInvalida = sesionCaja && !esUuid(sesionCaja.id);
+  const empleadoInvalido =
+    empleado &&
+    (!esUuid(empleado.id) ||
+      !esUuidOpcional(empleado.local_id) ||
+      !esUuidOpcional(empleado.deposito_id));
+  const cajaInvalida = caja && (!esUuid(caja.id) || !esUuid(caja.local_id));
+  const sesionInvalida =
+    sesionCaja &&
+    (!esUuid(sesionCaja.id) ||
+      !esUuid(sesionCaja.caja_id) ||
+      !esUuid(sesionCaja.empleado_id));
   const hayResiduo = !!(empleadoInvalido || cajaInvalida || sesionInvalida);
 
   useEffect(() => {
