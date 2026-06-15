@@ -42,6 +42,11 @@ export default function EditarProductoPage() {
     queryFn: () => db.stock.porProducto(id),
   });
   const depositosQ = useQuery({ queryKey: ['depositos'], queryFn: () => db.depositos.list() });
+  // Histórico de movimientos para mostrar estadísticas del producto.
+  const movsQ = useQuery({
+    queryKey: ['movs-prod', id],
+    queryFn: () => db.stock.movimientos({ producto_id: id }),
+  });
 
   const [values, setValues] = useState<ProductoFormValues | null>(null);
   const [precios, setPrecios] = useState<
@@ -162,40 +167,178 @@ export default function EditarProductoPage() {
 
         <ImagenesProducto productoId={id} />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Stock por depósito</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Para ajustar stock manualmente, ir a la sección Depósitos.
-            </p>
-          </CardHeader>
-          <CardContent>
-            {stockQ.isLoading ? (
-              <Skeleton className="h-20" />
-            ) : (stockQ.data ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">Sin stock en ningún depósito.</p>
-            ) : (
-              <div className="space-y-1 text-sm">
-                {(stockQ.data ?? []).map((s) => {
-                  const dep = depositosQ.data?.find((d) => d.id === s.deposito_id);
-                  return (
-                    <div key={s.deposito_id} className="flex justify-between">
-                      <span>{dep?.nombre ?? s.deposito_id}</span>
-                      <span className="tabular-nums">{s.cantidad}</span>
-                    </div>
-                  );
-                })}
-                <div className="border-t pt-1 text-right text-xs text-muted-foreground">
-                  Costo total estimado:{' '}
-                  {formatCurrency(
-                    (stockQ.data ?? []).reduce((acc, s) => acc + s.cantidad * prodQ.data!.costo, 0),
-                  )}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <EstadisticasProducto
+          stocks={stockQ.data ?? []}
+          movimientos={movsQ.data ?? []}
+          depositos={depositosQ.data ?? []}
+          costo={prodQ.data.costo}
+          loading={stockQ.isLoading || movsQ.isLoading}
+        />
       </div>
     </div>
+  );
+}
+
+function EstadisticasProducto({
+  stocks,
+  movimientos,
+  depositos,
+  costo,
+  loading,
+}: {
+  stocks: { deposito_id: string; cantidad: number }[];
+  movimientos: { tipo: string; cantidad: number; fecha: string; deposito_id: string }[];
+  depositos: { id: string; nombre: string }[];
+  costo: number;
+  loading: boolean;
+}) {
+  const stockTotal = stocks.reduce((acc, s) => acc + Number(s.cantidad), 0);
+  // Movimientos por tipo
+  const movsVenta = movimientos.filter((m) => m.tipo === 'venta');
+  const movsIngreso = movimientos.filter(
+    (m) => m.tipo === 'ingreso' || m.tipo === 'transferencia_entrada',
+  );
+  const movsMerma = movimientos.filter((m) => m.tipo === 'merma');
+  const unidadesVendidas = movsVenta.reduce((acc, m) => acc + Number(m.cantidad), 0);
+  const unidadesIngresadas = movsIngreso.reduce((acc, m) => acc + Number(m.cantidad), 0);
+  const unidadesMerma = movsMerma.reduce((acc, m) => acc + Number(m.cantidad), 0);
+  const ultimaVenta = movsVenta.length
+    ? movsVenta.reduce((a, b) => (a.fecha > b.fecha ? a : b)).fecha
+    : null;
+  const ultimoIngreso = movsIngreso.length
+    ? movsIngreso.reduce((a, b) => (a.fecha > b.fecha ? a : b)).fecha
+    : null;
+
+  const fmtFecha = (iso: string) =>
+    new Date(iso).toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Stock por depósito</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Para ajustar stock manualmente, ir a la sección Depósitos.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <Skeleton className="h-20" />
+          ) : (
+            <div className="space-y-1 text-sm">
+              {depositos.map((d) => {
+                const item = stocks.find((s) => s.deposito_id === d.id);
+                const cantidad = Number(item?.cantidad ?? 0);
+                return (
+                  <div key={d.id} className="flex justify-between">
+                    <span>{d.nombre}</span>
+                    <span
+                      className={`tabular-nums ${
+                        cantidad <= 0
+                          ? 'font-semibold text-destructive'
+                          : cantidad < 5
+                            ? 'text-orange-600'
+                            : ''
+                      }`}
+                    >
+                      {cantidad}
+                    </span>
+                  </div>
+                );
+              })}
+              <div className="flex justify-between border-t pt-1 font-semibold">
+                <span>Total</span>
+                <span
+                  className={`tabular-nums ${
+                    stockTotal <= 0 ? 'text-destructive' : ''
+                  }`}
+                >
+                  {stockTotal}
+                </span>
+              </div>
+              <div className="text-right text-xs text-muted-foreground">
+                Costo total estimado: {formatCurrency(stockTotal * costo)}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Estadísticas del producto</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Resumen histórico desde que se carga el producto en el sistema.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <Skeleton className="h-32" />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border bg-muted/30 p-3">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Unidades vendidas
+                </div>
+                <div className="mt-1 text-2xl font-bold tabular-nums">
+                  {unidadesVendidas}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {movsVenta.length} venta{movsVenta.length === 1 ? '' : 's'} registrada
+                  {movsVenta.length === 1 ? '' : 's'}
+                </div>
+              </div>
+              <div className="rounded-md border bg-muted/30 p-3">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Última venta
+                </div>
+                <div className="mt-1 text-base font-semibold">
+                  {ultimaVenta ? fmtFecha(ultimaVenta) : '—'}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {ultimaVenta ? 'Última vez que se vendió' : 'Sin ventas todavía'}
+                </div>
+              </div>
+              <div className="rounded-md border bg-muted/30 p-3">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Unidades ingresadas
+                </div>
+                <div className="mt-1 text-2xl font-bold tabular-nums">
+                  {unidadesIngresadas}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Incluye compras y transferencias entrantes
+                </div>
+              </div>
+              <div className="rounded-md border bg-muted/30 p-3">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Último ingreso
+                </div>
+                <div className="mt-1 text-base font-semibold">
+                  {ultimoIngreso ? fmtFecha(ultimoIngreso) : '—'}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {ultimoIngreso ? 'Última recepción' : 'Sin ingresos registrados'}
+                </div>
+              </div>
+              {unidadesMerma > 0 && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 sm:col-span-2">
+                  <div className="text-xs uppercase tracking-wider text-destructive">
+                    Mermas / roturas
+                  </div>
+                  <div className="mt-1 text-xl font-bold tabular-nums text-destructive">
+                    {unidadesMerma} u
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
   );
 }

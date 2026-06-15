@@ -58,18 +58,20 @@ export default function WebPage() {
     },
     enabled: !!productosQ.data,
   });
-  // Stock total por producto — para que el dueño vea si puede publicar.
+  // Stock total por producto — un solo query batch (consolidado) en vez de
+  // hacer N requests secuenciales. Antes con 1907 productos tardaba minutos
+  // y muchos fallaban quedando en 0.
   const stockQ = useQuery({
-    queryKey: ['stock-web-admin', productosQ.data?.length],
+    queryKey: ['stock-web-admin'],
     queryFn: async () => {
+      const items = await db.stock.consolidado();
       const map = new Map<string, number>();
-      for (const p of productosQ.data ?? []) {
-        const items = await db.stock.porProducto(p.id);
-        map.set(p.id, items.reduce((acc, s) => acc + Number(s.cantidad), 0));
+      for (const s of items) {
+        map.set(s.producto_id, (map.get(s.producto_id) ?? 0) + Number(s.cantidad));
       }
       return map;
     },
-    enabled: !!productosQ.data,
+    staleTime: 30_000,
   });
 
   const togglePublicarMut = useMutation({

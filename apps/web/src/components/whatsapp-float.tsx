@@ -45,7 +45,7 @@ export function WhatsAppFloat() {
       {/* Logo oficial de WhatsApp en SVG */}
       <svg
         viewBox="0 0 32 32"
-        className="h-7 w-7 sm:h-8 sm:w-8"
+        className="h-9 w-9 sm:h-10 sm:w-10"
         fill="currentColor"
         aria-hidden
       >

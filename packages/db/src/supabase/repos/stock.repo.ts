@@ -30,11 +30,20 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
       return Number(data?.cantidad ?? 0);
     },
     async consolidado(filtro = {}) {
-      let q = sb.from('stock_items').select('*');
-      if (filtro.producto_id) q = q.eq('producto_id', filtro.producto_id);
-      if (filtro.deposito_id) q = q.eq('deposito_id', filtro.deposito_id);
-      const rows = okList<StockItem>(await q, 'stock.consolidado');
-      return filtro.sin_stock ? rows.filter((r) => r.cantidad <= 0) : rows;
+      // Paginar internamente para sortear el límite de 1000 filas del REST.
+      const CHUNK = 1000;
+      const acumulado: StockItem[] = [];
+      let from = 0;
+      while (true) {
+        let q = sb.from('stock_items').select('*').range(from, from + CHUNK - 1);
+        if (filtro.producto_id) q = q.eq('producto_id', filtro.producto_id);
+        if (filtro.deposito_id) q = q.eq('deposito_id', filtro.deposito_id);
+        const chunk = okList<StockItem>(await q, 'stock.consolidado');
+        acumulado.push(...chunk);
+        if (chunk.length < CHUNK) break;
+        from += CHUNK;
+      }
+      return filtro.sin_stock ? acumulado.filter((r) => r.cantidad <= 0) : acumulado;
     },
     async ajustar(input) {
       const { producto_id, variante_id, deposito_id, cantidad, motivo, empleado_id } = input;
