@@ -108,6 +108,14 @@ export function makeProductosRepo(store: Store): ProductosRepo {
           .sort((a, b) => a.orden - b.orden),
       );
     },
+    async imagenesDeMuchos(productoIds) {
+      const set = new Set(productoIds);
+      return clone(
+        store.productoImagenes
+          .filter((i) => set.has(i.producto_id))
+          .sort((a, b) => a.orden - b.orden),
+      );
+    },
     async agregarImagen(productoId, url) {
       const orden = store.productoImagenes.filter((i) => i.producto_id === productoId).length;
       const img: ProductoImagen = { id: makeId('img'), producto_id: productoId, url, orden };

@@ -48,6 +48,24 @@ function CatalogoInner() {
     },
     enabled: !!productosQ.data,
   });
+  // Imágenes principales (orden 0) de todos los productos visibles, en UN
+  // solo query batch.
+  const imagenesPrincipalesQ = useQuery({
+    queryKey: ['imgs-catalogo', productosQ.data?.map((p) => p.id).join(',')],
+    queryFn: async () => {
+      const ids = (productosQ.data ?? []).map((p) => p.id);
+      const todas = await db.productos.imagenesDeMuchos(ids);
+      // Quedarme con la primera imagen (orden mínimo) de cada producto.
+      const map = new Map<string, string>();
+      for (const img of todas) {
+        const actual = map.get(img.producto_id);
+        if (!actual) map.set(img.producto_id, img.url);
+        // Como vienen ordenadas por `orden`, la primera que entra es la principal.
+      }
+      return map;
+    },
+    enabled: (productosQ.data?.length ?? 0) > 0,
+  });
 
   const categorias = categoriasQ.data ?? [];
   const productos = productosQ.data ?? [];
@@ -117,15 +135,28 @@ function CatalogoInner() {
           {productos.map((p) => {
             const escalas = preciosQ.data?.get(p.id) ?? [];
             const tieneEscala = escalas.length > 1;
+            const imgUrl = imagenesPrincipalesQ.data?.get(p.id);
             return (
               <Link key={p.id} href={`/catalogo/${p.id}`}>
                 <Card className="h-full overflow-hidden transition hover:border-foreground">
-                  {/* Placeholder visual con emoji representativo del producto */}
-                  <div
-                    className={`flex aspect-square items-center justify-center text-6xl ${visualDeCategoria(p.categoria_id).bg}`}
-                  >
-                    <span aria-hidden>{emojiProducto(p.nombre, p.categoria_id)}</span>
-                  </div>
+                  {imgUrl ? (
+                    <div className="aspect-square overflow-hidden bg-muted/30">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imgUrl}
+                        alt={p.nombre}
+                        loading="lazy"
+                        className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                      />
+                    </div>
+                  ) : (
+                    // Fallback: placeholder visual con emoji representativo
+                    <div
+                      className={`flex aspect-square items-center justify-center text-6xl ${visualDeCategoria(p.categoria_id).bg}`}
+                    >
+                      <span aria-hidden>{emojiProducto(p.nombre, p.categoria_id)}</span>
+                    </div>
+                  )}
                   <CardContent className="space-y-1 p-4">
                     <Badge variant="secondary" className="mb-1">
                       {categoriaNombre(p.categoria_id)}

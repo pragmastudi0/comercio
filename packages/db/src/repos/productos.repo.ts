@@ -45,6 +45,11 @@ export type ProductosRepo = {
 
   // Imágenes
   imagenes(productoId: ID): Promise<ProductoImagen[]>;
+  /**
+   * Trae todas las imágenes de un conjunto de productos en un solo query.
+   * Útil para listados como el catálogo del e-commerce.
+   */
+  imagenesDeMuchos(productoIds: ID[]): Promise<ProductoImagen[]>;
   agregarImagen(productoId: ID, url: string): Promise<ProductoImagen>;
   eliminarImagen(imagenId: ID): Promise<void>;
   reordenarImagenes(productoId: ID, idsEnOrden: ID[]): Promise<void>;

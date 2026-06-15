@@ -195,6 +195,26 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
         'productos.imagenes',
       );
     },
+    async imagenesDeMuchos(productoIds) {
+      if (productoIds.length === 0) return [];
+      // PostgREST tiene un límite práctico en el largo del IN. Loteamos
+      // por 200 ids para evitar 414/431.
+      const acumulado: ProductoImagen[] = [];
+      const CHUNK = 200;
+      for (let i = 0; i < productoIds.length; i += CHUNK) {
+        const slice = productoIds.slice(i, i + CHUNK);
+        const rows = okList<ProductoImagen>(
+          await sb
+            .from('producto_imagenes')
+            .select('*')
+            .in('producto_id', slice)
+            .order('orden'),
+          'productos.imagenesDeMuchos',
+        );
+        acumulado.push(...rows);
+      }
+      return acumulado;
+    },
     async agregarImagen(productoId, url) {
       const { data: count } = await sb
         .from('producto_imagenes')
