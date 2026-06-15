@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Providers } from './providers';
 import { Header } from '@/components/header';
 import { Footer } from '@/components/footer';
+import { WhatsAppFloat } from '@/components/whatsapp-float';
 import { SITE } from '@/lib/config';
 import '@comercio/ui/styles';
 
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="flex-1">{children}</main>
             <Footer />
           </div>
+          <WhatsAppFloat />
         </Providers>
       </body>
     </html>

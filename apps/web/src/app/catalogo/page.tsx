@@ -13,6 +13,7 @@ import { Badge } from '@comercio/ui/badge';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
 import { emojiProducto, visualDeCategoria } from '@/lib/imagenes';
+import { ProcesoCompra } from '@/components/proceso-compra';
 
 function CatalogoInner() {
   const db = getDb();
@@ -66,6 +67,10 @@ function CatalogoInner() {
         <p className="text-sm text-muted-foreground">
           Precios mayoristas. Para hacer el pedido armá el carrito y enviá por WhatsApp.
         </p>
+      </div>
+
+      <div className="mb-6">
+        <ProcesoCompra />
       </div>
 
       <div className="mb-6 grid gap-3 md:grid-cols-[1fr_240px]">
