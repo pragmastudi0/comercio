@@ -15,6 +15,7 @@ import {
   calcularSubtotal,
   useVenta,
 } from '@/stores/venta';
+import { useDepositoActivo } from '@/lib/deposito-activo';
 import { PRESET_IDS, type MetodoPago, type PagoVenta } from '@comercio/db';
 
 // Regex UUID liberal (formato hex 8-4-4-4-12, sin restricción de versión RFC).
@@ -79,6 +80,10 @@ export function ModalCobro({
   const [cuotas, setCuotas] = useState(1);
   const [montoInput, setMontoInput] = useState<string>('');
   const [montoRecibido, setMontoRecibido] = useState<string>('');
+
+  // Depósito desde donde se descuenta el stock al confirmar la venta.
+  // Es el del LOCAL de la caja activa, no el del empleado en su perfil.
+  const { depositoId: depositoActivoId } = useDepositoActivo();
 
   const configQ = useQuery({
     queryKey: ['config-empresa'],
@@ -187,7 +192,7 @@ export function ModalCobro({
       // a Supabase (evita el cryptic "invalid input syntax for type uuid").
       const idsAValidar: { campo: string; valor: string | null | undefined }[] = [
         { campo: 'empleado.id', valor: empleado.id },
-        { campo: 'empleado.deposito_id', valor: empleado.deposito_id },
+        { campo: 'depositoActivo', valor: depositoActivoId },
         { campo: 'caja.id', valor: caja.id },
         { campo: 'caja.local_id', valor: caja.local_id },
         { campo: 'sesion.id', valor: sesion.id },
@@ -241,7 +246,7 @@ export function ModalCobro({
         caja_id: caja.id,
         sesion_caja_id: sesion.id,
         local_id: caja.local_id,
-        deposito_id: depositoIdSeguro(empleado.deposito_id),
+        deposito_id: depositoIdSeguro(depositoActivoId),
         empleado_id: empleado.id,
         cliente_id: clienteId ?? undefined,
         items: items_payload,

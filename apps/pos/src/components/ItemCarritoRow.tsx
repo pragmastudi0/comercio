@@ -1,13 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Minus, Plus, Trash2, AlertTriangle, Tag } from 'lucide-react';
 import { getDb } from '@/lib/db';
-import { PRESET_IDS } from '@comercio/db';
-import { useSesion } from '@/stores/sesion';
-
-// Si el deposito_id de la sesión no es UUID (residuo del modo mock con
-// valores como 'dep_central'), caer al fallback canónico de Supabase.
-// Regex liberal (cualquier hex 8-4-4-4-12, sin restricción de versión RFC).
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { useDepositoActivo } from '@/lib/deposito-activo';
 import { useVenta, type ItemCarrito } from '@/stores/venta';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -15,17 +9,12 @@ import { formatCurrency } from '@comercio/ui/utils';
 
 export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
   const db = getDb();
-  const empleado = useSesion((s) => s.empleado);
   const setCantidad = useVenta((s) => s.setCantidad);
   const setPrecio = useVenta((s) => s.setPrecio);
   const setDescuento = useVenta((s) => s.setDescuentoLinea);
   const quitar = useVenta((s) => s.quitar);
 
-  const depositoIdRaw = empleado?.deposito_id;
-  const depositoId =
-    depositoIdRaw && UUID_RE.test(depositoIdRaw)
-      ? depositoIdRaw
-      : PRESET_IDS.depositoCentralFallback;
+  const { depositoId } = useDepositoActivo();
   // Traemos el stock por TODOS los depósitos del producto. Así el cajero ve
   // si hay stock en otro lugar (Central o el otro local) cuando le falta
   // en el suyo, y puede pedir una transferencia.

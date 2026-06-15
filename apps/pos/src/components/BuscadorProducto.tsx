@@ -4,16 +4,13 @@ import { toast } from 'sonner';
 import { AlertTriangle } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { PRESET_IDS } from '@comercio/db';
-import { useSesion } from '@/stores/sesion';
 import { useVenta } from '@/stores/venta';
+import { useDepositoActivo } from '@/lib/deposito-activo';
 import { Input } from '@comercio/ui/input';
 import { formatCurrency } from '@comercio/ui/utils';
 
 // Acepta tanto el UUID real de Supabase como el ID legacy del mock 'lp_cf'.
 const LISTA_CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
-
-// Regex liberal de UUID (defensa contra residuo del modo mock).
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type BuscadorProductoHandle = {
   focus: () => void;
@@ -21,12 +18,7 @@ export type BuscadorProductoHandle = {
 
 export function BuscadorProducto() {
   const db = getDb();
-  const empleado = useSesion((s) => s.empleado);
-  const depositoIdRaw = empleado?.deposito_id;
-  const depositoId =
-    depositoIdRaw && UUID_RE.test(depositoIdRaw)
-      ? depositoIdRaw
-      : PRESET_IDS.depositoCentralFallback;
+  const { depositoId } = useDepositoActivo();
 
   const [q, setQ] = useState('');
   const [mostrarLista, setMostrarLista] = useState(false);
