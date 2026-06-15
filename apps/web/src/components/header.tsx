@@ -18,7 +18,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
       <div className="container mx-auto flex h-16 items-center justify-between gap-3 px-4">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/catalogo" className="flex items-center gap-2">
           <Image
             src="/logo.png"
             alt={SITE.nombre}
@@ -34,12 +34,6 @@ export function Header() {
             </div>
           </div>
         </Link>
-
-        <nav className="hidden gap-6 text-sm md:flex">
-          <Link href="/catalogo" className="text-foreground/80 hover:text-foreground">
-            Catálogo
-          </Link>
-        </nav>
 
         <Link
           href="/carrito"

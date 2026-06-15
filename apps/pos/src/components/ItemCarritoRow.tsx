@@ -26,18 +26,35 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
     depositoIdRaw && UUID_RE.test(depositoIdRaw)
       ? depositoIdRaw
       : PRESET_IDS.depositoCentralFallback;
-  const stockQ = useQuery({
-    queryKey: ['stock', item.producto.id, depositoId],
-    queryFn: () => db.stock.cantidad(item.producto.id, depositoId),
+  // Traemos el stock por TODOS los depósitos del producto. Así el cajero ve
+  // si hay stock en otro lugar (Central o el otro local) cuando le falta
+  // en el suyo, y puede pedir una transferencia.
+  const stocksQ = useQuery({
+    queryKey: ['stock-prod', item.producto.id],
+    queryFn: () => db.stock.porProducto(item.producto.id),
+  });
+  const depositosQ = useQuery({
+    queryKey: ['depositos-pos'],
+    queryFn: () => db.depositos.list(),
   });
 
   const subtotalBruto = item.cantidad * item.precio_unitario;
   const dto = item.descuento_pct ? subtotalBruto * (item.descuento_pct / 100) : 0;
   const subtotal = subtotalBruto - dto;
   const precioEditado = item.precio_unitario !== item.precio_base;
-  const stockActual = stockQ.data ?? 0;
-  const stockTrasVenta = stockActual - item.cantidad;
+  const stockEnMiDep = Number(
+    stocksQ.data?.find((s) => s.deposito_id === depositoId)?.cantidad ?? 0,
+  );
+  const stockEnOtros = (stocksQ.data ?? [])
+    .filter((s) => s.deposito_id !== depositoId && Number(s.cantidad) > 0)
+    .map((s) => ({
+      cantidad: Number(s.cantidad),
+      nombre:
+        depositosQ.data?.find((d) => d.id === s.deposito_id)?.nombre ?? 'otro depósito',
+    }));
+  const stockTrasVenta = stockEnMiDep - item.cantidad;
   const sinStockSuficiente = stockTrasVenta < 0;
+  const totalEnOtros = stockEnOtros.reduce((acc, s) => acc + s.cantidad, 0);
 
   function cambiarDescuento(pct: number) {
     setDescuento(item.producto.id, pct > 0 ? pct : undefined);
@@ -59,9 +76,21 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
             }`}
           >
             {sinStockSuficiente && <AlertTriangle className="h-3 w-3" />}
-            Stock: {stockActual}
+            Stock: {stockEnMiDep}
             {item.cantidad > 0 && ` → ${stockTrasVenta} tras venta`}
           </span>
+          {/* Desglose de otros depósitos cuando hay stock en otro lugar */}
+          {sinStockSuficiente && totalEnOtros > 0 && (
+            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-800">
+              ⚠ Hay {totalEnOtros} u en otros depósitos:&nbsp;
+              {stockEnOtros.map((s, i) => (
+                <span key={s.nombre}>
+                  {i > 0 ? ' · ' : ''}
+                  <b>{s.nombre}</b> ({s.cantidad})
+                </span>
+              ))}
+            </span>
+          )}
           {precioEditado && (
             <span className="rounded bg-orange-100 px-1.5 py-0.5 text-orange-700">
               precio editado · base {formatCurrency(item.precio_base)}
