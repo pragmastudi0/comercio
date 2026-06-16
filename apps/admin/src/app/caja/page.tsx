@@ -1,14 +1,25 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import Link from 'next/link';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Wallet, LockOpen, Lock } from 'lucide-react';
+import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
+import { RequierePermiso } from '@/lib/permisos';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Badge } from '@comercio/ui/badge';
 import { Skeleton } from '@comercio/ui/skeleton';
+import { Button } from '@comercio/ui/button';
+import { Input } from '@comercio/ui/input';
+import { Label } from '@comercio/ui/label';
+import {
+  Dialog,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@comercio/ui/dialog';
 import { formatCurrency, formatDate } from '@comercio/ui/utils';
-import type { MetodoPago, MovimientoCaja } from '@comercio/db';
+import type { MetodoPago, MovimientoCaja, SesionCaja } from '@comercio/db';
 
 const METODOS: MetodoPago[] = ['efectivo', 'transferencia', 'debito', 'credito', 'qr', 'cta_cte'];
 
@@ -141,11 +152,12 @@ function SesionCard({
   cajaNombre,
   empleadoNombre,
 }: {
-  sesion: { id: string; saldo_inicial: number; abierta_en: string };
+  sesion: SesionCaja;
   cajaNombre: string;
   empleadoNombre: string;
 }) {
   const db = getDb();
+  const qc = useQueryClient();
   const movsQ = useQuery({
     queryKey: ['movs-caja-admin', sesion.id],
     queryFn: () => db.sesionesCaja.movimientos(sesion.id),
@@ -162,6 +174,38 @@ function SesionCard({
   }
   const totalIngresos = Object.values(totales).reduce((a, b) => a + b, 0);
   const efectivoEsperado = sesion.saldo_inicial + totales.efectivo;
+
+  // Estado del modal de cierre. El admin puede cerrar cualquier caja abierta,
+  // por ejemplo cuando el cajero se olvidó de cerrarla. Pedimos confirmación
+  // y un monto declarado (pre-llenado con el efectivo esperado).
+  const [cerrarOpen, setCerrarOpen] = useState(false);
+  const [saldoFinal, setSaldoFinal] = useState('');
+
+  const cerrarMut = useMutation({
+    mutationFn: async () => {
+      const monto = parseFloat(saldoFinal);
+      if (Number.isNaN(monto) || monto < 0) {
+        throw new Error('Ingresá un monto válido para el efectivo declarado.');
+      }
+      return db.sesionesCaja.cerrar(sesion.id, monto);
+    },
+    onSuccess: () => {
+      toast.success(`Caja "${cajaNombre}" cerrada`);
+      setCerrarOpen(false);
+      qc.invalidateQueries({ queryKey: ['sesiones-caja-todas'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function abrirDialog() {
+    setSaldoFinal(efectivoEsperado.toString());
+    setCerrarOpen(true);
+  }
+
+  const diferenciaPreview =
+    saldoFinal && !Number.isNaN(parseFloat(saldoFinal))
+      ? parseFloat(saldoFinal) - efectivoEsperado
+      : 0;
 
   return (
     <div className="rounded-md border bg-card p-4">
@@ -200,6 +244,89 @@ function SesionCard({
           <span className="tabular-nums">{formatCurrency(efectivoEsperado)}</span>
         </div>
       </div>
+
+      <RequierePermiso modulo="caja" accion="cerrar">
+        <div className="mt-3 border-t pt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={abrirDialog}
+          >
+            <Lock className="mr-2 h-4 w-4" />
+            Cerrar caja
+          </Button>
+        </div>
+      </RequierePermiso>
+
+      <Dialog open={cerrarOpen} onOpenChange={setCerrarOpen}>
+        <DialogHeader>
+          <DialogTitle>¿Cerrar la caja de {cajaNombre}?</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Esta acción cierra la sesión abierta de <b>{empleadoNombre}</b>. El
+            cajero no podrá seguir vendiendo en esta caja hasta volver a abrirla.
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-3 text-sm">
+          <div className="rounded-md bg-muted/40 p-3 space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Saldo inicial</span>
+              <span className="tabular-nums">{formatCurrency(sesion.saldo_inicial)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Efectivo del turno</span>
+              <span className="tabular-nums">{formatCurrency(totales.efectivo)}</span>
+            </div>
+            <div className="flex justify-between font-medium border-t pt-1">
+              <span>Efectivo esperado</span>
+              <span className="tabular-nums">{formatCurrency(efectivoEsperado)}</span>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor={`saldo-${sesion.id}`}>Efectivo declarado en caja</Label>
+            <Input
+              id={`saldo-${sesion.id}`}
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              value={saldoFinal}
+              onChange={(e) => setSaldoFinal(e.target.value)}
+              className="mt-1"
+              autoFocus
+            />
+            <p
+              className={`mt-1 text-xs tabular-nums ${
+                diferenciaPreview < 0
+                  ? 'text-destructive'
+                  : diferenciaPreview > 0
+                  ? 'text-orange-600'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              Diferencia con esperado: {formatCurrency(diferenciaPreview)}
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setCerrarOpen(false)}
+            disabled={cerrarMut.isPending}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => cerrarMut.mutate()}
+            disabled={cerrarMut.isPending}
+          >
+            {cerrarMut.isPending ? 'Cerrando…' : 'Sí, cerrar la caja'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   );
 }
