@@ -131,7 +131,10 @@ export function Caja() {
           </div>
         </div>
 
-        <aside className="border-l">
+        {/* overflow-hidden + min-h-0: sin esto, cuando se expande el panel
+            de descuento el aside crece y el scroll interno del ResumenVenta
+            deja de funcionar (no se llega a los botones de cobro). */}
+        <aside className="flex min-h-0 flex-col overflow-hidden border-l">
           <ResumenVenta
             onCobrar={(m) => abrirCobro(m)}
             onBuscarCliente={() => setModalCliente(true)}
@@ -139,7 +142,7 @@ export function Caja() {
           />
         </aside>
 
-        <aside className="hidden border-l lg:block">
+        <aside className="hidden min-h-0 flex-col overflow-hidden border-l lg:flex">
           <VentasDelDia />
         </aside>
       </div>

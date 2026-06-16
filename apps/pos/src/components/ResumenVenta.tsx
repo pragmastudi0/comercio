@@ -84,7 +84,9 @@ export function ResumenVenta({ onCobrar, onBuscarCliente, onCancelar }: Props) {
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      {/* min-h-0 es necesario para que overflow-y-auto funcione dentro
+          de un flex column; sin esto el contenido empuja y desborda. */}
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="space-y-1 text-sm">
           <div className="flex justify-between text-muted-foreground">
             <span>Items</span>
