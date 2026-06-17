@@ -246,17 +246,14 @@ export default function VentasPage() {
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="min-w-[160px] whitespace-normal text-right">
                       {(v.descuento_total ?? 0) > 0 ? (
                         <div className="flex flex-col items-end">
                           <span className="font-medium tabular-nums text-green-700">
                             -{formatCurrency(v.descuento_total)}
                           </span>
                           {descuentoPorVenta.get(v.id)?.motivo && (
-                            <span
-                              className="max-w-[160px] truncate text-[11px] text-muted-foreground"
-                              title={descuentoPorVenta.get(v.id)!.motivo!}
-                            >
+                            <span className="break-words text-right text-[11px] leading-snug text-muted-foreground">
                               {descuentoPorVenta.get(v.id)!.motivo}
                             </span>
                           )}
@@ -272,20 +269,17 @@ export default function VentasPage() {
                     >
                       {formatCurrency(v.total)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="min-w-[220px] whitespace-normal">
                       {anulada ? (
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex flex-col items-start gap-0.5">
                           <Badge variant="destructive">Anulada</Badge>
                           {v.motivo_anulacion && (
-                            <span
-                              className="max-w-[180px] truncate text-[11px] text-red-700"
-                              title={v.motivo_anulacion}
-                            >
+                            <span className="break-words text-[11px] leading-snug text-red-700">
                               {v.motivo_anulacion}
                             </span>
                           )}
                           {(v.anulada_por || v.anulada_en) && (
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-[10px] leading-snug text-muted-foreground">
                               {v.anulada_por
                                 ? `Por ${empleadoNombre(v.anulada_por)}`
                                 : ''}
