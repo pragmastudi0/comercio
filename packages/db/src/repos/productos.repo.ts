@@ -4,7 +4,12 @@ export type FiltroProductos = {
   texto?: string; // busca en código y nombre
   categoria_id?: ID;
   proveedor_id?: ID;
+  /** Suma total de stock en todos los depósitos <= 0. */
   sin_stock?: boolean;
+  /** Suma total de stock > 0 y <= umbral_bajo_stock. */
+  bajo_stock?: boolean;
+  /** Umbral en unidades para considerar "bajo stock". Default 5. */
+  umbral_bajo_stock?: number;
   publicado_web?: boolean;
   activo?: boolean;
 };

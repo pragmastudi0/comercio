@@ -40,35 +40,51 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
         from += CHUNK;
       }
       let rows = acumulado;
-      if (filtro.sin_stock) {
-        // Filtrar productos cuya suma de stock sea 0 en todos los depósitos.
-        // Hay que paginar también el query de stock_items para no truncar.
-        const ids = rows.map((r) => r.id);
-        if (ids.length === 0) return rows;
+      if (filtro.sin_stock || filtro.bajo_stock) {
+        if (rows.length === 0) return rows;
+        // Optimización: en vez de chunkear ids de 200 en 200 con .in() (que
+        // para 1907 productos eran ~10 round-trips en serie), traemos la
+        // tabla stock_items completa paginada de a 1000 — el límite real
+        // del REST. Para ~2500 stock_items son ~3 round-trips. Cuesta lo
+        // mismo levantar todo y sumar localmente que filtrar por ids,
+        // porque la tabla no crece más rápido que el catálogo.
         const total = new Map<string, number>();
-        for (let i = 0; i < ids.length; i += 200) {
-          const slice = ids.slice(i, i + 200);
-          const { data: stocks, error } = await sb
+        let f = 0;
+        while (true) {
+          const { data, error } = await sb
             .from('stock_items')
             .select('producto_id, cantidad')
-            .in('producto_id', slice);
+            .range(f, f + 999);
           if (error) throw new Error(`productos.list (stock): ${error.message}`);
-          for (const s of stocks ?? []) {
-            total.set(s.producto_id, (total.get(s.producto_id) ?? 0) + Number(s.cantidad));
+          for (const s of data ?? []) {
+            total.set(
+              s.producto_id,
+              (total.get(s.producto_id) ?? 0) + Number(s.cantidad),
+            );
           }
+          if (!data || data.length < 1000) break;
+          f += 1000;
         }
-        rows = rows.filter((p) => (total.get(p.id) ?? 0) <= 0);
+        const umbral = filtro.umbral_bajo_stock ?? 5;
+        if (filtro.sin_stock) {
+          rows = rows.filter((p) => (total.get(p.id) ?? 0) <= 0);
+        } else {
+          rows = rows.filter((p) => {
+            const t = total.get(p.id) ?? 0;
+            return t > 0 && t <= umbral;
+          });
+        }
       }
       return rows;
     },
     async listPaginado(filtro) {
       const { page, pageSize, ...resto } = filtro;
-      // Si filtra por sin_stock necesitamos saber el set completo de candidatos
-      // primero (para contar bien y paginar sobre el subconjunto). Caemos en la
-      // versión simple: traer todo via list() y paginar en memoria. Es 1 query
-      // extra pero garantiza count exacto.
-      if (resto.sin_stock) {
-        const all = await this.list({ ...resto, sin_stock: true });
+      // Si filtra por sin_stock o bajo_stock necesitamos el set completo de
+      // candidatos primero (para contar bien y paginar sobre el subconjunto).
+      // Caemos en la versión simple: traer todo via list() y paginar en
+      // memoria. Es 1 query extra pero garantiza count exacto.
+      if (resto.sin_stock || resto.bajo_stock) {
+        const all = await this.list(resto);
         const start = page * pageSize;
         return { rows: all.slice(start, start + pageSize), total: all.length };
       }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -11,6 +11,8 @@ import {
   Pencil,
   Eye,
   EyeOff,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
@@ -33,12 +35,19 @@ import { PRESET_IDS } from '@comercio/db';
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'https://turisteando-web.vercel.app';
 // Acepta tanto el UUID real como el id legacy del mock.
 const LISTA_MAY_IDS = [PRESET_IDS.listas.mayorista, 'lp_may'];
+const PAGE_SIZE = 50;
 
 export default function WebPage() {
   const db = getDb();
   const qc = useQueryClient();
   const [texto, setTexto] = useState('');
   const [filtro, setFiltro] = useState<'todos' | 'publicados' | 'ocultos'>('todos');
+  const [page, setPage] = useState(0);
+
+  // Cuando cambia búsqueda o filtro, volver a página 0.
+  useEffect(() => {
+    setPage(0);
+  }, [texto, filtro]);
 
   const productosQ = useQuery({
     queryKey: ['productos-web-admin'],
@@ -114,6 +123,14 @@ export default function WebPage() {
       (p) => p.nombre.toLowerCase().includes(q) || p.codigo_interno.includes(q),
     );
   }
+
+  // Paginación en memoria sobre el conjunto filtrado.
+  const totalVisibles = visibles.length;
+  const totalPages = Math.max(1, Math.ceil(totalVisibles / PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages - 1);
+  const desde = pageSafe * PAGE_SIZE;
+  const hasta = Math.min(desde + PAGE_SIZE, totalVisibles);
+  const pagina = visibles.slice(desde, hasta);
 
   const categoriaNombre = (id: string) =>
     categoriasQ.data?.find((c) => c.id === id)?.nombre ?? '—';
@@ -204,7 +221,9 @@ export default function WebPage() {
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
           <div className="flex items-center gap-2">
             <CardTitle className="text-base">
-              {visibles.length} de {productos.length}
+              {totalVisibles === 0
+                ? `0 de ${productos.length}`
+                : `${desde + 1}–${hasta} de ${totalVisibles}`}
             </CardTitle>
             <div className="flex gap-1 rounded-md border bg-background p-0.5 text-xs">
               <button
@@ -240,7 +259,7 @@ export default function WebPage() {
         <CardContent>
           {productosQ.isLoading ? (
             <Skeleton className="h-40" />
-          ) : visibles.length === 0 ? (
+          ) : totalVisibles === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               No hay productos que coincidan.
             </p>
@@ -259,7 +278,7 @@ export default function WebPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {visibles.map((p) => {
+                {pagina.map((p) => {
                   const stock = stockQ.data?.get(p.id) ?? 0;
                   const sinStock = stock <= 0;
                   return (
@@ -326,6 +345,32 @@ export default function WebPage() {
             </Table>
           )}
         </CardContent>
+
+        {totalVisibles > PAGE_SIZE && (
+          <div className="flex flex-col items-center justify-between gap-3 border-t px-4 py-3 text-sm sm:flex-row">
+            <span className="text-muted-foreground">
+              Página {pageSafe + 1} de {totalPages}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={pageSafe === 0}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={pageSafe >= totalPages - 1}
+              >
+                Siguiente <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <p className="mt-4 text-xs text-muted-foreground">

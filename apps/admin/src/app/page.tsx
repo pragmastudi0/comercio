@@ -103,14 +103,16 @@ export default function DashboardPage() {
           icon={Wallet}
           loading={sesionesQ.isLoading}
         />
-        <KpiCard
-          titulo="Sin stock"
-          valor={String(productosQ.data?.length ?? 0)}
-          sub="Productos a reponer"
-          icon={AlertTriangle}
-          loading={productosQ.isLoading}
-          variant={productosQ.data && productosQ.data.length > 0 ? 'warn' : undefined}
-        />
+        <Link href="/productos?stock=sin" className="block">
+          <KpiCard
+            titulo="Sin stock"
+            valor={String(productosQ.data?.length ?? 0)}
+            sub="Click para ver el listado"
+            icon={AlertTriangle}
+            loading={productosQ.isLoading}
+            variant={productosQ.data && productosQ.data.length > 0 ? 'warn' : undefined}
+          />
+        </Link>
         <KpiCard
           titulo="Clientes con deuda"
           valor={String(clientesQ.data?.length ?? 0)}
@@ -191,7 +193,7 @@ function KpiCard({
   variant?: 'warn';
 }) {
   return (
-    <Card>
+    <Card className="h-full transition hover:border-foreground/30">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium text-muted-foreground">{titulo}</CardTitle>

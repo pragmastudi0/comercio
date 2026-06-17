@@ -13,11 +13,13 @@ export function makeProductosRepo(store: Store): ProductosRepo {
       const q = f.texto.toLowerCase();
       if (!p.nombre.toLowerCase().includes(q) && !p.codigo_interno.includes(q)) return false;
     }
-    if (f.sin_stock) {
+    if (f.sin_stock || f.bajo_stock) {
       const total = store.stock
         .filter((s) => s.producto_id === p.id)
         .reduce((acc, s) => acc + s.cantidad, 0);
-      if (total > 0) return false;
+      const umbral = f.umbral_bajo_stock ?? 5;
+      if (f.sin_stock && total > 0) return false;
+      if (f.bajo_stock && (total <= 0 || total > umbral)) return false;
     }
     return true;
   }

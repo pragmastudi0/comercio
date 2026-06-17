@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
@@ -18,29 +19,40 @@ import { formatCurrency } from '@comercio/ui/utils';
 import { RequierePermiso, usePermiso } from '@/lib/permisos';
 
 const PAGE_SIZE = 100;
+const UMBRAL_BAJO_STOCK = 5;
 
-export default function ProductosPage() {
+type FiltroStock = '' | 'sin' | 'bajo';
+
+function ProductosPageInner() {
   const db = getDb();
   const qc = useQueryClient();
+  const params = useSearchParams();
   const [texto, setTexto] = useState('');
   const [categoriaId, setCategoriaId] = useState('');
-  const [sinStock, setSinStock] = useState(false);
+  // Lee filtro inicial de la URL para que deep-links del dashboard funcionen
+  // (ej. /productos?stock=sin viene del KPI "Sin stock").
+  const stockInicial = (params.get('stock') ?? '') as FiltroStock;
+  const [filtroStock, setFiltroStock] = useState<FiltroStock>(
+    stockInicial === 'sin' || stockInicial === 'bajo' ? stockInicial : '',
+  );
   const [page, setPage] = useState(0);
 
   // Cuando cambia filtro, volver a página 0.
   useEffect(() => {
     setPage(0);
-  }, [texto, categoriaId, sinStock]);
+  }, [texto, categoriaId, filtroStock]);
 
   const productosQ = useQuery({
-    queryKey: ['productos-admin', texto, categoriaId, sinStock, page],
+    queryKey: ['productos-admin', texto, categoriaId, filtroStock, page],
     queryFn: () =>
       db.productos.listPaginado({
         page,
         pageSize: PAGE_SIZE,
         texto: texto || undefined,
         categoria_id: categoriaId || undefined,
-        sin_stock: sinStock || undefined,
+        sin_stock: filtroStock === 'sin' || undefined,
+        bajo_stock: filtroStock === 'bajo' || undefined,
+        umbral_bajo_stock: filtroStock === 'bajo' ? UMBRAL_BAJO_STOCK : undefined,
         activo: true,
       }),
     placeholderData: (prev) => prev,
@@ -144,20 +156,16 @@ export default function ProductosPage() {
             </select>
           </div>
           <div>
-            <Label className="mb-1 block text-xs">&nbsp;</Label>
-            <label
-              htmlFor="sinstock"
-              className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm"
+            <Label className="mb-1 block text-xs">Stock</Label>
+            <select
+              value={filtroStock}
+              onChange={(e) => setFiltroStock(e.target.value as FiltroStock)}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
             >
-              <input
-                id="sinstock"
-                type="checkbox"
-                checked={sinStock}
-                onChange={(e) => setSinStock(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <span>Solo sin stock</span>
-            </label>
+              <option value="">Todos</option>
+              <option value="sin">Sin stock</option>
+              <option value="bajo">Bajo stock (≤ {UMBRAL_BAJO_STOCK})</option>
+            </select>
           </div>
         </CardContent>
       </Card>
@@ -282,5 +290,13 @@ export default function ProductosPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+export default function ProductosPage() {
+  return (
+    <Suspense fallback={null}>
+      <ProductosPageInner />
+    </Suspense>
   );
 }
