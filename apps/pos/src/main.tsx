@@ -3,8 +3,15 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
+import { setBrandName } from '@comercio/business';
 import App from './App';
 import '@comercio/ui/styles';
+
+// Permite overridear el nombre del comercio desde env de Vite, para armar
+// instancias demo / multi-tenant sin tocar código. Debe correr antes del
+// primer render.
+const brandEnv = (import.meta.env.VITE_BRAND_NAME ?? '').trim();
+if (brandEnv) setBrandName(brandEnv);
 
 // === Limpieza de assets de versiones anteriores ===
 // Borrar localStorage de la vesión v1 (que tenía residuo del modo mock).

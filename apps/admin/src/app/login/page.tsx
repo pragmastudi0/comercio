@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { LogIn } from 'lucide-react';
+import { LogIn, Sparkles } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
@@ -13,6 +13,17 @@ import { Input } from '@comercio/ui/input';
 import { PasswordInput } from '@comercio/ui/password-input';
 import { Label } from '@comercio/ui/label';
 import { Button } from '@comercio/ui/button';
+
+// Si la app no tiene env vars de Supabase configuradas, el dbClient cae al
+// mock con seed en memoria. Lo usamos para detectar "modo demo" y mostrar
+// las credenciales en pantalla, así el visitante entra de un click.
+const ES_DEMO = !process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+const CREDENCIALES_DEMO = [
+  { rol: 'Admin (acceso total)', email: 'admin@demo.com', password: 'admin123' },
+  { rol: 'Encargado', email: 'encargado@demo.com', password: 'encargado123' },
+  { rol: 'Cajero', email: 'cajero@demo.com', password: 'cajero123' },
+];
 
 export default function LoginPage() {
   const db = getDb();
@@ -94,6 +105,43 @@ export default function LoginPage() {
       <p className="mt-6 text-center text-xs text-muted-foreground">
         Solo personal autorizado. Si olvidaste tu contraseña, hablalo con el dueño.
       </p>
+
+      {ES_DEMO && (
+        <Card className="mt-6 border-primary/30 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Modo demo · entrá con un click
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            <p className="text-muted-foreground">
+              Esta instancia tiene datos de prueba. No hay nada real adentro,
+              podés tocar todo.
+            </p>
+            {CREDENCIALES_DEMO.map((c) => (
+              <button
+                key={c.email}
+                type="button"
+                onClick={() => {
+                  setEmail(c.email);
+                  setPassword(c.password);
+                }}
+                className="flex w-full items-center justify-between rounded-md border bg-background px-3 py-2 text-left transition hover:border-foreground/30"
+              >
+                <span>
+                  <span className="font-medium">{c.rol}</span>
+                  <br />
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {c.email} · {c.password}
+                  </span>
+                </span>
+                <span className="text-xs text-primary">Usar →</span>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </main>
   );
 }
