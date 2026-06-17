@@ -87,6 +87,9 @@ export default function VentasPage() {
     (acc, v) => acc + (v.descuento_total ?? 0),
     0,
   );
+  // KPI rápido de anulaciones en el rango filtrado.
+  const ventasAnuladas = ventas.filter((v) => v.estado === 'anulada');
+  const totalAnulado = ventasAnuladas.reduce((acc, v) => acc + v.total, 0);
 
   const empleadoNombre = (id: string) => {
     const e = empleadosQ.data?.find((x) => x.id === id);
@@ -170,14 +173,24 @@ export default function VentasPage() {
           <CardTitle className="text-sm">
             {ventas.length} ventas · Total: {formatCurrency(total)}
           </CardTitle>
-          {ventasConDescuento.length > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {ventasConDescuento.length} con descuento ·{' '}
-              <span className="text-green-700">
-                -{formatCurrency(totalDescuentos)}
+          <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:items-end">
+            {ventasConDescuento.length > 0 && (
+              <span>
+                {ventasConDescuento.length} con descuento ·{' '}
+                <span className="text-green-700">
+                  -{formatCurrency(totalDescuentos)}
+                </span>
               </span>
-            </span>
-          )}
+            )}
+            {ventasAnuladas.length > 0 && (
+              <span>
+                {ventasAnuladas.length} anulada(s) ·{' '}
+                <span className="text-red-700">
+                  -{formatCurrency(totalAnulado)}
+                </span>
+              </span>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {ventasQ.isLoading ? (
@@ -203,8 +216,17 @@ export default function VentasPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {[...ventas].reverse().map((v) => (
-                  <TableRow key={v.id}>
+                {[...ventas].reverse().map((v) => {
+                  const anulada = v.estado === 'anulada';
+                  return (
+                  <TableRow
+                    key={v.id}
+                    className={
+                      anulada
+                        ? 'bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20'
+                        : ''
+                    }
+                  >
                     <TableCell className="font-mono text-xs">{v.numero}</TableCell>
                     <TableCell className="text-xs">{formatDate(v.fecha)}</TableCell>
                     <TableCell>{empleadoNombre(v.empleado_id)}</TableCell>
@@ -243,20 +265,45 @@ export default function VentasPage() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
+                    <TableCell
+                      className={`text-right font-medium tabular-nums ${
+                        anulada ? 'text-red-700 line-through' : ''
+                      }`}
+                    >
                       {formatCurrency(v.total)}
                     </TableCell>
                     <TableCell>
-                      {v.estado === 'completada' ? (
+                      {anulada ? (
+                        <div className="flex flex-col gap-0.5">
+                          <Badge variant="destructive">Anulada</Badge>
+                          {v.motivo_anulacion && (
+                            <span
+                              className="max-w-[180px] truncate text-[11px] text-red-700"
+                              title={v.motivo_anulacion}
+                            >
+                              {v.motivo_anulacion}
+                            </span>
+                          )}
+                          {(v.anulada_por || v.anulada_en) && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {v.anulada_por
+                                ? `Por ${empleadoNombre(v.anulada_por)}`
+                                : ''}
+                              {v.anulada_en
+                                ? `${v.anulada_por ? ' · ' : ''}${formatDate(v.anulada_en)}`
+                                : ''}
+                            </span>
+                          )}
+                        </div>
+                      ) : v.estado === 'completada' ? (
                         <Badge variant="secondary">Completada</Badge>
-                      ) : v.estado === 'anulada' ? (
-                        <Badge variant="destructive">Anulada</Badge>
                       ) : (
                         <Badge>Presupuesto</Badge>
                       )}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}

@@ -17,7 +17,6 @@ export function VentasDelDia() {
         ? db.ventas.list({
             empleado_id: empleado?.id,
             desde: sesion.abierta_en,
-            estado: 'completada',
           })
         : Promise.resolve([]),
     enabled: !!sesion,
@@ -25,8 +24,11 @@ export function VentasDelDia() {
   });
 
   const ventas = (ventasQ.data ?? []).slice().reverse();
-  const totalDia = (ventasQ.data ?? []).reduce((acc, v) => acc + v.total, 0);
-  const cantidad = (ventasQ.data ?? []).length;
+  // Para los totales del turno solo cuentan las completadas. Las anuladas
+  // se muestran para que el cajero sepa cuáles dio de baja pero no suman.
+  const completadas = (ventasQ.data ?? []).filter((v) => v.estado === 'completada');
+  const totalDia = completadas.reduce((acc, v) => acc + v.total, 0);
+  const cantidad = completadas.length;
 
   return (
     <div className="flex h-full flex-col bg-muted/20">
@@ -58,24 +60,41 @@ export function VentasDelDia() {
             const metodos = esMixto
               ? `Mixto · ${metodosUnicos.map((m) => m.replace('_', ' ')).join(' + ')}`
               : metodosUnicos[0]?.replace('_', ' ') ?? '';
+            const anulada = v.estado === 'anulada';
             return (
               <Link
                 key={v.id}
                 to={`/ticket/${v.id}`}
-                className="block rounded px-2 py-2 transition hover:bg-accent"
+                className={`block rounded px-2 py-2 transition hover:bg-accent ${
+                  anulada ? 'bg-red-50' : ''
+                }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1 font-mono text-muted-foreground">
+                  <span
+                    className={`flex items-center gap-1 font-mono ${
+                      anulada ? 'text-red-700' : 'text-muted-foreground'
+                    }`}
+                  >
                     <Receipt className="h-3 w-3" />
                     {v.numero}
                   </span>
-                  <span className="font-semibold tabular-nums">
+                  <span
+                    className={`font-semibold tabular-nums ${
+                      anulada ? 'text-red-700 line-through' : ''
+                    }`}
+                  >
                     {formatCurrency(v.total)}
                   </span>
                 </div>
                 <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
                   <span>{hora}</span>
-                  <span className="capitalize">{metodos}</span>
+                  <span className="capitalize">
+                    {anulada ? (
+                      <span className="font-semibold text-red-700">Anulada</span>
+                    ) : (
+                      metodos
+                    )}
+                  </span>
                 </div>
               </Link>
             );
