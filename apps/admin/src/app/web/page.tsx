@@ -67,21 +67,10 @@ export default function WebPage() {
     },
     enabled: !!productosQ.data,
   });
-  // Stock total por producto — un solo query batch (consolidado) en vez de
-  // hacer N requests secuenciales. Antes con 1907 productos tardaba minutos
-  // y muchos fallaban quedando en 0.
-  const stockQ = useQuery({
-    queryKey: ['stock-web-admin'],
-    queryFn: async () => {
-      const items = await db.stock.consolidado();
-      const map = new Map<string, number>();
-      for (const s of items) {
-        map.set(s.producto_id, (map.get(s.producto_id) ?? 0) + Number(s.cantidad));
-      }
-      return map;
-    },
-    staleTime: 30_000,
-  });
+  // Stock total — solo de los productos visibles en la página actual.
+  // Antes traíamos toda la tabla stock_items (2500+ filas) aunque la UI
+  // mostrara 50. Ahora va por totalesDeMuchos con los 50 ids de la página.
+  // Declarado más abajo porque depende de `pagina` que se calcula después.
 
   const togglePublicarMut = useMutation({
     mutationFn: ({ id, publicar }: { id: string; publicar: boolean }) =>
@@ -131,6 +120,17 @@ export default function WebPage() {
   const desde = pageSafe * PAGE_SIZE;
   const hasta = Math.min(desde + PAGE_SIZE, totalVisibles);
   const pagina = visibles.slice(desde, hasta);
+
+  // Stock total — solo de los productos visibles en la página actual.
+  // Antes traíamos la tabla stock_items entera (2500+ filas) aunque la
+  // UI mostrara 50. Ahora va por totalesDeMuchos con los 50 ids.
+  const idsPagina = pagina.map((p) => p.id).join(',');
+  const stockQ = useQuery({
+    queryKey: ['stock-web-page', idsPagina],
+    queryFn: () => db.stock.totalesDeMuchos(pagina.map((p) => p.id)),
+    enabled: pagina.length > 0,
+    staleTime: 15_000,
+  });
 
   const categoriaNombre = (id: string) =>
     categoriasQ.data?.find((c) => c.id === id)?.nombre ?? '—';
@@ -300,11 +300,23 @@ export default function WebPage() {
                     </TableCell>
                     <TableCell
                       className={`text-right tabular-nums ${
-                        sinStock ? 'font-semibold text-destructive' : ''
+                        stockQ.data && sinStock ? 'font-semibold text-destructive' : ''
                       }`}
-                      title={sinStock ? 'Sin stock — conviene no publicar' : `${stock} unidades`}
+                      title={
+                        !stockQ.data
+                          ? 'Cargando stock…'
+                          : sinStock
+                          ? 'Sin stock — conviene no publicar'
+                          : `${stock} unidades`
+                      }
                     >
-                      {stockQ.isLoading ? '…' : stock}
+                      {!stockQ.data ? (
+                        <span className="inline-flex justify-end">
+                          <Skeleton className="h-4 w-10" />
+                        </span>
+                      ) : (
+                        stock
+                      )}
                     </TableCell>
                     <TableCell>
                       {p.descripcion_larga ? (

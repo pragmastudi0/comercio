@@ -38,6 +38,17 @@ export function makeStockRepo(store: Store): StockRepo {
         }),
       );
     },
+    async totalesDeMuchos(productoIds, depositoId) {
+      const set = new Set(productoIds);
+      const map = new Map<string, number>();
+      for (const id of productoIds) map.set(id, 0);
+      for (const s of store.stock) {
+        if (!set.has(s.producto_id)) continue;
+        if (depositoId && s.deposito_id !== depositoId) continue;
+        map.set(s.producto_id, (map.get(s.producto_id) ?? 0) + s.cantidad);
+      }
+      return map;
+    },
     async ajustar({ producto_id, variante_id, deposito_id, cantidad, motivo, empleado_id }) {
       const item = findOrCreate(producto_id, deposito_id, variante_id);
       item.cantidad += cantidad;

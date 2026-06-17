@@ -91,17 +91,14 @@ function ProductosPageInner() {
     },
     enabled: rows.length > 0,
   });
+  // Stock total por producto en UN solo query batch (totalesDeMuchos hace
+  // .in() chunkeado de a 200). Antes se hacía N+1 — 100 round-trips por
+  // página de 100 productos. staleTime corto para que reaccione a cambios.
   const stockQ = useQuery({
     queryKey: ['stock-totales-page', idsVisibles],
-    queryFn: async () => {
-      const map = new Map<string, number>();
-      for (const p of rows) {
-        const items = await db.stock.porProducto(p.id);
-        map.set(p.id, items.reduce((acc, s) => acc + Number(s.cantidad), 0));
-      }
-      return map;
-    },
+    queryFn: () => db.stock.totalesDeMuchos(rows.map((p) => p.id)),
     enabled: rows.length > 0,
+    staleTime: 15_000,
   });
 
   const categoriaNombre = (id: string) =>
@@ -219,10 +216,18 @@ function ProductosPageInner() {
                       </TableCell>
                       <TableCell
                         className={`text-right tabular-nums ${
-                          sinStockProd ? 'font-semibold text-destructive' : ''
+                          stockQ.data && sinStockProd ? 'font-semibold text-destructive' : ''
                         }`}
                       >
-                        {stockQ.isLoading ? '…' : stock}
+                        {/* Mientras carga la primera vez mostramos un
+                            skeleton para que no parezca "0 / sin stock" */}
+                        {!stockQ.data ? (
+                          <span className="inline-flex justify-end">
+                            <Skeleton className="h-4 w-10" />
+                          </span>
+                        ) : (
+                          stock
+                        )}
                       </TableCell>
                       <TableCell>
                         {p.publicado_web ? (

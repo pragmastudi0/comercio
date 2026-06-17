@@ -45,6 +45,28 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
       }
       return filtro.sin_stock ? acumulado.filter((r) => r.cantidad <= 0) : acumulado;
     },
+    async totalesDeMuchos(productoIds, depositoId) {
+      const map = new Map<string, number>();
+      if (productoIds.length === 0) return map;
+      // PostgREST tiene un límite práctico en el largo del IN; chunkeo de 200.
+      const CHUNK = 200;
+      for (let i = 0; i < productoIds.length; i += CHUNK) {
+        const slice = productoIds.slice(i, i + CHUNK);
+        let q = sb
+          .from('stock_items')
+          .select('producto_id, cantidad')
+          .in('producto_id', slice);
+        if (depositoId) q = q.eq('deposito_id', depositoId);
+        const { data, error } = await q;
+        if (error) throw new Error(`stock.totalesDeMuchos: ${error.message}`);
+        for (const r of data ?? []) {
+          map.set(r.producto_id, (map.get(r.producto_id) ?? 0) + Number(r.cantidad));
+        }
+      }
+      // Productos sin filas en stock_items quedan en 0.
+      for (const id of productoIds) if (!map.has(id)) map.set(id, 0);
+      return map;
+    },
     async ajustar(input) {
       const { producto_id, variante_id, deposito_id, cantidad, motivo, empleado_id } = input;
       // Upsert + update con delta. Mejor: leer, sumar, escribir (no atómico pero
