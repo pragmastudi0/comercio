@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Search } from 'lucide-react';
+import { Search, Printer } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@comercio/ui/table';
 import { Badge } from '@comercio/ui/badge';
+import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { Skeleton } from '@comercio/ui/skeleton';
@@ -213,6 +215,7 @@ export default function VentasPage() {
                   <TableHead className="text-right">Descuento</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -294,6 +297,18 @@ export default function VentasPage() {
                       ) : (
                         <Badge>Presupuesto</Badge>
                       )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="icon"
+                        title="Ver / imprimir ticket"
+                      >
+                        <Link href={`/ventas/${v.id}/ticket`}>
+                          <Printer className="h-4 w-4" />
+                        </Link>
+                      </Button>
                     </TableCell>
                   </TableRow>
                   );

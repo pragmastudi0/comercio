@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Upload, X } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { PRESET_IDS } from '@comercio/db';
 import { PaginaProtegida, RequierePermiso } from '@/lib/permisos';
+import { comprimirImagen, subirAStorage } from '@/lib/upload-imagen';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -268,25 +269,11 @@ function ConfiguracionInner() {
               />
             </div>
             <div className="sm:col-span-2">
-              <Label className="mb-1 block">Logo (URL pública)</Label>
-              <div className="flex items-start gap-3">
-                <Input
-                  value={logoUrl}
-                  onChange={(e) => setLogoUrl(e.target.value)}
-                  placeholder="https://… o /logo.png"
-                  className="flex-1"
-                />
-                {logoUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={logoUrl}
-                    alt="logo"
-                    className="h-10 w-10 rounded border bg-background object-contain"
-                  />
-                )}
-              </div>
+              <Label className="mb-1 block">Logo del comercio</Label>
+              <LogoUploader logoUrl={logoUrl} setLogoUrl={setLogoUrl} />
               <p className="mt-1 text-xs text-muted-foreground">
                 Aparece en el header del ticket. PNG cuadrado funciona mejor.
+                Se redimensiona y comprime automáticamente al subirlo.
               </p>
             </div>
           </CardContent>
@@ -350,6 +337,93 @@ function ConfiguracionInner() {
             {saveMut.isPending ? 'Guardando…' : 'Guardar cambios'}
           </Button>
         </RequierePermiso>
+      </div>
+    </div>
+  );
+}
+
+function LogoUploader({
+  logoUrl,
+  setLogoUrl,
+}: {
+  logoUrl: string;
+  setLogoUrl: (v: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [subiendo, setSubiendo] = useState(false);
+
+  async function manejarArchivo(file: File) {
+    setSubiendo(true);
+    try {
+      const { blob } = await comprimirImagen(file);
+      // Subimos al mismo bucket que las imágenes de producto, en una carpeta
+      // dedicada "_config". No es un productoId pero la firma del helper
+      // acepta cualquier prefijo de path.
+      const url = await subirAStorage('_config', blob);
+      setLogoUrl(url);
+      toast.success('Logo subido. No olvides guardar la configuración.');
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSubiendo(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start gap-3">
+        {logoUrl ? (
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={logoUrl}
+              alt="logo"
+              className="h-20 w-20 rounded border bg-white object-contain p-1"
+            />
+            <button
+              type="button"
+              onClick={() => setLogoUrl('')}
+              className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-white shadow hover:bg-destructive/90"
+              title="Quitar logo"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex h-20 w-20 items-center justify-center rounded border border-dashed text-xs text-muted-foreground">
+            sin logo
+          </div>
+        )}
+
+        <div className="flex-1 space-y-2">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void manejarArchivo(f);
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => inputRef.current?.click()}
+            disabled={subiendo}
+          >
+            <Upload className="mr-1 h-4 w-4" />
+            {subiendo ? 'Subiendo…' : 'Subir desde mi PC'}
+          </Button>
+          <p className="text-xs text-muted-foreground">o pegá una URL pública:</p>
+          <Input
+            value={logoUrl}
+            onChange={(e) => setLogoUrl(e.target.value)}
+            placeholder="https://…"
+          />
+        </div>
       </div>
     </div>
   );

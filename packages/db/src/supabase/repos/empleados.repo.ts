@@ -87,13 +87,32 @@ export function makeEmpleadosRepo(sb: SupabaseClient): EmpleadosRepo {
         'empleados.cambiarRol',
       );
     },
-    async setPassword(_id, _password) {
-      // Cambiar el password de otro usuario requiere service_role; lo dejamos
-      // para una Edge Function. Por ahora, lanzamos error claro para que la UI
-      // sepa que esta operación no está disponible desde el cliente.
-      throw new Error(
-        'Cambio de contraseña ajeno requiere Edge Function con service_role. Próximamente.',
+    async setPassword(id, password) {
+      // Cambiar el password de OTRO usuario requiere service_role. Lo hace la
+      // edge function `set-empleado-password` que valida que el solicitante
+      // sea admin antes de tocar Supabase Auth. La función no se invoca sola:
+      // hay que pasarle el JWT del usuario actual en Authorization.
+      const session = (await sb.auth.getSession()).data.session;
+      if (!session) {
+        throw new Error('Tu sesión expiró. Iniciá sesión de nuevo.');
+      }
+      const { data, error } = await sb.functions.invoke(
+        'set-empleado-password',
+        {
+          body: { empleado_id: id, nueva_password: password },
+        },
       );
+      if (error) {
+        // El error que devuelve la edge va en el body, no en el error genérico.
+        const msg =
+          (data && typeof data === 'object' && 'error' in data && data.error) ||
+          error.message ||
+          'No se pudo cambiar la contraseña.';
+        throw new Error(String(msg));
+      }
+      if (data && typeof data === 'object' && 'error' in data && data.error) {
+        throw new Error(String(data.error));
+      }
     },
     async autenticar(email, password) {
       const { error: signErr } = await sb.auth.signInWithPassword({ email, password });
