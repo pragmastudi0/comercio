@@ -93,7 +93,7 @@ export default function CajasPage() {
             <p className="text-sm text-muted-foreground">Sin sesiones cerradas todavía.</p>
           ) : (
             <div className="-mx-4 overflow-x-auto sm:mx-0">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full min-w-[760px] text-sm">
               <thead className="text-xs uppercase text-muted-foreground">
                 <tr className="border-b">
                   <th className="whitespace-nowrap px-3 py-2 text-left">Caja</th>
@@ -101,42 +101,20 @@ export default function CajasPage() {
                   <th className="whitespace-nowrap px-3 py-2 text-left">Apertura</th>
                   <th className="whitespace-nowrap px-3 py-2 text-left">Cierre</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Inicial</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right">Esperado</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Declarado</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Diferencia</th>
                 </tr>
               </thead>
               <tbody>
-                {cerradas.map((s) => {
-                  const dif =
-                    s.saldo_final_declarado !== undefined
-                      ? s.saldo_final_declarado - s.saldo_inicial
-                      : 0;
-                  return (
-                    <tr key={s.id} className="border-b last:border-0">
-                      <td className="whitespace-nowrap px-3 py-2">{cajaNombre(s.caja_id)}</td>
-                      <td className="whitespace-nowrap px-3 py-2">{empleadoNombre(s.empleado_id)}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
-                        {formatDate(s.abierta_en)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
-                        {s.cerrada_en ? formatDate(s.cerrada_en) : '—'}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                        {formatCurrency(s.saldo_inicial)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                        {formatCurrency(s.saldo_final_declarado ?? 0)}
-                      </td>
-                      <td
-                        className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${
-                          dif < 0 ? 'text-destructive' : dif > 0 ? 'text-orange-600' : 'text-green-700'
-                        }`}
-                      >
-                        {formatCurrency(dif)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {cerradas.map((s) => (
+                  <FilaSesionCerrada
+                    key={s.id}
+                    sesion={s}
+                    cajaNombre={cajaNombre(s.caja_id)}
+                    empleadoNombre={empleadoNombre(s.empleado_id)}
+                  />
+                ))}
               </tbody>
             </table>
             </div>
@@ -144,6 +122,88 @@ export default function CajasPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function FilaSesionCerrada({
+  sesion,
+  cajaNombre,
+  empleadoNombre,
+}: {
+  sesion: SesionCaja;
+  cajaNombre: string;
+  empleadoNombre: string;
+}) {
+  const db = getDb();
+  // Traemos movimientos de la sesión para calcular el efectivo del turno.
+  // Las sesiones ya cerradas no cambian, así que cache largo.
+  const movsQ = useQuery({
+    queryKey: ['movs-caja-cerrada', sesion.id],
+    queryFn: () => db.sesionesCaja.movimientos(sesion.id),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  let totalEfectivo = 0;
+  for (const m of (movsQ.data ?? []) as MovimientoCaja[]) {
+    if (m.metodo !== 'efectivo') continue;
+    const signo =
+      m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'anulacion'
+        ? -1
+        : 1;
+    totalEfectivo += signo * m.monto;
+  }
+  const declarado = sesion.saldo_final_declarado ?? 0;
+  const esperado = sesion.saldo_inicial + totalEfectivo;
+  // Diferencia real de arqueo: lo que dijo el cajero menos lo que debería
+  // haber. Negativo = faltó plata, positivo = sobró.
+  const dif = declarado - esperado;
+  const cargando = movsQ.isLoading;
+
+  let claseFila = '';
+  let claseDif = 'text-green-700';
+  let etiqueta = 'OK';
+  if (!cargando && Math.abs(dif) >= 0.01) {
+    if (dif < 0) {
+      claseFila = 'bg-red-50/60 dark:bg-red-950/20';
+      claseDif = 'text-destructive font-semibold';
+      etiqueta = 'Faltó';
+    } else {
+      claseFila = 'bg-orange-50/60 dark:bg-orange-950/20';
+      claseDif = 'text-orange-600 font-semibold';
+      etiqueta = 'Sobró';
+    }
+  }
+
+  return (
+    <tr className={`border-b last:border-0 ${claseFila}`}>
+      <td className="whitespace-nowrap px-3 py-2">{cajaNombre}</td>
+      <td className="whitespace-nowrap px-3 py-2">{empleadoNombre}</td>
+      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+        {formatDate(sesion.abierta_en)}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+        {sesion.cerrada_en ? formatDate(sesion.cerrada_en) : '—'}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+        {formatCurrency(sesion.saldo_inicial)}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">
+        {cargando ? '…' : formatCurrency(esperado)}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+        {formatCurrency(declarado)}
+      </td>
+      <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${claseDif}`}>
+        {cargando ? (
+          '…'
+        ) : (
+          <div className="flex flex-col items-end">
+            <span>{formatCurrency(dif)}</span>
+            <span className="text-[10px] uppercase tracking-wider">{etiqueta}</span>
+          </div>
+        )}
+      </td>
+    </tr>
   );
 }
 
