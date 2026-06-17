@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Tag, Banknote, CreditCard, Smartphone, Wallet } from 'lucide-react';
+import { Tag, Banknote, CreditCard, Smartphone } from 'lucide-react';
 import {
   calcularBaseVenta,
   calcularDescuentoGlobal,
@@ -8,7 +7,6 @@ import {
   useVenta,
 } from '@/stores/venta';
 import { useSesion } from '@/stores/sesion';
-import { getDb } from '@/lib/db';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
@@ -19,14 +17,11 @@ import type { MetodoPago } from '@comercio/db';
 
 type Props = {
   onCobrar: (metodo?: MetodoPago) => void;
-  onBuscarCliente: () => void;
   onCancelar: () => void;
 };
 
-export function ResumenVenta({ onCobrar, onBuscarCliente, onCancelar }: Props) {
-  const db = getDb();
+export function ResumenVenta({ onCobrar, onCancelar }: Props) {
   const items = useVenta((s) => s.items);
-  const clienteId = useVenta((s) => s.clienteId);
   const descuentoModo = useVenta((s) => s.descuentoModo);
   const descuentoValor = useVenta((s) => s.descuentoValor);
   const motivoDescuento = useVenta((s) => s.motivoDescuento);
@@ -41,12 +36,6 @@ export function ResumenVenta({ onCobrar, onBuscarCliente, onCancelar }: Props) {
   const empleado = useSesion((s) => s.empleado);
   const caja = useSesion((s) => s.caja);
   const sesion = useSesion((s) => s.sesionCaja);
-
-  const clienteQ = useQuery({
-    queryKey: ['cliente', clienteId],
-    queryFn: () => (clienteId ? db.clientes.get(clienteId) : Promise.resolve(null)),
-    enabled: !!clienteId,
-  });
 
   const [editDto, setEditDto] = useState(false);
   const hayItems = items.length > 0;
@@ -66,22 +55,7 @@ export function ResumenVenta({ onCobrar, onBuscarCliente, onCancelar }: Props) {
 
       <div className="border-b p-4">
         <div className="mb-1 text-xs text-muted-foreground">Cliente</div>
-        {clienteQ.data ? (
-          <div>
-            <div className="font-medium">
-              {clienteQ.data.nombre} {clienteQ.data.apellido}
-            </div>
-            {clienteQ.data.dni && (
-              <div className="text-xs text-muted-foreground">DNI {clienteQ.data.dni}</div>
-            )}
-          </div>
-        ) : (
-          <div className="text-sm text-muted-foreground">Consumidor final</div>
-        )}
-        <Button variant="link" className="mt-1 h-auto p-0 text-xs" onClick={onBuscarCliente}>
-          {clienteQ.data ? 'Cambiar' : 'Identificar cliente'} ·{' '}
-          {SHORTCUT_LABELS.buscarCliente}
-        </Button>
+        <div className="text-sm text-muted-foreground">Consumidor final</div>
       </div>
 
       {/* min-h-0 es necesario para que overflow-y-auto funcione dentro
@@ -198,7 +172,7 @@ export function ResumenVenta({ onCobrar, onBuscarCliente, onCancelar }: Props) {
       </div>
 
       <div className="border-t bg-background p-3">
-        <div className="mb-2 grid grid-cols-2 gap-2">
+        <div className="mb-2 grid grid-cols-3 gap-2">
           <Button
             size="lg"
             disabled={!hayItems}
@@ -236,20 +210,6 @@ export function ResumenVenta({ onCobrar, onBuscarCliente, onCancelar }: Props) {
               QR / Transf.
             </span>
             <span className="text-[10px] opacity-75">F7</span>
-          </Button>
-          <Button
-            size="lg"
-            disabled={!hayItems || !clienteId}
-            onClick={() => onCobrar('cta_cte')}
-            variant="secondary"
-            className="h-14 flex-col gap-0 text-xs"
-            title={!clienteId ? 'Requiere identificar cliente (F3)' : ''}
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              <Wallet className="h-4 w-4" />
-              Cta cte
-            </span>
-            <span className="text-[10px] opacity-75">F8</span>
           </Button>
         </div>
         <Button

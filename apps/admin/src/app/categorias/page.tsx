@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Trash2 } from 'lucide-react';
@@ -73,9 +74,21 @@ export default function CategoriasPage() {
           { header: 'Nombre', cell: (r) => <span className="font-medium">{r.nombre}</span> },
           {
             header: 'Productos',
-            cell: (r) => (
-              <span className="text-sm text-muted-foreground">{cantPorCat(r.id)}</span>
-            ),
+            cell: (r) => {
+              const cant = cantPorCat(r.id);
+              if (cant === 0) {
+                return <span className="text-sm text-muted-foreground">0</span>;
+              }
+              return (
+                <Link
+                  href={`/productos?categoria=${r.id}`}
+                  className="text-sm font-medium text-primary underline-offset-2 hover:underline"
+                  title="Ver los productos de esta categoría"
+                >
+                  {cant} →
+                </Link>
+              );
+            },
           },
           {
             header: 'Atributos',

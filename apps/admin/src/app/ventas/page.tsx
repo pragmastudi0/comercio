@@ -219,14 +219,14 @@ export default function VentasPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {[...ventas].reverse().map((v) => {
+                {[...ventas].reverse().flatMap((v) => {
                   const anulada = v.estado === 'anulada';
-                  return (
+                  const rows = [
                   <TableRow
                     key={v.id}
                     className={
                       anulada
-                        ? 'bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20'
+                        ? 'border-b-0 bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20'
                         : ''
                     }
                   >
@@ -249,14 +249,17 @@ export default function VentasPage() {
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="min-w-[160px] whitespace-normal text-right">
+                    <TableCell className="text-right">
                       {(v.descuento_total ?? 0) > 0 ? (
-                        <div className="flex flex-col items-end">
+                        <div className="flex flex-col items-end leading-tight">
                           <span className="font-medium tabular-nums text-green-700">
                             -{formatCurrency(v.descuento_total)}
                           </span>
                           {descuentoPorVenta.get(v.id)?.motivo && (
-                            <span className="break-words text-right text-[11px] leading-snug text-muted-foreground">
+                            <span
+                              className="max-w-[140px] truncate text-[11px] text-muted-foreground"
+                              title={descuentoPorVenta.get(v.id)!.motivo!}
+                            >
                               {descuentoPorVenta.get(v.id)!.motivo}
                             </span>
                           )}
@@ -272,26 +275,9 @@ export default function VentasPage() {
                     >
                       {formatCurrency(v.total)}
                     </TableCell>
-                    <TableCell className="min-w-[220px] whitespace-normal">
+                    <TableCell>
                       {anulada ? (
-                        <div className="flex flex-col items-start gap-0.5">
-                          <Badge variant="destructive">Anulada</Badge>
-                          {v.motivo_anulacion && (
-                            <span className="break-words text-[11px] leading-snug text-red-700">
-                              {v.motivo_anulacion}
-                            </span>
-                          )}
-                          {(v.anulada_por || v.anulada_en) && (
-                            <span className="text-[10px] leading-snug text-muted-foreground">
-                              {v.anulada_por
-                                ? `Por ${empleadoNombre(v.anulada_por)}`
-                                : ''}
-                              {v.anulada_en
-                                ? `${v.anulada_por ? ' · ' : ''}${formatDate(v.anulada_en)}`
-                                : ''}
-                            </span>
-                          )}
-                        </div>
+                        <Badge variant="destructive">Anulada</Badge>
                       ) : v.estado === 'completada' ? (
                         <Badge variant="secondary">Completada</Badge>
                       ) : (
@@ -310,8 +296,35 @@ export default function VentasPage() {
                         </Link>
                       </Button>
                     </TableCell>
-                  </TableRow>
-                  );
+                  </TableRow>,
+                  ];
+                  // Detalle de anulación en una fila secundaria, así no
+                  // recarga la columna Estado y se ve bien alineado.
+                  if (anulada && (v.motivo_anulacion || v.anulada_por || v.anulada_en)) {
+                    rows.push(
+                      <TableRow
+                        key={`${v.id}-anul`}
+                        className="bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20"
+                      >
+                        <TableCell
+                          colSpan={10}
+                          className="!whitespace-normal !py-1.5 pl-8 text-[11px] leading-snug text-red-700"
+                        >
+                          <span className="font-medium">↳ Motivo: </span>
+                          {v.motivo_anulacion || '—'}
+                          <span className="ml-3 text-muted-foreground">
+                            {v.anulada_por
+                              ? `· por ${empleadoNombre(v.anulada_por)}`
+                              : ''}
+                            {v.anulada_en
+                              ? ` · ${formatDate(v.anulada_en)}`
+                              : ''}
+                          </span>
+                        </TableCell>
+                      </TableRow>,
+                    );
+                  }
+                  return rows;
                 })}
               </TableBody>
             </Table>

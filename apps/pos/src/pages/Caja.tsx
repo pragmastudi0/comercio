@@ -10,7 +10,6 @@ import { BuscadorProducto } from '@/components/BuscadorProducto';
 import { Carrito } from '@/components/Carrito';
 import { ResumenVenta } from '@/components/ResumenVenta';
 import { ModalCobro } from '@/components/ModalCobro';
-import { ModalCliente } from '@/components/ModalCliente';
 import { VentasDelDia } from '@/components/VentasDelDia';
 import { SHORTCUTS, SHORTCUT_LABELS } from '@/lib/shortcuts';
 import { Button } from '@comercio/ui/button';
@@ -26,7 +25,6 @@ export function Caja() {
   const [modalCobro, setModalCobro] = useState<{ open: boolean; metodo?: MetodoPago }>({
     open: false,
   });
-  const [modalCliente, setModalCliente] = useState(false);
 
   function abrirCobro(metodo?: MetodoPago) {
     if (items.length === 0) {
@@ -55,11 +53,9 @@ export function Caja() {
     },
     { enableOnFormTags: true },
   );
-  useHotkeys(SHORTCUTS.buscarCliente, (e) => { e.preventDefault(); setModalCliente(true); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cobrarEfectivo, (e) => { e.preventDefault(); abrirCobro('efectivo'); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cobrarTarjeta, (e) => { e.preventDefault(); abrirCobro('credito'); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cobrarQR, (e) => { e.preventDefault(); abrirCobro('qr'); }, { enableOnFormTags: true });
-  useHotkeys(SHORTCUTS.cobrarCtaCte, (e) => { e.preventDefault(); abrirCobro('cta_cte'); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cancelar, () => cancelarVenta(), { enableOnFormTags: true });
 
   if (!empleado || !caja) return null;
@@ -114,18 +110,12 @@ export function Caja() {
               </span>
               <span>
                 <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">
-                  {SHORTCUT_LABELS.buscarCliente}
-                </kbd>{' '}
-                Cliente
-              </span>
-              <span>
-                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono shadow-sm">
                   {SHORTCUT_LABELS.cancelar}
                 </kbd>{' '}
                 Cancelar
               </span>
               <span className="text-muted-foreground/70">
-                Cobro: F5 Efectivo · F6 Tarjeta · F7 QR · F8 Cta cte
+                Cobro: F5 Efectivo · F6 Tarjeta · F7 QR
               </span>
             </div>
           </div>
@@ -137,7 +127,6 @@ export function Caja() {
         <aside className="flex min-h-0 flex-col overflow-hidden border-l">
           <ResumenVenta
             onCobrar={(m) => abrirCobro(m)}
-            onBuscarCliente={() => setModalCliente(true)}
             onCancelar={cancelarVenta}
           />
         </aside>
@@ -153,7 +142,6 @@ export function Caja() {
         metodoInicial={modalCobro.metodo}
         onCobrado={(ventaId) => navigate(`/ticket/${ventaId}`)}
       />
-      <ModalCliente open={modalCliente} onOpenChange={setModalCliente} />
     </div>
   );
 }

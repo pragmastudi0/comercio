@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Banknote, CreditCard, Smartphone, ArrowLeftRight, Wallet, X, Check } from 'lucide-react';
+import { Banknote, CreditCard, Smartphone, ArrowLeftRight, X, Check } from 'lucide-react';
 import { Dialog, DialogFooter, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -39,7 +39,8 @@ const METODOS: MetodoConfig[] = [
   { metodo: 'debito', label: 'Débito', icon: CreditCard },
   { metodo: 'credito', label: 'Crédito (cuotas)', icon: CreditCard },
   { metodo: 'qr', label: 'QR', icon: Smartphone },
-  { metodo: 'cta_cte', label: 'Cuenta corriente', icon: Wallet, requiereCliente: true },
+  // Cta corriente quitada del PoS: el cajero solo vende a consumidor final.
+  // La lógica del repo sigue soportándola por si la habilitamos en el futuro.
 ];
 
 export function ModalCobro({

@@ -28,13 +28,14 @@ function ProductosPageInner() {
   const qc = useQueryClient();
   const params = useSearchParams();
   const [texto, setTexto] = useState('');
-  const [categoriaId, setCategoriaId] = useState('');
-  // Lee filtro inicial de la URL para que deep-links del dashboard funcionen
-  // (ej. /productos?stock=sin viene del KPI "Sin stock").
+  // Lee filtros iniciales de la URL para que los deep-links funcionen:
+  //   /productos?stock=sin            ← KPI del dashboard
+  //   /productos?categoria=<uuid>     ← clickear "N productos" en categorías
   const stockInicial = (params.get('stock') ?? '') as FiltroStock;
   const [filtroStock, setFiltroStock] = useState<FiltroStock>(
     stockInicial === 'sin' || stockInicial === 'bajo' ? stockInicial : '',
   );
+  const [categoriaId, setCategoriaId] = useState(params.get('categoria') ?? '');
   const [page, setPage] = useState(0);
 
   // Cuando cambia filtro, volver a página 0.
