@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
   TrendingUp,
-  Users,
   Package,
   AlertTriangle,
   Wallet,
@@ -31,10 +30,6 @@ export default function DashboardPage() {
   const productosQ = useQuery({
     queryKey: ['dashboard-sin-stock'],
     queryFn: () => db.productos.list({ activo: true, sin_stock: true }),
-  });
-  const clientesQ = useQuery({
-    queryKey: ['dashboard-clientes-deuda'],
-    queryFn: () => db.clientes.list({ con_deuda: true }),
   });
   const sesionesQ = useQuery({
     queryKey: ['dashboard-sesiones-abiertas'],
@@ -88,21 +83,25 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          titulo="Ventas hoy"
-          valor={formatCurrency(totalHoy)}
-          sub={`${ventasHoy.length} tickets`}
-          icon={TrendingUp}
-          loading={ventasQ.isLoading}
-        />
-        <KpiCard
-          titulo="Cajas abiertas"
-          valor={String(sesionesAbiertas)}
-          sub="Sesiones en curso"
-          icon={Wallet}
-          loading={sesionesQ.isLoading}
-        />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Link href="/ventas" className="block">
+          <KpiCard
+            titulo="Ventas hoy"
+            valor={formatCurrency(totalHoy)}
+            sub={`${ventasHoy.length} tickets · ver historial`}
+            icon={TrendingUp}
+            loading={ventasQ.isLoading}
+          />
+        </Link>
+        <Link href="/caja" className="block">
+          <KpiCard
+            titulo="Cajas abiertas"
+            valor={String(sesionesAbiertas)}
+            sub="Sesiones en curso · ver detalle"
+            icon={Wallet}
+            loading={sesionesQ.isLoading}
+          />
+        </Link>
         <Link href="/productos?stock=sin" className="block">
           <KpiCard
             titulo="Sin stock"
@@ -113,13 +112,6 @@ export default function DashboardPage() {
             variant={productosQ.data && productosQ.data.length > 0 ? 'warn' : undefined}
           />
         </Link>
-        <KpiCard
-          titulo="Clientes con deuda"
-          valor={String(clientesQ.data?.length ?? 0)}
-          sub="Cta corriente abierta"
-          icon={Users}
-          loading={clientesQ.isLoading}
-        />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
