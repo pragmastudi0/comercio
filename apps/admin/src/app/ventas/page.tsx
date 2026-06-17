@@ -47,12 +47,46 @@ export default function VentasPage() {
   const empleadosQ = useQuery({ queryKey: ['empleados'], queryFn: () => db.empleados.list() });
   const localesQ = useQuery({ queryKey: ['locales'], queryFn: () => db.locales.list() });
 
+  // Logs de descuento manual del rango. El motivo del descuento global se
+  // guarda en auditoría (no como columna de la venta), así que cruzamos
+  // venta_id → motivo desde acá. Es 1 query extra por rango.
+  const descuentosQ = useQuery({
+    queryKey: ['ventas-admin-descuentos', desde, hasta],
+    queryFn: () =>
+      db.auditoria.list({
+        entidad: 'venta',
+        desde: new Date(`${desde}T00:00:00`).toISOString(),
+        hasta: new Date(`${hasta}T23:59:59`).toISOString(),
+      }),
+  });
+  // Map ventaId → { motivo, monto } (solo entries de descuento_manual).
+  const descuentoPorVenta = (() => {
+    const map = new Map<string, { motivo: string | null; monto: number }>();
+    for (const log of descuentosQ.data ?? []) {
+      if (log.accion !== 'descuento_manual' || !log.entidad_id) continue;
+      const d = log.detalle ?? {};
+      map.set(log.entidad_id, {
+        motivo: (d.motivo as string | null) ?? null,
+        monto: typeof d.monto === 'number' ? d.monto : 0,
+      });
+    }
+    return map;
+  })();
+
   let ventas = ventasQ.data ?? [];
   if (metodo) ventas = ventas.filter((v) => v.pagos.some((p) => p.metodo === metodo));
 
   const total = ventas
     .filter((v) => v.estado === 'completada')
     .reduce((acc, v) => acc + v.total, 0);
+  // KPI rápido de descuentos en el rango filtrado.
+  const ventasConDescuento = ventas.filter(
+    (v) => v.estado === 'completada' && (v.descuento_total ?? 0) > 0,
+  );
+  const totalDescuentos = ventasConDescuento.reduce(
+    (acc, v) => acc + (v.descuento_total ?? 0),
+    0,
+  );
 
   const empleadoNombre = (id: string) => {
     const e = empleadosQ.data?.find((x) => x.id === id);
@@ -132,10 +166,18 @@ export default function VentasPage() {
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardHeader className="flex flex-col items-start justify-between gap-2 pb-3 sm:flex-row sm:items-center">
           <CardTitle className="text-sm">
             {ventas.length} ventas · Total: {formatCurrency(total)}
           </CardTitle>
+          {ventasConDescuento.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {ventasConDescuento.length} con descuento ·{' '}
+              <span className="text-green-700">
+                -{formatCurrency(totalDescuentos)}
+              </span>
+            </span>
+          )}
         </CardHeader>
         <CardContent>
           {ventasQ.isLoading ? (
@@ -155,6 +197,7 @@ export default function VentasPage() {
                   <TableHead>Local</TableHead>
                   <TableHead>Items</TableHead>
                   <TableHead>Métodos</TableHead>
+                  <TableHead className="text-right">Descuento</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Estado</TableHead>
                 </TableRow>
@@ -180,6 +223,25 @@ export default function VentasPage() {
                           labels
                         );
                       })()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(v.descuento_total ?? 0) > 0 ? (
+                        <div className="flex flex-col items-end">
+                          <span className="font-medium tabular-nums text-green-700">
+                            -{formatCurrency(v.descuento_total)}
+                          </span>
+                          {descuentoPorVenta.get(v.id)?.motivo && (
+                            <span
+                              className="max-w-[160px] truncate text-[11px] text-muted-foreground"
+                              title={descuentoPorVenta.get(v.id)!.motivo!}
+                            >
+                              {descuentoPorVenta.get(v.id)!.motivo}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       {formatCurrency(v.total)}
