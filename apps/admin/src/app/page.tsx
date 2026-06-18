@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
@@ -8,6 +9,9 @@ import {
   AlertTriangle,
   Wallet,
   ArrowRight,
+  Banknote,
+  CreditCard,
+  PiggyBank,
 } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { getDb } from '@/lib/db';
@@ -35,10 +39,39 @@ export default function DashboardPage() {
     queryKey: ['dashboard-sesiones-abiertas'],
     queryFn: () => db.sesionesCaja.list(),
   });
+  // Necesitamos el catálogo para calcular ganancia (precio - costo).
+  const productosLookupQ = useQuery({
+    queryKey: ['productos-list'],
+    queryFn: () => db.productos.list(),
+  });
 
   const ventasHoy = ventasQ.data ?? [];
   const totalHoy = ventasHoy.reduce((acc, v) => acc + v.total, 0);
   const sesionesAbiertas = (sesionesQ.data ?? []).filter((s) => s.estado === 'abierta').length;
+
+  // Indicadores financieros del día.
+  const indicadores = useMemo(() => {
+    const costoPorProducto = new Map<string, number>();
+    for (const p of productosLookupQ.data ?? []) {
+      costoPorProducto.set(p.id, p.costo);
+    }
+    let bruto = 0; // suma de subtotales (precio lista × cantidad)
+    let ganancia = 0; // suma de (precio_unitario − costo) × cantidad
+    let efectivo = 0;
+    let otros = 0;
+    for (const v of ventasHoy) {
+      bruto += v.subtotal;
+      for (const it of v.items) {
+        const costo = costoPorProducto.get(it.producto_id) ?? 0;
+        ganancia += (it.precio_unitario - costo) * it.cantidad;
+      }
+      for (const p of v.pagos) {
+        if (p.metodo === 'efectivo') efectivo += p.monto;
+        else otros += p.monto;
+      }
+    }
+    return { bruto, ganancia, efectivo, otros };
+  }, [ventasHoy, productosLookupQ.data]);
 
   // Top productos del día
   const topMap = new Map<string, { id: string; cantidad: number; monto: number }>();
@@ -54,10 +87,6 @@ export default function DashboardPage() {
     .sort((a, b) => b.cantidad - a.cantidad)
     .slice(0, 5);
 
-  const productosLookupQ = useQuery({
-    queryKey: ['productos-list'],
-    queryFn: () => db.productos.list(),
-  });
   const nombreProd = (id: string) => {
     if (productosLookupQ.isLoading) return '…';
     const p = productosLookupQ.data?.find((x) => x.id === id);
@@ -83,16 +112,43 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Sección financiera del día — los 4 números que más importan. */}
+      <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/ventas" className="block">
           <KpiCard
-            titulo="Ventas hoy"
+            titulo="Facturado hoy"
             valor={formatCurrency(totalHoy)}
             sub={`${ventasHoy.length} tickets · ver historial`}
             icon={TrendingUp}
             loading={ventasQ.isLoading}
+            destacado
           />
         </Link>
+        <KpiCard
+          titulo="Ganancia bruta"
+          valor={formatCurrency(indicadores.ganancia)}
+          sub={`Bruto (s/desc.): ${formatCurrency(indicadores.bruto)}`}
+          icon={PiggyBank}
+          loading={ventasQ.isLoading || productosLookupQ.isLoading}
+        />
+        <KpiCard
+          titulo="Cobrado en efectivo"
+          valor={formatCurrency(indicadores.efectivo)}
+          sub={`${pctTexto(indicadores.efectivo, totalHoy)} del total`}
+          icon={Banknote}
+          loading={ventasQ.isLoading}
+        />
+        <KpiCard
+          titulo="Otros cobros"
+          valor={formatCurrency(indicadores.otros)}
+          sub="Tarjeta · QR · Transf."
+          icon={CreditCard}
+          loading={ventasQ.isLoading}
+        />
+      </div>
+
+      {/* Sección operativa — alertas y estado de cajas. */}
+      <div className="grid gap-4 sm:grid-cols-2">
         <Link href="/caja" className="block">
           <KpiCard
             titulo="Cajas abiertas"
@@ -169,6 +225,12 @@ export default function DashboardPage() {
   );
 }
 
+/** Devuelve un porcentaje legible (`45%`) o un guión si el total es 0. */
+function pctTexto(parte: number, total: number): string {
+  if (!total || total <= 0) return '—';
+  return `${Math.round((parte / total) * 100)}%`;
+}
+
 function KpiCard({
   titulo,
   valor,
@@ -176,6 +238,7 @@ function KpiCard({
   icon: Icon,
   loading,
   variant,
+  destacado,
 }: {
   titulo: string;
   valor: string;
@@ -183,9 +246,15 @@ function KpiCard({
   icon: typeof TrendingUp;
   loading?: boolean;
   variant?: 'warn';
+  /** Marca esta tarjeta como la más importante visualmente. */
+  destacado?: boolean;
 }) {
   return (
-    <Card className="h-full transition hover:border-foreground/30">
+    <Card
+      className={`h-full transition hover:border-foreground/30 ${
+        destacado ? 'border-primary/30 bg-primary/5' : ''
+      }`}
+    >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium text-muted-foreground">{titulo}</CardTitle>
@@ -198,7 +267,9 @@ function KpiCard({
         {loading ? (
           <Skeleton className="h-7 w-24" />
         ) : (
-          <div className="text-2xl font-bold tabular-nums">{valor}</div>
+          <div className={`font-bold tabular-nums ${destacado ? 'text-3xl' : 'text-2xl'}`}>
+            {valor}
+          </div>
         )}
         <p className="text-xs text-muted-foreground">{sub}</p>
       </CardContent>

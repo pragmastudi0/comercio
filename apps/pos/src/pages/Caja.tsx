@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
-import { LogOut } from 'lucide-react';
+import { LogOut, Type } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { useVenta } from '@/stores/venta';
+import { useLetrasGrandes } from '@/hooks/useLetrasGrandes';
 import { BuscadorProducto } from '@/components/BuscadorProducto';
 import { Carrito } from '@/components/Carrito';
 import { ResumenVenta } from '@/components/ResumenVenta';
@@ -25,6 +26,7 @@ export function Caja() {
   const [modalCobro, setModalCobro] = useState<{ open: boolean; metodo?: MetodoPago }>({
     open: false,
   });
+  const { grande: letrasGrandes, toggle: toggleLetras } = useLetrasGrandes(caja?.id);
 
   function abrirCobro(metodo?: MetodoPago) {
     if (items.length === 0) {
@@ -72,6 +74,19 @@ export function Caja() {
             </span>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              variant={letrasGrandes ? 'default' : 'ghost'}
+              size="sm"
+              onClick={toggleLetras}
+              title={
+                letrasGrandes
+                  ? 'Volver al tamaño normal'
+                  : 'Activar modo letras grandes (para ver mejor)'
+              }
+            >
+              <Type className="mr-1 h-3 w-3" />
+              {letrasGrandes ? 'Texto grande' : 'Texto normal'}
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate('/cerrar-caja')}>
               Cerrar caja
             </Button>
