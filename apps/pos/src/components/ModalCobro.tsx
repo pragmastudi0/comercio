@@ -243,6 +243,51 @@ export function ModalCobro({
         }, 0);
       const descuento_total = descuentoLineas + descuentoGlobal + descuentoMetodo;
 
+      // Reubicar stock desde otros depósitos al local si hace falta. Esto
+      // sirve para el caso "cross-depósito": el cajero pudo agregar al
+      // carrito un producto que solo había en otro local (B12 vendiendo
+      // algo que solo estaba en C11). Antes de cobrar, movemos las
+      // unidades necesarias con un ajuste, así la RPC de venta encuentra
+      // todo el stock en el local.
+      const depLocal = depositoIdSeguro(depositoActivoId);
+      for (const it of items) {
+        const todos = await db.stock.porProducto(it.producto.id);
+        const enLocal = Number(
+          todos.find((s) => s.deposito_id === depLocal)?.cantidad ?? 0,
+        );
+        const faltante = it.cantidad - enLocal;
+        if (faltante <= 0) continue;
+        let restante = faltante;
+        for (const otro of todos) {
+          if (otro.deposito_id === depLocal) continue;
+          const disp = Number(otro.cantidad);
+          if (disp <= 0) continue;
+          const aMover = Math.min(disp, restante);
+          await db.stock.ajustar({
+            producto_id: it.producto.id,
+            deposito_id: otro.deposito_id,
+            cantidad: -aMover,
+            motivo: `Auto-transfer a ${caja.nombre} para venta`,
+            empleado_id: empleado.id,
+          });
+          await db.stock.ajustar({
+            producto_id: it.producto.id,
+            deposito_id: depLocal,
+            cantidad: aMover,
+            motivo: `Auto-transfer desde otro depósito (cajero ${caja.nombre})`,
+            empleado_id: empleado.id,
+          });
+          restante -= aMover;
+          if (restante <= 0) break;
+        }
+        if (restante > 0) {
+          throw new Error(
+            `Stock insuficiente para "${it.producto.nombre}". ` +
+              `Faltan ${restante} unidades en todos los depósitos.`,
+          );
+        }
+      }
+
       const venta = await db.ventas.crear({
         caja_id: caja.id,
         sesion_caja_id: sesion.id,
