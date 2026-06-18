@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
@@ -18,18 +18,60 @@ import { getDb } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { Button } from '@comercio/ui/button';
+import { Input } from '@comercio/ui/input';
 import { formatCurrency } from '@comercio/ui/utils';
+
+type Rango = 'hoy' | 'semana' | 'mes' | 'anio' | 'custom';
+
+const LABEL_RANGO: Record<Rango, string> = {
+  hoy: 'Hoy',
+  semana: 'Últimos 7 días',
+  mes: 'Este mes',
+  anio: 'Este año',
+  custom: 'Rango personalizado',
+};
+
+function calcularRango(rango: Rango, custom?: { desde: string; hasta: string }) {
+  const ahora = new Date();
+  let desde = new Date(ahora);
+  desde.setHours(0, 0, 0, 0);
+  let hasta = new Date(ahora);
+  if (rango === 'semana') {
+    desde.setDate(desde.getDate() - 6);
+  } else if (rango === 'mes') {
+    desde = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+  } else if (rango === 'anio') {
+    desde = new Date(ahora.getFullYear(), 0, 1);
+  } else if (rango === 'custom' && custom?.desde && custom?.hasta) {
+    desde = new Date(`${custom.desde}T00:00:00`);
+    hasta = new Date(`${custom.hasta}T23:59:59`);
+  }
+  return { desde: desde.toISOString(), hasta: hasta.toISOString() };
+}
+
+function formatHoyAR(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export default function DashboardPage() {
   const db = getDb();
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  const desde = hoy.toISOString();
+  const [rango, setRango] = useState<Rango>('hoy');
+  const [customDesde, setCustomDesde] = useState(formatHoyAR());
+  const [customHasta, setCustomHasta] = useState(formatHoyAR());
+
+  const { desde, hasta } = useMemo(
+    () => calcularRango(rango, { desde: customDesde, hasta: customHasta }),
+    [rango, customDesde, customHasta],
+  );
+
+  // Solo refrescar automáticamente cuando estamos viendo "hoy" — para el resto
+  // es info estable.
+  const refetchInterval = rango === 'hoy' ? 10_000 : false;
 
   const ventasQ = useQuery({
-    queryKey: ['dashboard-ventas-hoy'],
-    queryFn: () => db.ventas.list({ desde, estado: 'completada' }),
-    refetchInterval: 10_000,
+    queryKey: ['dashboard-ventas', desde, hasta],
+    queryFn: () => db.ventas.list({ desde, hasta, estado: 'completada' }),
+    refetchInterval,
   });
   const productosQ = useQuery({
     queryKey: ['dashboard-sin-stock'],
@@ -45,8 +87,8 @@ export default function DashboardPage() {
     queryFn: () => db.productos.list(),
   });
 
-  const ventasHoy = ventasQ.data ?? [];
-  const totalHoy = ventasHoy.reduce((acc, v) => acc + v.total, 0);
+  const ventasRango = ventasQ.data ?? [];
+  const totalRango = ventasRango.reduce((acc, v) => acc + v.total, 0);
   const sesionesAbiertas = (sesionesQ.data ?? []).filter((s) => s.estado === 'abierta').length;
 
   // Indicadores financieros del día.
@@ -59,7 +101,7 @@ export default function DashboardPage() {
     let ganancia = 0; // suma de (precio_unitario − costo) × cantidad
     let efectivo = 0;
     let otros = 0;
-    for (const v of ventasHoy) {
+    for (const v of ventasRango) {
       bruto += v.subtotal;
       for (const it of v.items) {
         const costo = costoPorProducto.get(it.producto_id) ?? 0;
@@ -71,11 +113,11 @@ export default function DashboardPage() {
       }
     }
     return { bruto, ganancia, efectivo, otros };
-  }, [ventasHoy, productosLookupQ.data]);
+  }, [ventasRango, productosLookupQ.data]);
 
   // Top productos del día
   const topMap = new Map<string, { id: string; cantidad: number; monto: number }>();
-  for (const v of ventasHoy) {
+  for (const v of ventasRango) {
     for (const it of v.items) {
       const prev = topMap.get(it.producto_id) ?? { id: it.producto_id, cantidad: 0, monto: 0 };
       prev.cantidad += it.cantidad;
@@ -96,13 +138,15 @@ export default function DashboardPage() {
     return `Producto eliminado (${id.slice(0, 8)}…)`;
   };
 
+  const subRango = rango === 'hoy' ? 'Actualiza cada 10s' : LABEL_RANGO[rango];
+
   return (
     <div className="container mx-auto px-4 py-6 sm:py-8">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold sm:text-2xl">Hola, {BRAND.nombreCorto}</h1>
           <p className="text-sm text-muted-foreground">
-            Resumen del día · actualiza cada 10s
+            Resumen · {subRango.toLowerCase()}
           </p>
         </div>
         <Button asChild variant="outline" size="sm" className="self-start sm:self-auto">
@@ -112,13 +156,53 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* Sección financiera del día — los 4 números que más importan. */}
+      {/* Selector de rango — define qué período toman las tarjetas financieras. */}
+      <div className="mb-4 flex flex-wrap items-end gap-2">
+        {(['hoy', 'semana', 'mes', 'anio', 'custom'] as const).map((r) => (
+          <Button
+            key={r}
+            size="sm"
+            variant={rango === r ? 'default' : 'outline'}
+            onClick={() => setRango(r)}
+          >
+            {LABEL_RANGO[r]}
+          </Button>
+        ))}
+        {rango === 'custom' && (
+          <div className="flex items-end gap-2 rounded-md border bg-card px-3 py-2">
+            <div>
+              <label className="block text-[10px] uppercase text-muted-foreground">
+                Desde
+              </label>
+              <Input
+                type="date"
+                value={customDesde}
+                onChange={(e) => setCustomDesde(e.target.value)}
+                className="h-8 w-[150px] text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase text-muted-foreground">
+                Hasta
+              </label>
+              <Input
+                type="date"
+                value={customHasta}
+                onChange={(e) => setCustomHasta(e.target.value)}
+                className="h-8 w-[150px] text-sm"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Sección financiera del rango — los 4 números que más importan. */}
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link href="/ventas" className="block">
           <KpiCard
-            titulo="Facturado hoy"
-            valor={formatCurrency(totalHoy)}
-            sub={`${ventasHoy.length} tickets · ver historial`}
+            titulo={`Facturado ${LABEL_RANGO[rango].toLowerCase()}`}
+            valor={formatCurrency(totalRango)}
+            sub={`${ventasRango.length} tickets · ver historial`}
             icon={TrendingUp}
             loading={ventasQ.isLoading}
             destacado
@@ -134,7 +218,7 @@ export default function DashboardPage() {
         <KpiCard
           titulo="Cobrado en efectivo"
           valor={formatCurrency(indicadores.efectivo)}
-          sub={`${pctTexto(indicadores.efectivo, totalHoy)} del total`}
+          sub={`${pctTexto(indicadores.efectivo, totalRango)} del total`}
           icon={Banknote}
           loading={ventasQ.isLoading}
         />
@@ -173,7 +257,9 @@ export default function DashboardPage() {
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Top productos del día</CardTitle>
+            <CardTitle className="text-base">
+              Top productos · {LABEL_RANGO[rango].toLowerCase()}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {ventasQ.isLoading ? (
@@ -206,11 +292,11 @@ export default function DashboardPage() {
           <CardContent>
             {ventasQ.isLoading ? (
               <Skeleton className="h-40" />
-            ) : ventasHoy.length === 0 ? (
+            ) : ventasRango.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin ventas todavía.</p>
             ) : (
               <div className="space-y-1">
-                {[...ventasHoy].reverse().slice(0, 8).map((v) => (
+                {[...ventasRango].reverse().slice(0, 8).map((v) => (
                   <div key={v.id} className="flex items-center justify-between text-sm">
                     <span className="font-mono text-xs text-muted-foreground">{v.numero}</span>
                     <span className="tabular-nums">{formatCurrency(v.total)}</span>

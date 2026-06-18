@@ -13,6 +13,14 @@ import '@comercio/ui/styles';
 const brandEnv = (import.meta.env.VITE_BRAND_NAME ?? '').trim();
 if (brandEnv) setBrandName(brandEnv);
 
+// Tamaño de fuente base del PoS un poco más grande que el default web.
+// Pedido del cliente: hay cajeros con visión cansada y el sistema se usa
+// muchas horas seguidas. Aumentamos a 17px (default web es 16px); como
+// Tailwind usa rem, todo el árbol escala parejo.
+if (typeof document !== 'undefined') {
+  document.documentElement.style.fontSize = '17px';
+}
+
 // === Limpieza de assets de versiones anteriores ===
 // Borrar localStorage de la vesión v1 (que tenía residuo del modo mock).
 try {
