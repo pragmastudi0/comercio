@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Search, Printer } from 'lucide-react';
+import { Search, Printer, Eye } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@comercio/ui/table';
@@ -13,8 +13,14 @@ import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { Skeleton } from '@comercio/ui/skeleton';
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@comercio/ui/dialog';
 import { formatCurrency, formatDate } from '@comercio/ui/utils';
-import type { MetodoPago } from '@comercio/db';
+import type { MetodoPago, Venta } from '@comercio/db';
 
 const LABEL_METODO: Record<MetodoPago, string> = {
   efectivo: 'Efectivo',
@@ -35,6 +41,8 @@ export default function VentasPage() {
   const [empleadoId, setEmpleadoId] = useState<string>('');
   const [localId, setLocalId] = useState<string>('');
   const [metodo, setMetodo] = useState<string>('');
+  // Venta seleccionada para ver el detalle en el popup.
+  const [ventaDetalle, setVentaDetalle] = useState<Venta | null>(null);
 
   const ventasQ = useQuery({
     queryKey: ['ventas-admin', desde, hasta, empleadoId, localId],
@@ -48,6 +56,12 @@ export default function VentasPage() {
   });
   const empleadosQ = useQuery({ queryKey: ['empleados'], queryFn: () => db.empleados.list() });
   const localesQ = useQuery({ queryKey: ['locales'], queryFn: () => db.locales.list() });
+  // Cargado al hacer click en una venta (lazy) para mostrar productos por nombre.
+  const productosQ = useQuery({
+    queryKey: ['productos-all'],
+    queryFn: () => db.productos.list(),
+    enabled: !!ventaDetalle,
+  });
 
   // Logs de descuento manual del rango. El motivo del descuento global se
   // guarda en auditoría (no como columna de la venta), así que cruzamos
@@ -224,11 +238,12 @@ export default function VentasPage() {
                   const rows = [
                   <TableRow
                     key={v.id}
-                    className={
+                    onClick={() => setVentaDetalle(v)}
+                    className={`cursor-pointer ${
                       anulada
                         ? 'border-b-0 bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20'
-                        : ''
-                    }
+                        : 'hover:bg-muted/40'
+                    }`}
                   >
                     <TableCell className="font-mono text-xs">{v.numero}</TableCell>
                     <TableCell className="text-xs">{formatDate(v.fecha)}</TableCell>
@@ -238,14 +253,13 @@ export default function VentasPage() {
                     <TableCell className="text-xs">
                       {(() => {
                         const ms = Array.from(new Set(v.pagos.map((p) => p.metodo)));
-                        const labels = ms.map((m) => LABEL_METODO[m]).join(' + ');
+                        // Compacto: si es un solo método, mostramos el nombre;
+                        // si es mixto, solo "Mixto" sin el desglose (el detalle
+                        // se ve al hacer click en la venta).
                         return ms.length > 1 ? (
-                          <span>
-                            <span className="font-medium">Mixto</span>
-                            <span className="text-muted-foreground"> · {labels}</span>
-                          </span>
+                          <span className="font-medium">Mixto</span>
                         ) : (
-                          labels
+                          LABEL_METODO[ms[0]!]
                         );
                       })()}
                     </TableCell>
@@ -285,16 +299,30 @@ export default function VentasPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        asChild
-                        variant="ghost"
-                        size="icon"
-                        title="Ver / imprimir ticket"
-                      >
-                        <Link href={`/ventas/${v.id}/ticket`}>
-                          <Printer className="h-4 w-4" />
-                        </Link>
-                      </Button>
+                      <div className="flex justify-end gap-0.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Ver detalle"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setVentaDetalle(v);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="icon"
+                          title="Ver / imprimir ticket"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Link href={`/ventas/${v.id}/ticket`}>
+                            <Printer className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>,
                   ];
@@ -331,6 +359,223 @@ export default function VentasPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Detalle de venta en popup. */}
+      <Dialog
+        open={!!ventaDetalle}
+        onOpenChange={(v) => !v && setVentaDetalle(null)}
+        className="max-w-2xl"
+      >
+        {ventaDetalle && (
+          <DetalleVenta
+            venta={ventaDetalle}
+            empleadoNombre={empleadoNombre}
+            localNombre={localNombre}
+            motivoDescuento={descuentoPorVenta.get(ventaDetalle.id)?.motivo ?? null}
+            productosCache={productosQ.data ?? []}
+          />
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setVentaDetalle(null)}>
+            Cerrar
+          </Button>
+          {ventaDetalle && (
+            <Button asChild>
+              <Link href={`/ventas/${ventaDetalle.id}/ticket`}>
+                <Printer className="mr-1 h-4 w-4" />
+                Ver ticket impreso
+              </Link>
+            </Button>
+          )}
+        </DialogFooter>
+      </Dialog>
     </div>
+  );
+}
+
+function DetalleVenta({
+  venta,
+  empleadoNombre,
+  localNombre,
+  motivoDescuento,
+  productosCache,
+}: {
+  venta: Venta;
+  empleadoNombre: (id: string) => string;
+  localNombre: (id: string) => string;
+  motivoDescuento: string | null;
+  productosCache: { id: string; codigo_interno: string; nombre: string }[];
+}) {
+  const productoInfo = (id: string) =>
+    productosCache.find((p) => p.id === id);
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>
+          Venta {venta.numero} ·{' '}
+          <span className="text-muted-foreground">{formatDate(venta.fecha)}</span>
+        </DialogTitle>
+      </DialogHeader>
+
+      {/* Cabecera de la venta */}
+      <div className="grid grid-cols-2 gap-3 rounded-md bg-muted/40 p-3 text-sm">
+        <div>
+          <div className="text-xs text-muted-foreground">Cajero</div>
+          <div className="font-medium">{empleadoNombre(venta.empleado_id)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Local</div>
+          <div className="font-medium">{localNombre(venta.local_id)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Estado</div>
+          <div className="font-medium">
+            {venta.estado === 'anulada' ? (
+              <Badge variant="destructive">Anulada</Badge>
+            ) : venta.estado === 'completada' ? (
+              <Badge variant="secondary">Completada</Badge>
+            ) : (
+              <Badge>Presupuesto</Badge>
+            )}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Items</div>
+          <div className="font-medium">
+            {venta.items.reduce((a, i) => a + i.cantidad, 0)} unidad(es)
+          </div>
+        </div>
+      </div>
+
+      {/* Items */}
+      <div className="mt-3">
+        <div className="mb-2 text-sm font-medium">Productos vendidos</div>
+        <div className="rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-xs text-muted-foreground">
+              <tr>
+                <th className="px-2 py-1.5 text-left">Código</th>
+                <th className="px-2 py-1.5 text-left">Producto</th>
+                <th className="px-2 py-1.5 text-right">Cant.</th>
+                <th className="px-2 py-1.5 text-right">Precio</th>
+                <th className="px-2 py-1.5 text-right">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {venta.items.map((it, i) => {
+                const p = productoInfo(it.producto_id);
+                return (
+                  <tr key={i} className="border-t">
+                    <td className="px-2 py-1.5 font-mono text-xs">
+                      {p?.codigo_interno ?? '—'}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {p?.nombre ?? (
+                        <span className="text-xs text-muted-foreground">
+                          Producto eliminado
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {it.cantidad}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {formatCurrency(it.precio_unitario)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {formatCurrency(it.subtotal)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Cómo se cobró */}
+      <div className="mt-3">
+        <div className="mb-2 text-sm font-medium">Forma de cobro</div>
+        <div className="rounded-md border">
+          {venta.pagos.map((p, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between border-t px-3 py-2 text-sm first:border-t-0"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-medium">
+                  {LABEL_METODO[p.metodo] ?? p.metodo}
+                </span>
+                {p.cuotas && (
+                  <span className="text-xs text-muted-foreground">
+                    en {p.cuotas} cuota(s)
+                  </span>
+                )}
+                {p.recargo_pct ? (
+                  <span className="text-xs text-orange-700">
+                    +{p.recargo_pct}% recargo
+                  </span>
+                ) : null}
+              </div>
+              <span className="font-medium tabular-nums">
+                {formatCurrency(p.monto)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Totales */}
+      <div className="mt-3 rounded-md bg-muted/40 p-3 text-sm">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Subtotal</span>
+          <span className="tabular-nums">{formatCurrency(venta.subtotal)}</span>
+        </div>
+        {(venta.descuento_total ?? 0) > 0 && (
+          <div className="flex justify-between text-green-700">
+            <span>
+              Descuento
+              {motivoDescuento && (
+                <span className="ml-1 text-xs text-muted-foreground">
+                  · {motivoDescuento}
+                </span>
+              )}
+            </span>
+            <span className="tabular-nums">
+              -{formatCurrency(venta.descuento_total)}
+            </span>
+          </div>
+        )}
+        {(venta.recargo_total ?? 0) > 0 && (
+          <div className="flex justify-between text-orange-700">
+            <span>Recargo (cuotas)</span>
+            <span className="tabular-nums">
+              +{formatCurrency(venta.recargo_total)}
+            </span>
+          </div>
+        )}
+        <div className="mt-1 flex justify-between border-t pt-1 text-base font-semibold">
+          <span>TOTAL</span>
+          <span className="tabular-nums">{formatCurrency(venta.total)}</span>
+        </div>
+      </div>
+
+      {/* Anulación, si aplica */}
+      {venta.estado === 'anulada' && (
+        <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="font-medium">Esta venta fue anulada</div>
+          {venta.motivo_anulacion && (
+            <div className="mt-1">
+              <span className="text-xs">Motivo:</span> {venta.motivo_anulacion}
+            </div>
+          )}
+          <div className="mt-1 text-xs text-red-700">
+            {venta.anulada_por && `Por ${empleadoNombre(venta.anulada_por)}`}
+            {venta.anulada_en && ` · ${formatDate(venta.anulada_en)}`}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

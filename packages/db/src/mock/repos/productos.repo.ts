@@ -136,6 +136,11 @@ export function makeProductosRepo(store: Store): ProductosRepo {
     async preciosDe(productoId) {
       return clone(store.productoListaPrecio.filter((x) => x.producto_id === productoId));
     },
+    async preciosDeLista(listaPrecioId) {
+      return clone(
+        store.productoListaPrecio.filter((x) => x.lista_precio_id === listaPrecioId),
+      );
+    },
     async setPrecio(productoId, listaPrecioId, escalas) {
       const ordenadas = [...escalas].sort((a, b) => a.desde - b.desde);
       const idx = store.productoListaPrecio.findIndex(

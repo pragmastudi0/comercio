@@ -61,5 +61,11 @@ export type ProductosRepo = {
 
   // Listas de precio
   preciosDe(productoId: ID): Promise<ProductoListaPrecio[]>;
+  /**
+   * Trae todos los registros de precio para una lista (todos los productos).
+   * Pensado para reportes y valuación de stock: 1 sola request en lugar de
+   * llamar preciosDe por cada producto.
+   */
+  preciosDeLista(listaPrecioId: ID): Promise<ProductoListaPrecio[]>;
   setPrecio(productoId: ID, listaPrecioId: ID, escalas: { desde: number; precio: number }[]): Promise<void>;
 };

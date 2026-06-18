@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -71,14 +71,9 @@ export function Ticket() {
   });
   const empleadosQ = useQuery({ queryKey: ['empleados-ticket'], queryFn: () => db.empleados.list() });
 
-  // Auto-print al cargar la primera vez (después de cobrar)
-  useEffect(() => {
-    if (ventaQ.data) {
-      const t = setTimeout(() => window.print(), 400);
-      return () => clearTimeout(t);
-    }
-    return;
-  }, [ventaQ.data]);
+  // El auto-print al cobrar fue removido a pedido del cliente: el cajero
+  // imprime SOLO si lo necesita, apretando el botón "Imprimir" en el
+  // header. Evita el popup molesto en cada venta.
 
   if (ventaQ.isLoading) {
     return (

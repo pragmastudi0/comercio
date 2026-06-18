@@ -272,6 +272,27 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
       // El tipo ProductoListaPrecio coincide 1:1
       return rows as ProductoListaPrecio[];
     },
+    async preciosDeLista(listaPrecioId) {
+      // Paginamos para sortear el límite de 1000 del REST (puede haber
+      // ~2000 productos con precio en una lista grande).
+      const CHUNK = 1000;
+      const acumulado: ProductoListaPrecio[] = [];
+      let from = 0;
+      while (true) {
+        const rows = okList<PrecioRow>(
+          await sb
+            .from('producto_lista_precio')
+            .select('*')
+            .eq('lista_precio_id', listaPrecioId)
+            .range(from, from + CHUNK - 1),
+          'productos.preciosDeLista',
+        );
+        acumulado.push(...(rows as ProductoListaPrecio[]));
+        if (rows.length < CHUNK) break;
+        from += CHUNK;
+      }
+      return acumulado;
+    },
     async setPrecio(productoId, listaPrecioId, escalas) {
       const ordenadas = [...escalas].sort((a, b) => a.desde - b.desde);
       const { error } = await sb

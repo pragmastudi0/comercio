@@ -12,8 +12,11 @@ import {
   Banknote,
   CreditCard,
   PiggyBank,
+  Warehouse,
+  Tag,
 } from 'lucide-react';
 import { BRAND } from '@comercio/business';
+import { PRESET_IDS } from '@comercio/db';
 import { getDb } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Skeleton } from '@comercio/ui/skeleton';
@@ -86,6 +89,54 @@ export default function DashboardPage() {
     queryKey: ['productos-list'],
     queryFn: () => db.productos.list(),
   });
+
+  // Valuación de mercadería (independiente del rango — es snapshot al
+  // momento). Se actualiza cada 5 min porque no cambia tanto como las
+  // ventas y trae muchas filas.
+  const stockTotalQ = useQuery({
+    queryKey: ['dashboard-stock-consolidado'],
+    queryFn: () => db.stock.consolidado(),
+    staleTime: 5 * 60_000,
+  });
+  const preciosCFQ = useQuery({
+    queryKey: ['dashboard-precios-cf'],
+    queryFn: () =>
+      db.productos.preciosDeLista(PRESET_IDS.listas.consumidorFinal),
+    staleTime: 5 * 60_000,
+  });
+
+  const valuacion = useMemo(() => {
+    const stockPorProducto = new Map<string, number>();
+    for (const s of stockTotalQ.data ?? []) {
+      const cant = Number(s.cantidad);
+      if (cant <= 0) continue; // stock negativo no se valúa
+      stockPorProducto.set(
+        s.producto_id,
+        (stockPorProducto.get(s.producto_id) ?? 0) + cant,
+      );
+    }
+    const precioCFPorProducto = new Map<string, number>();
+    for (const r of preciosCFQ.data ?? []) {
+      // Tomamos el precio base (escala mínima, "desde 1u").
+      const esc = [...r.escalas].sort((a, b) => a.desde - b.desde)[0];
+      if (esc) precioCFPorProducto.set(r.producto_id, esc.precio);
+    }
+    let totalCosto = 0;
+    let totalPrecio = 0;
+    let unidades = 0;
+    for (const p of productosLookupQ.data ?? []) {
+      const cant = stockPorProducto.get(p.id) ?? 0;
+      if (cant <= 0) continue;
+      unidades += cant;
+      totalCosto += cant * (p.costo ?? 0);
+      totalPrecio += cant * (precioCFPorProducto.get(p.id) ?? 0);
+    }
+    return { totalCosto, totalPrecio, unidades };
+  }, [stockTotalQ.data, preciosCFQ.data, productosLookupQ.data]);
+  const valuacionCargando =
+    stockTotalQ.isLoading ||
+    preciosCFQ.isLoading ||
+    productosLookupQ.isLoading;
 
   const ventasRango = ventasQ.data ?? [];
   const totalRango = ventasRango.reduce((acc, v) => acc + v.total, 0);
@@ -232,7 +283,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Sección operativa — alertas y estado de cajas. */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="mb-4 grid gap-4 sm:grid-cols-2">
         <Link href="/caja" className="block">
           <KpiCard
             titulo="Cajas abiertas"
@@ -252,6 +303,24 @@ export default function DashboardPage() {
             variant={productosQ.data && productosQ.data.length > 0 ? 'warn' : undefined}
           />
         </Link>
+      </div>
+
+      {/* Valuación de mercadería — snapshot del momento, no depende del rango. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <KpiCard
+          titulo="Mercadería al costo"
+          valor={formatCurrency(valuacion.totalCosto)}
+          sub={`${valuacion.unidades.toLocaleString('es-AR')} unidades en stock`}
+          icon={Warehouse}
+          loading={valuacionCargando}
+        />
+        <KpiCard
+          titulo="Valor de venta (consumidor final)"
+          valor={formatCurrency(valuacion.totalPrecio)}
+          sub={`Potencial si se vende todo el stock`}
+          icon={Tag}
+          loading={valuacionCargando}
+        />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
