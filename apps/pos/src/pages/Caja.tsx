@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
-import { LogOut, Type } from 'lucide-react';
+import { LogOut, Type, History } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { useVenta } from '@/stores/venta';
@@ -86,6 +86,15 @@ export function Caja() {
             >
               <Type className="mr-1 h-3 w-3" />
               {letrasGrandes ? 'Texto grande' : 'Texto normal'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/historial')}
+              title="Historial 48hs · cambios"
+            >
+              <History className="mr-1 h-3 w-3" />
+              Historial
             </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate('/cerrar-caja')}>
               Cerrar caja

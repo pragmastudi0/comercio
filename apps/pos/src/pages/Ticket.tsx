@@ -17,8 +17,9 @@ import {
 } from '@comercio/ui/dialog';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency, formatDate } from '@comercio/ui/utils';
-import { Printer, ArrowLeft, Receipt, Ban } from 'lucide-react';
+import { Printer, ArrowLeft, Receipt, Ban, RefreshCw } from 'lucide-react';
 import { ModalNotaCredito } from '@/components/ModalNotaCredito';
+import { ModalCambio } from '@/components/ModalCambio';
 
 const LABEL_METODO: Record<string, string> = {
   efectivo: 'Efectivo',
@@ -36,6 +37,7 @@ export function Ticket() {
   const qc = useQueryClient();
   const empleado = useSesion((s) => s.empleado);
   const [ncOpen, setNcOpen] = useState(false);
+  const [cambioOpen, setCambioOpen] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
   const [motivoAnular, setMotivoAnular] = useState('');
 
@@ -112,6 +114,16 @@ export function Ticket() {
     venta.empleado_id === empleado.id &&
     new Date(venta.fecha) >= inicioDelDia;
 
+  // El cambio está habilitado si la venta es de los últimos 2 días y está
+  // completada. Política Turisteando: 2 días de garantía para cambios por
+  // rotura/falla. NO requiere que sea del mismo cajero — cualquier cajero
+  // del local puede atender el cambio.
+  const haceDosDias = new Date();
+  haceDosDias.setHours(0, 0, 0, 0);
+  haceDosDias.setDate(haceDosDias.getDate() - 1);
+  const esCambiable =
+    venta.estado === 'completada' && new Date(venta.fecha) >= haceDosDias;
+
   return (
     <>
       <header className="no-print border-b bg-background">
@@ -121,6 +133,17 @@ export function Ticket() {
             Nueva venta
           </Button>
           <div className="flex gap-2">
+            {esCambiable && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-primary/40"
+                onClick={() => setCambioOpen(true)}
+              >
+                <RefreshCw className="mr-1 h-4 w-4" />
+                Cambio
+              </Button>
+            )}
             {venta.estado === 'completada' && (
               <Button variant="outline" size="sm" onClick={() => setNcOpen(true)}>
                 <Receipt className="mr-1 h-4 w-4" />
@@ -150,6 +173,12 @@ export function Ticket() {
         venta={venta}
         open={ncOpen}
         onOpenChange={setNcOpen}
+      />
+
+      <ModalCambio
+        venta={venta}
+        open={cambioOpen}
+        onOpenChange={setCambioOpen}
       />
 
       <Dialog open={anularOpen} onOpenChange={setAnularOpen}>

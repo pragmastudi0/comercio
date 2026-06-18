@@ -3,6 +3,7 @@ import { Login } from './pages/Login';
 import { AbrirCaja } from './pages/AbrirCaja';
 import { Caja } from './pages/Caja';
 import { CerrarCaja } from './pages/CerrarCaja';
+import { Historial } from './pages/Historial';
 import { Ticket } from './pages/Ticket';
 import { Reset } from './pages/Reset';
 import { RequireEmpleado, RequireSesionAbierta } from './components/RequireSesion';
@@ -34,6 +35,14 @@ export default function App() {
         element={
           <RequireSesionAbierta>
             <CerrarCaja />
+          </RequireSesionAbierta>
+        }
+      />
+      <Route
+        path="/historial"
+        element={
+          <RequireSesionAbierta>
+            <Historial />
           </RequireSesionAbierta>
         }
       />
