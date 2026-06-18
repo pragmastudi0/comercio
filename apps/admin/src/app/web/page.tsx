@@ -121,17 +121,6 @@ export default function WebPage() {
   const hasta = Math.min(desde + PAGE_SIZE, totalVisibles);
   const pagina = visibles.slice(desde, hasta);
 
-  // Stock total — solo de los productos visibles en la página actual.
-  // Antes traíamos la tabla stock_items entera (2500+ filas) aunque la
-  // UI mostrara 50. Ahora va por totalesDeMuchos con los 50 ids.
-  const idsPagina = pagina.map((p) => p.id).join(',');
-  const stockQ = useQuery({
-    queryKey: ['stock-web-page', idsPagina],
-    queryFn: () => db.stock.totalesDeMuchos(pagina.map((p) => p.id)),
-    enabled: pagina.length > 0,
-    staleTime: 15_000,
-  });
-
   const categoriaNombre = (id: string) =>
     categoriasQ.data?.find((c) => c.id === id)?.nombre ?? '—';
 
@@ -272,15 +261,12 @@ export default function WebPage() {
                   <TableHead>Producto</TableHead>
                   <TableHead>Categoría</TableHead>
                   <TableHead className="text-right">Precio mayorista</TableHead>
-                  <TableHead className="text-right">Stock</TableHead>
                   <TableHead>Desc. larga</TableHead>
                   <TableHead className="w-24 text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pagina.map((p) => {
-                  const stock = stockQ.data?.get(p.id) ?? 0;
-                  const sinStock = stock <= 0;
                   return (
                   <TableRow key={p.id}>
                     <TableCell>
@@ -297,26 +283,6 @@ export default function WebPage() {
                     <TableCell>{categoriaNombre(p.categoria_id)}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatCurrency(preciosQ.data?.get(p.id) ?? 0)}
-                    </TableCell>
-                    <TableCell
-                      className={`text-right tabular-nums ${
-                        stockQ.data && sinStock ? 'font-semibold text-destructive' : ''
-                      }`}
-                      title={
-                        !stockQ.data
-                          ? 'Cargando stock…'
-                          : sinStock
-                          ? 'Sin stock — conviene no publicar'
-                          : `${stock} unidades`
-                      }
-                    >
-                      {!stockQ.data ? (
-                        <span className="inline-flex justify-end">
-                          <Skeleton className="h-4 w-10" />
-                        </span>
-                      ) : (
-                        stock
-                      )}
                     </TableCell>
                     <TableCell>
                       {p.descripcion_larga ? (

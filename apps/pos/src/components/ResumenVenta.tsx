@@ -171,13 +171,13 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
         </div>
       </div>
 
-      <div className="border-t bg-background p-4">
-        <div className="mb-3 grid grid-cols-3 gap-2.5">
+      <div className="border-t bg-background p-3">
+        <div className="mb-2 grid grid-cols-3 gap-2">
           <Button
             size="lg"
             disabled={!hayItems}
             onClick={() => onCobrar('efectivo')}
-            className="h-16 flex-col gap-1 px-2 text-xs"
+            className="flex h-auto flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-xs"
           >
             <span className="flex items-center gap-1.5 text-sm font-semibold">
               <Banknote className="h-4 w-4" />
@@ -190,7 +190,7 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
             disabled={!hayItems}
             onClick={() => onCobrar('credito')}
             variant="secondary"
-            className="h-16 flex-col gap-1 px-2 text-xs"
+            className="flex h-auto flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-xs"
           >
             <span className="flex items-center gap-1.5 text-sm font-semibold">
               <CreditCard className="h-4 w-4" />
@@ -203,7 +203,7 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
             disabled={!hayItems}
             onClick={() => onCobrar('qr')}
             variant="secondary"
-            className="h-16 flex-col gap-1 px-2 text-xs"
+            className="flex h-auto flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-xs"
           >
             <span className="flex items-center gap-1.5 text-sm font-semibold">
               <Smartphone className="h-4 w-4" />
@@ -215,7 +215,7 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
         <Button
           variant="ghost"
           size="sm"
-          className="mt-1 w-full text-destructive"
+          className="w-full text-destructive"
           disabled={!hayItems}
           onClick={onCancelar}
         >

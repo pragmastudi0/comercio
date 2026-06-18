@@ -1,8 +1,8 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Package } from 'lucide-react';
 import { getDb } from '@/lib/db';
@@ -17,6 +17,7 @@ import { ProcesoCompra } from '@/components/proceso-compra';
 
 function CatalogoInner() {
   const db = getDb();
+  const router = useRouter();
   const params = useSearchParams();
   const catParam = params.get('cat') ?? '';
   const [texto, setTexto] = useState('');
@@ -24,6 +25,14 @@ function CatalogoInner() {
   const categoriasQ = useQuery({
     queryKey: ['categorias'],
     queryFn: () => db.categorias.list(),
+  });
+  // TODOS los productos publicados (sin filtro de texto/cat). Sirve para
+  // saber qué categorías tienen al menos un producto cargado para no
+  // mostrar categorías vacías en el selector.
+  const todosPublicadosQ = useQuery({
+    queryKey: ['catalogo-todos-publicados'],
+    queryFn: () => db.productos.list({ publicado_web: true, activo: true }),
+    staleTime: 5 * 60_000,
   });
   const productosQ = useQuery({
     queryKey: ['productos-web-cat', catParam, texto],
@@ -70,6 +79,26 @@ function CatalogoInner() {
   const categorias = categoriasQ.data ?? [];
   const productos = productosQ.data ?? [];
 
+  // Solo categorías que tienen al menos un producto publicado, con su
+  // conteo. Las que no tienen productos cargados no aparecen en el selector.
+  const categoriasConProductos = useMemo(() => {
+    const conteo = new Map<string, number>();
+    for (const p of todosPublicadosQ.data ?? []) {
+      conteo.set(p.categoria_id, (conteo.get(p.categoria_id) ?? 0) + 1);
+    }
+    return categorias
+      .filter((c) => (conteo.get(c.id) ?? 0) > 0)
+      .map((c) => ({ ...c, cantidad: conteo.get(c.id) ?? 0 }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+  }, [categorias, todosPublicadosQ.data]);
+
+  const totalProductos = todosPublicadosQ.data?.length ?? 0;
+
+  function cambiarCategoria(catId: string) {
+    const url = catId ? `/catalogo?cat=${catId}` : '/catalogo';
+    router.push(url);
+  }
+
   function precioUnitario(productoId: string): number {
     const escalas = preciosQ.data?.get(productoId) ?? [];
     return escalas[0]?.precio ?? 0;
@@ -91,7 +120,7 @@ function CatalogoInner() {
         <ProcesoCompra />
       </div>
 
-      <div className="mb-6 grid gap-3 md:grid-cols-[1fr_240px]">
+      <div className="mb-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -101,22 +130,46 @@ function CatalogoInner() {
             className="h-11 pl-10 text-base"
           />
         </div>
-        <select
-          value={catParam}
-          onChange={(e) => {
-            const v = e.target.value;
-            const url = v ? `/catalogo?cat=${v}` : '/catalogo';
-            window.location.href = url;
-          }}
-          className="h-11 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="">Todas las categorías</option>
-          {categorias.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre}
-            </option>
-          ))}
-        </select>
+      </div>
+
+      {/* Selector de categorías como chips horizontales scrollables.
+          Más visual y fácil de usar en mobile que un select. Solo
+          muestra categorías que tienen al menos 1 producto cargado. */}
+      <div className="-mx-4 mb-6 overflow-x-auto px-4">
+        <div className="flex w-max gap-2 pb-1">
+          <button
+            type="button"
+            onClick={() => cambiarCategoria('')}
+            className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+              catParam === ''
+                ? 'border-foreground bg-foreground text-background'
+                : 'border-input bg-background hover:border-foreground/40'
+            }`}
+          >
+            Todos
+            {totalProductos > 0 && (
+              <span className="text-xs opacity-75">({totalProductos})</span>
+            )}
+          </button>
+          {categoriasConProductos.map((c) => {
+            const activa = catParam === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => cambiarCategoria(c.id)}
+                className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                  activa
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-input bg-background hover:border-foreground/40'
+                }`}
+              >
+                {c.nombre}
+                <span className="text-xs opacity-75">({c.cantidad})</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {productosQ.isLoading ? (

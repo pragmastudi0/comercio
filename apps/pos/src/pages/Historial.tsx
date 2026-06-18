@@ -55,18 +55,37 @@ export function Historial() {
     return e ? `${e.nombre} ${e.apellido}` : '—';
   };
 
-  // Orden y filtro en memoria.
+  // Catálogo de productos (para buscar por código y mostrar nombre en cada
+  // venta). Tener todo en memoria es OK porque ya está cacheado.
+  const productosQ = useQuery({
+    queryKey: ['productos-all'],
+    queryFn: () => db.productos.list(),
+  });
+  const productoPorId = (id: string) =>
+    productosQ.data?.find((p) => p.id === id);
+
+  // Orden y filtro en memoria. La búsqueda mira número de ticket, cajero
+  // y código/nombre de cualquier producto incluido en la venta — así el
+  // cajero puede encontrar la venta de "tal producto" sin recordar el
+  // número.
   const ventas = useMemo(() => {
     const lista = [...(ventasQ.data ?? [])].reverse();
     const q = filtro.trim().toLowerCase();
     if (!q) return lista;
-    return lista.filter(
-      (v) =>
-        v.numero.toLowerCase().includes(q) ||
-        empleadoNombre(v.empleado_id).toLowerCase().includes(q),
-    );
+    return lista.filter((v) => {
+      if (v.numero.toLowerCase().includes(q)) return true;
+      if (empleadoNombre(v.empleado_id).toLowerCase().includes(q)) return true;
+      // Buscar por código o nombre de cualquier producto vendido.
+      for (const it of v.items) {
+        const p = productoPorId(it.producto_id);
+        if (!p) continue;
+        if (p.codigo_interno.toLowerCase().includes(q)) return true;
+        if (p.nombre.toLowerCase().includes(q)) return true;
+      }
+      return false;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ventasQ.data, filtro, empleadosQ.data]);
+  }, [ventasQ.data, filtro, empleadosQ.data, productosQ.data]);
 
   if (!caja) {
     navigate('/abrir-caja');
@@ -97,7 +116,7 @@ export function Historial() {
           <Input
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
-            placeholder="Buscar por número de ticket o cajero"
+            placeholder="Número de ticket, cajero, código o nombre de producto"
             className="h-11 pl-10 text-base"
             autoFocus
           />
