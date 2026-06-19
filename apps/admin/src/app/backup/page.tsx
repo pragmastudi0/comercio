@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { format, subDays } from 'date-fns';
-import { Download, Lock, Database, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { Download, Lock, Database, FileSpreadsheet, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import { toast } from 'sonner';
 import { useSesion } from '@/stores/sesion';
 import { getDb } from '@/lib/db';
@@ -12,6 +13,19 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@come
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
+
+/**
+ * Limpia un nombre para que sea válido en sistemas de archivos (Windows
+ * es el más restrictivo). Quita / \ : * ? " < > | y comas/puntos al final.
+ * También trunca a 100 chars.
+ */
+function sanitizarParaFS(nombre: string): string {
+  return nombre
+    .replace(/[/\\:*?"<>|]/g, '-')
+    .replace(/[.,\s]+$/, '')
+    .trim()
+    .slice(0, 100) || 'sin-nombre';
+}
 
 const ADMIN_ROLE_ID = PRESET_IDS.roles.admin;
 
@@ -75,6 +89,7 @@ export default function BackupPage() {
   const [hasta, setHasta] = useState(hoy);
   const [generando, setGenerando] = useState(false);
   const [progreso, setProgreso] = useState<string>('');
+  const [incluirImagenes, setIncluirImagenes] = useState(false);
 
   async function generarBackup() {
     if (!esAdmin) {
@@ -352,23 +367,122 @@ export default function BackupPage() {
       append('NC - items', ncItemsRows);
       append('Clientes', clientesRows);
 
-      // 5) Descargar.
+      // 5) Empaquetar.
       const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([buf], {
+      const xlsxBlob = new Blob([buf], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
-      const url = URL.createObjectURL(blob);
+
+      let downloadBlob: Blob;
+      let downloadName: string;
+
+      if (incluirImagenes) {
+        // Backup completo: ZIP con XLSX + carpeta imagenes/ organizada por
+        // producto. Descargamos las imágenes una por una de Supabase Storage
+        // (URL pública), informando progreso.
+        setProgreso('Descargando imágenes…');
+        const zip = new JSZip();
+        zip.file(`turisteando-backup_${desde}_${hasta}.xlsx`, xlsxBlob);
+        const imgsFolder = zip.folder('imagenes')!;
+
+        // Para no saturar: solo productos ACTIVOS. Si bajáramos los borrados
+        // o publicados=false al final no aportan.
+        const productosActivos = productos.filter((p) => p.activo);
+        let descargadas = 0;
+        let omitidas = 0;
+        const errores: string[] = [];
+        for (let i = 0; i < productosActivos.length; i++) {
+          const p = productosActivos[i]!;
+          if (i % 25 === 0) {
+            setProgreso(
+              `Descargando imágenes · ${i}/${productosActivos.length} productos`,
+            );
+          }
+          try {
+            const imgs = await db.productos.imagenes(p.id);
+            if (imgs.length === 0) {
+              omitidas++;
+              continue;
+            }
+            const subdir =
+              `${sanitizarParaFS(p.codigo_interno)} - ${sanitizarParaFS(p.nombre)}`;
+            const prodFolder = imgsFolder.folder(subdir)!;
+            for (let j = 0; j < imgs.length; j++) {
+              const img = imgs[j]!;
+              try {
+                const res = await fetch(img.url);
+                if (!res.ok) {
+                  errores.push(`${subdir}/img-${j + 1}: HTTP ${res.status}`);
+                  continue;
+                }
+                const blob = await res.blob();
+                // Tomamos la extensión del Content-Type, default jpg.
+                const ext = blob.type.split('/')[1]?.split(';')[0] || 'jpg';
+                prodFolder.file(`img-${j + 1}.${ext}`, blob);
+                descargadas++;
+              } catch (e) {
+                errores.push(`${subdir}/img-${j + 1}: ${(e as Error).message}`);
+              }
+            }
+          } catch (e) {
+            errores.push(`${p.nombre}: ${(e as Error).message}`);
+          }
+        }
+
+        // Sumamos un README.txt con resumen y errores.
+        const readme = [
+          'TURISTEANDO — BACKUP COMPLETO',
+          '================================',
+          '',
+          `Generado: ${new Date().toLocaleString('es-AR')}`,
+          `Rango de datos: ${desde} → ${hasta}`,
+          '',
+          'CONTENIDO',
+          `· turisteando-backup_${desde}_${hasta}.xlsx — todas las operaciones del rango`,
+          `· imagenes/ — fotos de productos activos`,
+          '',
+          'IMÁGENES',
+          `· ${descargadas} archivos descargados`,
+          `· ${omitidas} productos sin imágenes cargadas`,
+          `· ${errores.length} errores (ver lista abajo)`,
+          '',
+          errores.length > 0 ? 'ERRORES' : '',
+          ...errores.slice(0, 50),
+          errores.length > 50 ? `… y ${errores.length - 50} más` : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+        zip.file('LEEME.txt', readme);
+
+        setProgreso('Comprimiendo ZIP…');
+        downloadBlob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 },
+        });
+        downloadName = `turisteando-backup-completo_${desde}_${hasta}.zip`;
+
+        toast.success(
+          `Backup completo · ${ventas.length} ventas + ${descargadas} imágenes`,
+        );
+      } else {
+        downloadBlob = xlsxBlob;
+        downloadName = `turisteando-backup_${desde}_${hasta}.xlsx`;
+        toast.success(
+          `Backup generado · ${ventas.length} ventas, ${sesiones.length} sesiones`,
+        );
+      }
+
+      // Disparar la descarga.
+      const url = URL.createObjectURL(downloadBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `turisteando-backup_${desde}_${hasta}.xlsx`;
+      a.download = downloadName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1500);
 
-      toast.success(
-        `Backup generado · ${ventas.length} ventas, ${sesiones.length} sesiones`,
-      );
       setProgreso('');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error desconocido';
@@ -501,6 +615,32 @@ export default function BackupPage() {
             </Button>
           </div>
 
+          <label
+            htmlFor="incluir-imgs"
+            className="flex cursor-pointer items-start gap-2 rounded-md border bg-muted/30 p-3 text-sm transition hover:border-foreground/30"
+          >
+            <input
+              id="incluir-imgs"
+              type="checkbox"
+              checked={incluirImagenes}
+              onChange={(e) => setIncluirImagenes(e.target.checked)}
+              disabled={generando}
+              className="mt-0.5 h-4 w-4"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5 font-medium">
+                <ImageIcon className="h-4 w-4" />
+                Incluir imágenes de productos
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                Descarga las fotos de Supabase Storage y las empaqueta en una
+                carpeta <code>imagenes/</code> con subcarpetas por producto
+                (código + nombre). Tarda más (~5–10 min con 1900 productos)
+                pero te queda un backup 100% offline.
+              </div>
+            </div>
+          </label>
+
           <Button
             type="button"
             onClick={generarBackup}
@@ -508,7 +648,11 @@ export default function BackupPage() {
             className="w-full sm:w-auto"
           >
             <Download className="mr-2 h-4 w-4" />
-            {generando ? progreso || 'Generando…' : 'Descargar backup (.xlsx)'}
+            {generando
+              ? progreso || 'Generando…'
+              : incluirImagenes
+                ? 'Descargar backup completo (.zip)'
+                : 'Descargar backup (.xlsx)'}
           </Button>
         </CardContent>
       </Card>
