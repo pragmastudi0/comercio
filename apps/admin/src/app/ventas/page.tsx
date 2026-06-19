@@ -241,7 +241,7 @@ export default function VentasPage() {
                     onClick={() => setVentaDetalle(v)}
                     className={`cursor-pointer ${
                       anulada
-                        ? 'border-b-0 bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20'
+                        ? 'bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20'
                         : 'hover:bg-muted/40'
                     }`}
                   >
@@ -326,32 +326,9 @@ export default function VentasPage() {
                     </TableCell>
                   </TableRow>,
                   ];
-                  // Detalle de anulación en una fila secundaria, así no
-                  // recarga la columna Estado y se ve bien alineado.
-                  if (anulada && (v.motivo_anulacion || v.anulada_por || v.anulada_en)) {
-                    rows.push(
-                      <TableRow
-                        key={`${v.id}-anul`}
-                        className="bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20"
-                      >
-                        <TableCell
-                          colSpan={10}
-                          className="!whitespace-normal !py-1.5 pl-8 text-[11px] leading-snug text-red-700"
-                        >
-                          <span className="font-medium">↳ Motivo: </span>
-                          {v.motivo_anulacion || '—'}
-                          <span className="ml-3 text-muted-foreground">
-                            {v.anulada_por
-                              ? `· por ${empleadoNombre(v.anulada_por)}`
-                              : ''}
-                            {v.anulada_en
-                              ? ` · ${formatDate(v.anulada_en)}`
-                              : ''}
-                          </span>
-                        </TableCell>
-                      </TableRow>,
-                    );
-                  }
+                  // El motivo de anulación (y autor/fecha) se muestra ahora
+                  // SOLO en el popup de detalle. La tabla queda compacta
+                  // y prolija sin filas secundarias.
                   return rows;
                 })}
               </TableBody>
