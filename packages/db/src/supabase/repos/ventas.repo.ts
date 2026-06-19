@@ -126,13 +126,21 @@ export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
       // Para ventas canceladas: insert directo sin RPC. No descuenta stock,
       // no genera movimientos de caja, pagos vacíos. Solo queda como
       // registro auditable.
+      //
+      // El número usa un sufijo UUID en lugar de Date.now() para evitar
+      // colisiones si dos canceladas se generan en el mismo ms (red lenta
+      // + cajero apretando Cancelar varias veces).
+      const sufijo =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID().slice(0, 8)
+          : Math.random().toString(36).slice(2, 10);
       return ok<Venta>(
         await sb
           .from('ventas')
           .insert({
             ...input,
             pagos: [],
-            numero: `CAN-${Date.now()}`,
+            numero: `CAN-${sufijo}`,
             estado: 'cancelada',
             cliente_id: input.cliente_id ?? null,
           })

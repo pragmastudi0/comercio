@@ -25,19 +25,28 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
       );
     },
     async cerrar(id, saldoFinalDeclarado) {
-      return ok<SesionCaja>(
-        await sb
-          .from('sesiones_caja')
-          .update({
-            estado: 'cerrada',
-            cerrada_en: new Date().toISOString(),
-            saldo_final_declarado: saldoFinalDeclarado,
-          })
-          .eq('id', id)
-          .select('*')
-          .single(),
-        'sesiones_caja.cerrar',
-      );
+      // Filtramos por estado=abierta para prevenir doble cierre silencioso
+      // (caso típico: el admin cierra la sesión desde /admin/caja y el
+      // cajero la cierra desde el PoS simultáneamente — sin este filtro,
+      // el segundo update pasaba sin error pero no afectaba nada).
+      const { data, error } = await sb
+        .from('sesiones_caja')
+        .update({
+          estado: 'cerrada',
+          cerrada_en: new Date().toISOString(),
+          saldo_final_declarado: saldoFinalDeclarado,
+        })
+        .eq('id', id)
+        .eq('estado', 'abierta')
+        .select('*')
+        .maybeSingle();
+      if (error) throw new Error(`sesiones_caja.cerrar: ${error.message}`);
+      if (!data) {
+        throw new Error(
+          'La caja ya estaba cerrada (otra persona la cerró primero).',
+        );
+      }
+      return data as SesionCaja;
     },
     async sesionActivaDe(empleadoId, cajaId) {
       return okMaybe<SesionCaja>(

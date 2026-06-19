@@ -80,6 +80,11 @@ export function CerrarCaja() {
       if (!sesion) throw new Error('No hay sesión activa');
       const monto = parseFloat(saldoFinal);
       if (Number.isNaN(monto)) throw new Error('Saldo final inválido');
+      // Bloqueamos negativo: el saldo declarado es el efectivo físico en
+      // caja. No tiene sentido decir "tengo menos $20 en caja".
+      if (monto < 0) {
+        throw new Error('El saldo declarado no puede ser negativo.');
+      }
       return db.sesionesCaja.cerrar(sesion.id, monto);
     },
     onSuccess: () => {
@@ -241,10 +246,24 @@ export function CerrarCaja() {
           )}
           <Button
             className="w-full"
-            disabled={!saldoFinal || cerrarMut.isPending}
+            disabled={
+              !saldoFinal ||
+              cerrarMut.isPending ||
+              movimientosQ.isLoading ||
+              ventasQ.isLoading
+            }
             onClick={() => cerrarMut.mutate()}
+            title={
+              movimientosQ.isLoading || ventasQ.isLoading
+                ? 'Esperá a que termine de cargar el resumen para evitar cerrar con datos viejos'
+                : undefined
+            }
           >
-            {cerrarMut.isPending ? 'Cerrando…' : 'Cerrar caja'}
+            {cerrarMut.isPending
+              ? 'Cerrando…'
+              : movimientosQ.isLoading || ventasQ.isLoading
+                ? 'Cargando resumen…'
+                : 'Cerrar caja'}
           </Button>
         </CardContent>
       </Card>

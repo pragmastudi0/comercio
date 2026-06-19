@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Banknote, CreditCard, Smartphone, ArrowLeftRight, X, Check } from 'lucide-react';
@@ -56,6 +57,7 @@ export function ModalCobro({
 }) {
   const db = getDb();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const empleado = useSesion((s) => s.empleado);
   const caja = useSesion((s) => s.caja);
   const sesion = useSesion((s) => s.sesionCaja);
@@ -206,11 +208,13 @@ export function ModalCobro({
         ({ valor }) => valor != null && !UUID_RE.test(valor),
       );
       if (malos.length > 0) {
-        // Forzar relogin: la sesión tiene residuo del modo mock
+        // Forzar relogin: la sesión tiene residuo del modo mock o quedó
+        // desincronizada. Limpiamos el carrito + logout + nav a login en
+        // el siguiente tick (para no romper el flujo de mutación).
         useSesion.getState().logout();
+        setTimeout(() => navigate('/login'), 100);
         throw new Error(
-          `Sesión inválida (${malos[0]!.campo} = "${malos[0]!.valor}"). ` +
-            'Por favor cerrá sesión y volvé a iniciarla.',
+          'Tu sesión quedó desincronizada. Te llevamos al login.',
         );
       }
       const items_payload = items.map((it) => ({
