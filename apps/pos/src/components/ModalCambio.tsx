@@ -2,7 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { Minus, Plus, Search, Trash2, RefreshCw } from 'lucide-react';
+import {
+  Minus,
+  Plus,
+  Search,
+  Trash2,
+  RefreshCw,
+  Banknote,
+  CreditCard,
+  Smartphone,
+} from 'lucide-react';
 import {
   Dialog,
   DialogFooter,
@@ -18,7 +27,7 @@ import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { useDepositoActivo } from '@/lib/deposito-activo';
 import { PRESET_IDS } from '@comercio/db';
-import type { Producto, Venta } from '@comercio/db';
+import type { MetodoPago, Producto, Venta } from '@comercio/db';
 
 const LISTA_CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
 
@@ -33,8 +42,11 @@ const LISTA_CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
  *   2. Si lleva items nuevos, crea una venta nueva por esos items.
  *      - Si lo nuevo ≤ lo devuelto: descuento global = total nuevo (queda $0).
  *      - Si lo nuevo > lo devuelto: descuento global = total devuelto. La
- *        diferencia se cobra en efectivo.
- *   3. El movimiento de caja por la diferencia se registra normalmente.
+ *        diferencia se cobra con el método que elija el cajero
+ *        (efectivo / tarjeta / QR).
+ *   3. El movimiento de caja por la diferencia se registra normalmente y
+ *      queda etiquetado en auditoría como `cambio_venta` para que el admin
+ *      pueda diferenciarlo de un ingreso normal.
  */
 export function ModalCambio({
   venta,
@@ -61,6 +73,8 @@ export function ModalCambio({
   >([]);
   // Buscador de items nuevos.
   const [q, setQ] = useState('');
+  // Método de cobro de la diferencia (si la hay).
+  const [metodoDiferencia, setMetodoDiferencia] = useState<MetodoPago>('efectivo');
 
   // Reset al abrir/cerrar.
   useEffect(() => {
@@ -68,6 +82,7 @@ export function ModalCambio({
       setCantDevolver({});
       setItemsNuevos([]);
       setQ('');
+      setMetodoDiferencia('efectivo');
     }
   }, [open, venta.id]);
 
@@ -177,6 +192,7 @@ export function ModalCambio({
 
       // 2) Si hay items nuevos, crear venta nueva con descuento global
       //    que compense la NC.
+      let ventaNueva = null;
       if (algoNuevo) {
         const subtotalNuevo = totalNuevo;
         // Descuento global = mínimo entre lo devuelto y lo nuevo.
@@ -186,12 +202,13 @@ export function ModalCambio({
         const descuentoGlobal = Math.min(totalDevuelto, subtotalNuevo);
         const totalAPagar = subtotalNuevo - descuentoGlobal;
 
-        // Pagos: si hay diferencia, va en efectivo (versión simple).
+        // Pagos: la diferencia se cobra con el método que eligió el cajero
+        // (efectivo / tarjeta / QR). Si la diferencia es 0, no hay pago.
         const pagos = totalAPagar > 0
-          ? [{ metodo: 'efectivo' as const, monto: totalAPagar }]
+          ? [{ metodo: metodoDiferencia, monto: totalAPagar }]
           : [];
 
-        await db.ventas.crear({
+        ventaNueva = await db.ventas.crear({
           caja_id: caja.id,
           sesion_caja_id: sesion.id,
           local_id: caja.local_id,
@@ -210,6 +227,29 @@ export function ModalCambio({
           total: totalAPagar,
         });
       }
+
+      // 3) Registrar el cambio en auditoría para que el admin vea la
+      //    historia completa. Linkea la venta original con la NC y la
+      //    venta nueva (si hubo). Sin esto en el admin solo se ven 3
+      //    operaciones sueltas sin contexto.
+      await db.auditoria.log({
+        empleado_id: empleado.id,
+        accion: 'cambio_venta',
+        entidad: 'venta',
+        entidad_id: venta.id,
+        detalle: {
+          nc_id: nc.id,
+          nc_numero: nc.numero,
+          venta_nueva_id: ventaNueva?.id ?? null,
+          venta_nueva_numero: ventaNueva?.numero ?? null,
+          total_devuelto: totalDevuelto,
+          total_nuevo: totalNuevo,
+          diferencia_cobrada: Math.max(0, totalNuevo - totalDevuelto),
+          metodo_diferencia:
+            totalNuevo > totalDevuelto ? metodoDiferencia : null,
+          caja: caja.nombre,
+        },
+      });
 
       return nc;
     },
@@ -412,7 +452,7 @@ export function ModalCambio({
         <div className="mt-2 flex items-center justify-between border-t pt-2 font-medium">
           {diferencia > 0 ? (
             <>
-              <span className="text-orange-700">El cliente paga (efectivo)</span>
+              <span className="text-orange-700">El cliente paga</span>
               <span className="tabular-nums text-orange-700">
                 {formatCurrency(diferencia)}
               </span>
@@ -435,12 +475,61 @@ export function ModalCambio({
             <span className="text-muted-foreground">Marcá qué se devuelve.</span>
           )}
         </div>
+
+        {/* Selector de método de pago — sólo si hay diferencia a cobrar.
+            Si no hay diferencia (o es a favor del cliente que se pierde),
+            no tiene sentido elegir método. */}
+        {diferencia > 0 && (
+          <div className="mt-3 border-t pt-2">
+            <div className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+              Cobrar la diferencia con
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setMetodoDiferencia('efectivo')}
+                className={`flex flex-col items-center gap-1 rounded-md border p-2 text-xs transition ${
+                  metodoDiferencia === 'efectivo'
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-input hover:border-foreground/40'
+                }`}
+              >
+                <Banknote className="h-4 w-4" />
+                <span className="font-medium">Efectivo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMetodoDiferencia('debito')}
+                className={`flex flex-col items-center gap-1 rounded-md border p-2 text-xs transition ${
+                  metodoDiferencia === 'debito'
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-input hover:border-foreground/40'
+                }`}
+              >
+                <CreditCard className="h-4 w-4" />
+                <span className="font-medium">Tarjeta</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMetodoDiferencia('qr')}
+                className={`flex flex-col items-center gap-1 rounded-md border p-2 text-xs transition ${
+                  metodoDiferencia === 'qr'
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-input hover:border-foreground/40'
+                }`}
+              >
+                <Smartphone className="h-4 w-4" />
+                <span className="font-medium">QR / Transf.</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <Label className="mt-2 flex items-start gap-1 text-xs text-muted-foreground">
         <Label className="font-medium text-foreground">Importante:</Label>
         si lo nuevo es más barato, el cliente NO recibe la diferencia. Si es
-        más caro, se cobra en efectivo en esta caja.
+        más caro, se cobra en esta caja con el método elegido arriba.
       </Label>
 
       <DialogFooter>

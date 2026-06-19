@@ -90,6 +90,57 @@ export default function VentasPage() {
     return map;
   })();
 
+  // Cambios (devoluciones + venta nueva) registrados en auditoría desde el PoS.
+  // Construimos DOS mapas porque un cambio toca DOS ventas:
+  //   - ventaId ORIGINAL → resumen del cambio (qué NC, qué venta nueva, etc.)
+  //   - ventaId NUEVA    → link a la original ("esta venta es la diferencia
+  //     cobrada en el cambio de la venta XXXX")
+  // Sin esto el admin ve la venta nueva como un ingreso "normal" y no
+  // entiende por qué hay también una NC ese día.
+  type CambioInfo = {
+    venta_original_id: string;
+    venta_original_numero: string | null;
+    nc_id: string | null;
+    nc_numero: string | null;
+    venta_nueva_id: string | null;
+    venta_nueva_numero: string | null;
+    total_devuelto: number;
+    total_nuevo: number;
+    diferencia_cobrada: number;
+    metodo_diferencia: MetodoPago | null;
+    fecha: string;
+  };
+  const { cambioComoOriginal, cambioComoNueva } = (() => {
+    const original = new Map<string, CambioInfo>();
+    const nueva = new Map<string, CambioInfo>();
+    for (const log of descuentosQ.data ?? []) {
+      if (log.accion !== 'cambio_venta' || !log.entidad_id) continue;
+      const d = log.detalle ?? {};
+      // El número de la venta original no se guardó en detalle (sólo el id),
+      // pero el `entidad_id` SÍ es esa venta — el `numero` lo resolvemos al
+      // renderizar usando la lista de ventas del rango.
+      const info: CambioInfo = {
+        venta_original_id: log.entidad_id,
+        venta_original_numero: null,
+        nc_id: (d.nc_id as string | null) ?? null,
+        nc_numero: (d.nc_numero as string | null) ?? null,
+        venta_nueva_id: (d.venta_nueva_id as string | null) ?? null,
+        venta_nueva_numero: (d.venta_nueva_numero as string | null) ?? null,
+        total_devuelto:
+          typeof d.total_devuelto === 'number' ? d.total_devuelto : 0,
+        total_nuevo: typeof d.total_nuevo === 'number' ? d.total_nuevo : 0,
+        diferencia_cobrada:
+          typeof d.diferencia_cobrada === 'number' ? d.diferencia_cobrada : 0,
+        metodo_diferencia:
+          (d.metodo_diferencia as MetodoPago | null) ?? null,
+        fecha: log.fecha,
+      };
+      original.set(log.entidad_id, info);
+      if (info.venta_nueva_id) nueva.set(info.venta_nueva_id, info);
+    }
+    return { cambioComoOriginal: original, cambioComoNueva: nueva };
+  })();
+
   let ventas = ventasQ.data ?? [];
   if (metodo) ventas = ventas.filter((v) => v.pagos.some((p) => p.metodo === metodo));
   if (estado) ventas = ventas.filter((v) => v.estado === estado);
@@ -319,15 +370,30 @@ export default function VentasPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {anulada ? (
-                        <Badge variant="destructive">Anulada</Badge>
-                      ) : cancelada ? (
-                        <Badge variant="outline">Cancelada</Badge>
-                      ) : v.estado === 'completada' ? (
-                        <Badge variant="secondary">Completada</Badge>
-                      ) : (
-                        <Badge>Presupuesto</Badge>
-                      )}
+                      <div className="flex flex-col items-start gap-0.5">
+                        {anulada ? (
+                          <Badge variant="destructive">Anulada</Badge>
+                        ) : cancelada ? (
+                          <Badge variant="outline">Cancelada</Badge>
+                        ) : v.estado === 'completada' ? (
+                          <Badge variant="secondary">Completada</Badge>
+                        ) : (
+                          <Badge>Presupuesto</Badge>
+                        )}
+                        {/* Tag opcional: la venta está atada a un cambio.
+                            La distinción "original con cambio" vs "venta
+                            nueva del cambio" se ve en el popup; acá sólo
+                            marcamos que existe el contexto. */}
+                        {(cambioComoOriginal.has(v.id) ||
+                          cambioComoNueva.has(v.id)) && (
+                          <Badge
+                            variant="outline"
+                            className="border-amber-300 text-amber-700"
+                          >
+                            Cambio
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-0.5">
@@ -374,15 +440,31 @@ export default function VentasPage() {
         onOpenChange={(v) => !v && setVentaDetalle(null)}
         className="max-w-2xl"
       >
-        {ventaDetalle && (
-          <DetalleVenta
-            venta={ventaDetalle}
-            empleadoNombre={empleadoNombre}
-            localNombre={localNombre}
-            motivoDescuento={descuentoPorVenta.get(ventaDetalle.id)?.motivo ?? null}
-            productosCache={productosQ.data ?? []}
-          />
-        )}
+        {ventaDetalle && (() => {
+          // Resolvemos el "número" de la venta original a partir de la lista
+          // ya cargada del rango (auditoría sólo guarda el id).
+          const enrich = (c: CambioInfo | undefined): CambioInfo | null => {
+            if (!c) return null;
+            if (c.venta_original_numero) return c;
+            const orig = ventas.find((v) => v.id === c.venta_original_id);
+            return { ...c, venta_original_numero: orig?.numero ?? null };
+          };
+          return (
+            <DetalleVenta
+              venta={ventaDetalle}
+              empleadoNombre={empleadoNombre}
+              localNombre={localNombre}
+              motivoDescuento={
+                descuentoPorVenta.get(ventaDetalle.id)?.motivo ?? null
+              }
+              cambioComoOriginal={enrich(
+                cambioComoOriginal.get(ventaDetalle.id),
+              )}
+              cambioComoNueva={enrich(cambioComoNueva.get(ventaDetalle.id))}
+              productosCache={productosQ.data ?? []}
+            />
+          );
+        })()}
         <DialogFooter>
           <Button variant="outline" onClick={() => setVentaDetalle(null)}>
             Cerrar
@@ -401,17 +483,35 @@ export default function VentasPage() {
   );
 }
 
+type CambioInfoView = {
+  venta_original_id: string;
+  venta_original_numero: string | null;
+  nc_id: string | null;
+  nc_numero: string | null;
+  venta_nueva_id: string | null;
+  venta_nueva_numero: string | null;
+  total_devuelto: number;
+  total_nuevo: number;
+  diferencia_cobrada: number;
+  metodo_diferencia: MetodoPago | null;
+  fecha: string;
+};
+
 function DetalleVenta({
   venta,
   empleadoNombre,
   localNombre,
   motivoDescuento,
+  cambioComoOriginal,
+  cambioComoNueva,
   productosCache,
 }: {
   venta: Venta;
   empleadoNombre: (id: string) => string;
   localNombre: (id: string) => string;
   motivoDescuento: string | null;
+  cambioComoOriginal: CambioInfoView | null;
+  cambioComoNueva: CambioInfoView | null;
   productosCache: { id: string; codigo_interno: string; nombre: string }[];
 }) {
   const productoInfo = (id: string) =>
@@ -457,6 +557,126 @@ function DetalleVenta({
           </div>
         </div>
       </div>
+
+      {/* Banner de cambio — esta venta es la ORIGINAL que tuvo un cambio.
+          Le decimos al admin qué NC se emitió, si hubo venta nueva, cuánto
+          se devolvió y cuánto se cobró de diferencia (y con qué método).
+          Sin esto, en la lista ve "la venta de $X" y al lado, en NC, ve la
+          devolución, sin saber que están relacionadas. */}
+      {cambioComoOriginal && (
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="font-medium">
+            Esta venta tuvo un cambio el {formatDate(cambioComoOriginal.fecha)}
+          </div>
+          <div className="mt-2 grid gap-1 text-xs">
+            <div>
+              <span className="text-amber-700">Se devolvió:</span>{' '}
+              <span className="font-medium tabular-nums">
+                {formatCurrency(cambioComoOriginal.total_devuelto)}
+              </span>
+              {cambioComoOriginal.nc_numero && (
+                <>
+                  {' '}vía nota de crédito{' '}
+                  <span className="font-mono">
+                    #{cambioComoOriginal.nc_numero}
+                  </span>
+                </>
+              )}
+            </div>
+            {cambioComoOriginal.venta_nueva_id ? (
+              <>
+                <div>
+                  <span className="text-amber-700">Se llevó:</span>{' '}
+                  <span className="font-medium tabular-nums">
+                    {formatCurrency(cambioComoOriginal.total_nuevo)}
+                  </span>
+                  {cambioComoOriginal.venta_nueva_numero && (
+                    <>
+                      {' '}en venta{' '}
+                      <span className="font-mono">
+                        #{cambioComoOriginal.venta_nueva_numero}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {cambioComoOriginal.diferencia_cobrada > 0 ? (
+                  <div>
+                    <span className="text-amber-700">Cobró diferencia:</span>{' '}
+                    <span className="font-medium tabular-nums">
+                      {formatCurrency(cambioComoOriginal.diferencia_cobrada)}
+                    </span>
+                    {cambioComoOriginal.metodo_diferencia && (
+                      <>
+                        {' '}en{' '}
+                        <span className="font-medium">
+                          {LABEL_METODO[cambioComoOriginal.metodo_diferencia]}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                ) : cambioComoOriginal.total_nuevo <
+                  cambioComoOriginal.total_devuelto ? (
+                  <div className="italic text-amber-700">
+                    Quedó saldo a favor del cliente (no se devolvió plata —
+                    política Turisteando).
+                  </div>
+                ) : (
+                  <div className="italic text-amber-700">Cambio exacto.</div>
+                )}
+              </>
+            ) : (
+              <div className="italic text-amber-700">
+                Devolución sin reemplazo (no se llevó otro producto).
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Banner de cambio — esta venta NO es la original sino la "venta nueva"
+          generada por la diferencia del cambio. Sirve para que el admin no
+          piense que es un ingreso normal. */}
+      {cambioComoNueva && (
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="font-medium">
+            Esta venta es la diferencia de un cambio
+            {cambioComoNueva.venta_original_numero && (
+              <>
+                {' '}sobre la venta original{' '}
+                <span className="font-mono">
+                  #{cambioComoNueva.venta_original_numero}
+                </span>
+              </>
+            )}
+          </div>
+          <div className="mt-1 text-xs text-amber-800">
+            El cliente devolvió{' '}
+            <span className="font-medium tabular-nums">
+              {formatCurrency(cambioComoNueva.total_devuelto)}
+            </span>{' '}
+            (NC{' '}
+            {cambioComoNueva.nc_numero ? (
+              <span className="font-mono">#{cambioComoNueva.nc_numero}</span>
+            ) : (
+              '—'
+            )}
+            ) y se llevó productos por{' '}
+            <span className="font-medium tabular-nums">
+              {formatCurrency(cambioComoNueva.total_nuevo)}
+            </span>
+            . Acá se registra sólo la diferencia cobrada
+            {cambioComoNueva.metodo_diferencia && (
+              <>
+                {' '}en{' '}
+                <span className="font-medium">
+                  {LABEL_METODO[cambioComoNueva.metodo_diferencia]}
+                </span>
+              </>
+            )}
+            .
+          </div>
+        </div>
+      )}
 
       {/* Items */}
       <div className="mt-3">
