@@ -41,6 +41,7 @@ export default function VentasPage() {
   const [empleadoId, setEmpleadoId] = useState<string>('');
   const [localId, setLocalId] = useState<string>('');
   const [metodo, setMetodo] = useState<string>('');
+  const [estado, setEstado] = useState<string>('');
   // Venta seleccionada para ver el detalle en el popup.
   const [ventaDetalle, setVentaDetalle] = useState<Venta | null>(null);
 
@@ -91,6 +92,7 @@ export default function VentasPage() {
 
   let ventas = ventasQ.data ?? [];
   if (metodo) ventas = ventas.filter((v) => v.pagos.some((p) => p.metodo === metodo));
+  if (estado) ventas = ventas.filter((v) => v.estado === estado);
 
   const total = ventas
     .filter((v) => v.estado === 'completada')
@@ -126,7 +128,7 @@ export default function VentasPage() {
           <CardTitle className="text-sm">Filtros</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <div>
               <Label className="mb-1 block text-xs">Desde</Label>
               <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
@@ -178,6 +180,20 @@ export default function VentasPage() {
                     {v}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Estado</Label>
+              <select
+                value={estado}
+                onChange={(e) => setEstado(e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos</option>
+                <option value="completada">Completadas</option>
+                <option value="anulada">Anuladas</option>
+                <option value="cancelada">Canceladas</option>
+                <option value="presupuesto">Presupuestos</option>
               </select>
             </div>
           </div>
@@ -235,6 +251,7 @@ export default function VentasPage() {
               <TableBody>
                 {[...ventas].reverse().flatMap((v) => {
                   const anulada = v.estado === 'anulada';
+                  const cancelada = v.estado === 'cancelada';
                   const rows = [
                   <TableRow
                     key={v.id}
@@ -242,7 +259,9 @@ export default function VentasPage() {
                     className={`cursor-pointer ${
                       anulada
                         ? 'bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20'
-                        : 'hover:bg-muted/40'
+                        : cancelada
+                          ? 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
+                          : 'hover:bg-muted/40'
                     }`}
                   >
                     <TableCell className="font-mono text-xs">{v.numero}</TableCell>
@@ -251,7 +270,9 @@ export default function VentasPage() {
                     <TableCell>{localNombre(v.local_id)}</TableCell>
                     <TableCell>{v.items.reduce((a, i) => a + i.cantidad, 0)}</TableCell>
                     <TableCell className="text-xs">
-                      {(() => {
+                      {cancelada ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (() => {
                         const ms = Array.from(new Set(v.pagos.map((p) => p.metodo)));
                         // Compacto: si es un solo método, mostramos el nombre;
                         // si es mixto, solo "Mixto" sin el desglose (el detalle
@@ -284,14 +305,24 @@ export default function VentasPage() {
                     </TableCell>
                     <TableCell
                       className={`text-right font-medium tabular-nums ${
-                        anulada ? 'text-red-700 line-through' : ''
+                        anulada
+                          ? 'text-red-700 line-through'
+                          : cancelada
+                            ? 'text-muted-foreground line-through'
+                            : ''
                       }`}
                     >
-                      {formatCurrency(v.total)}
+                      {cancelada ? (
+                        <span className="text-xs">—</span>
+                      ) : (
+                        formatCurrency(v.total)
+                      )}
                     </TableCell>
                     <TableCell>
                       {anulada ? (
                         <Badge variant="destructive">Anulada</Badge>
+                      ) : cancelada ? (
+                        <Badge variant="outline">Cancelada</Badge>
                       ) : v.estado === 'completada' ? (
                         <Badge variant="secondary">Completada</Badge>
                       ) : (
@@ -410,6 +441,8 @@ function DetalleVenta({
           <div className="font-medium">
             {venta.estado === 'anulada' ? (
               <Badge variant="destructive">Anulada</Badge>
+            ) : venta.estado === 'cancelada' ? (
+              <Badge variant="outline">Cancelada</Badge>
             ) : venta.estado === 'completada' ? (
               <Badge variant="secondary">Completada</Badge>
             ) : (
@@ -550,6 +583,18 @@ function DetalleVenta({
           <div className="mt-1 text-xs text-red-700">
             {venta.anulada_por && `Por ${empleadoNombre(venta.anulada_por)}`}
             {venta.anulada_en && ` · ${formatDate(venta.anulada_en)}`}
+          </div>
+        </div>
+      )}
+
+      {/* Venta cancelada — carrito armado pero nunca cobrado. */}
+      {venta.estado === 'cancelada' && (
+        <div className="mt-3 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+          <div className="font-medium text-foreground">Esta venta fue cancelada</div>
+          <div className="mt-1">
+            El cajero armó el carrito pero NO se llegó a cobrar. No hay
+            descuento de stock ni movimiento de caja. Queda registrada para
+            auditoría.
           </div>
         </div>
       )}

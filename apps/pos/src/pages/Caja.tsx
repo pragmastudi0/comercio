@@ -6,6 +6,8 @@ import { LogOut, History } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { useVenta } from '@/stores/venta';
+import { useDepositoActivo } from '@/lib/deposito-activo';
+import { getDb } from '@/lib/db';
 import { BuscadorProducto } from '@/components/BuscadorProducto';
 import { Carrito } from '@/components/Carrito';
 import { ResumenVenta } from '@/components/ResumenVenta';
@@ -17,8 +19,11 @@ import type { MetodoPago } from '@comercio/db';
 
 export function Caja() {
   const navigate = useNavigate();
+  const db = getDb();
   const empleado = useSesion((s) => s.empleado);
   const caja = useSesion((s) => s.caja);
+  const sesion = useSesion((s) => s.sesionCaja);
+  const { depositoId } = useDepositoActivo();
   const items = useVenta((s) => s.items);
   const limpiar = useVenta((s) => s.limpiar);
 
@@ -34,12 +39,45 @@ export function Caja() {
     setModalCobro({ open: true, metodo });
   }
 
-  function cancelarVenta() {
+  async function cancelarVenta() {
     if (items.length === 0) return;
-    if (confirm('¿Cancelar la venta actual? Se vaciará el carrito.')) {
-      limpiar();
-      toast.info('Venta cancelada');
+    if (!confirm('¿Cancelar la venta actual? Se vaciará el carrito.')) return;
+    // Si el carrito tenía items y hay sesión activa, registramos la venta
+    // como "cancelada" para que el dueño pueda auditarla desde /admin/ventas.
+    // No descuenta stock ni afecta caja.
+    if (empleado && caja && sesion) {
+      try {
+        const subtotal = items.reduce(
+          (acc, it) => acc + it.cantidad * it.precio_unitario,
+          0,
+        );
+        await db.ventas.cancelar({
+          caja_id: caja.id,
+          sesion_caja_id: sesion.id,
+          local_id: caja.local_id,
+          deposito_id: depositoId,
+          empleado_id: empleado.id,
+          items: items.map((it) => ({
+            producto_id: it.producto.id,
+            cantidad: it.cantidad,
+            precio_unitario: it.precio_unitario,
+            descuento_pct: it.descuento_pct,
+            subtotal: it.cantidad * it.precio_unitario,
+          })),
+          subtotal,
+          descuento_total: 0,
+          recargo_total: 0,
+          total: subtotal,
+        });
+      } catch (e) {
+        // No bloquear el cancel si el registro falla — el cajero debe
+        // poder limpiar el carrito sí o sí. Logueamos para diagnóstico.
+        // eslint-disable-next-line no-console
+        console.error('No se pudo registrar venta cancelada:', e);
+      }
     }
+    limpiar();
+    toast.info('Venta cancelada');
   }
 
   useHotkeys(

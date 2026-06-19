@@ -150,5 +150,17 @@ export function makeVentasRepo(store: Store): VentasRepo {
       store.ventas.push(v);
       return clone(v);
     },
+    async cancelar(input) {
+      const v: Venta = {
+        ...input,
+        pagos: [],
+        id: makeId('canc'),
+        numero: `CAN-${nextNumero()}`,
+        estado: 'cancelada',
+        fecha: now(),
+      };
+      store.ventas.push(v);
+      return clone(v);
+    },
   };
 }

@@ -23,7 +23,13 @@ export function VentasDelDia() {
     refetchInterval: 5000,
   });
 
-  const ventas = (ventasQ.data ?? []).slice().reverse();
+  // En el historial inmediato del PoS NO mostramos las canceladas (no se
+  // cobraron, son ruido para el cajero). Quedan en /admin/ventas como
+  // auditoría para el dueño.
+  const ventas = (ventasQ.data ?? [])
+    .filter((v) => v.estado !== 'cancelada')
+    .slice()
+    .reverse();
   // Para los totales del turno solo cuentan las completadas. Las anuladas
   // se muestran para que el cajero sepa cuáles dio de baja pero no suman.
   const completadas = (ventasQ.data ?? []).filter((v) => v.estado === 'completada');

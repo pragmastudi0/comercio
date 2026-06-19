@@ -18,4 +18,13 @@ export type VentasRepo = {
   anular(id: ID, empleadoId: ID, motivo: string): Promise<Venta>;
   // Devuelve un "presupuesto": misma forma que venta pero no descuenta stock ni afecta caja.
   presupuesto(input: Omit<Venta, 'id' | 'numero' | 'estado' | 'fecha'>): Promise<Venta>;
+  /**
+   * Registra una venta cancelada (carrito armado pero no cobrado).
+   * NO descuenta stock, NO afecta caja, NO genera movimientos. Sirve sólo
+   * para auditoría: el dueño puede ver qué carritos se cargan y se cancelan.
+   * Los `pagos` siempre quedan vacíos.
+   */
+  cancelar(
+    input: Omit<Venta, 'id' | 'numero' | 'estado' | 'fecha' | 'pagos'>,
+  ): Promise<Venta>;
 };

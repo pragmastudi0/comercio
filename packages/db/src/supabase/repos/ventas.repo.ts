@@ -122,5 +122,24 @@ export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
         'ventas.presupuesto',
       );
     },
+    async cancelar(input) {
+      // Para ventas canceladas: insert directo sin RPC. No descuenta stock,
+      // no genera movimientos de caja, pagos vacíos. Solo queda como
+      // registro auditable.
+      return ok<Venta>(
+        await sb
+          .from('ventas')
+          .insert({
+            ...input,
+            pagos: [],
+            numero: `CAN-${Date.now()}`,
+            estado: 'cancelada',
+            cliente_id: input.cliente_id ?? null,
+          })
+          .select('*')
+          .single(),
+        'ventas.cancelar',
+      );
+    },
   };
 }

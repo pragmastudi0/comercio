@@ -232,7 +232,7 @@ export type Venta = {
   descuento_total: number;
   recargo_total: number;
   total: number;
-  estado: 'completada' | 'anulada' | 'presupuesto';
+  estado: 'completada' | 'anulada' | 'presupuesto' | 'cancelada';
   anulada_por?: ID;
   anulada_en?: ISODate;
   motivo_anulacion?: string;
