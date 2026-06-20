@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
@@ -191,6 +191,18 @@ export default function DashboardPage() {
 
   const subRango = rango === 'hoy' ? 'Actualiza cada 10s' : LABEL_RANGO[rango];
 
+  // Valores animados de las tarjetas financieras. Cada uno anima de 0 al
+  // target en ~900ms con ease-out cuando cambia el rango → da un feel de
+  // "loader" tipo Google sin agregar libs. Para las tarjetas operativas
+  // (cajas abiertas / sin stock) lo dejamos estático, porque son enteros
+  // chicos y el efecto no aporta.
+  const totalRangoAnim = useCountUp(totalRango);
+  const gananciaAnim = useCountUp(indicadores.ganancia);
+  const efectivoAnim = useCountUp(indicadores.efectivo);
+  const otrosAnim = useCountUp(indicadores.otros);
+  const valuacionCostoAnim = useCountUp(valuacion.totalCosto);
+  const valuacionPrecioAnim = useCountUp(valuacion.totalPrecio);
+
   return (
     <div className="container mx-auto px-4 py-6 sm:py-8">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -252,7 +264,7 @@ export default function DashboardPage() {
         <Link href="/ventas" className="block">
           <KpiCard
             titulo={`Facturado ${LABEL_RANGO[rango].toLowerCase()}`}
-            valor={formatCurrency(totalRango)}
+            valor={formatCurrency(Math.round(totalRangoAnim))}
             sub={`${ventasRango.length} tickets · ver historial`}
             icon={TrendingUp}
             loading={ventasQ.isLoading}
@@ -261,21 +273,21 @@ export default function DashboardPage() {
         </Link>
         <KpiCard
           titulo="Ganancia bruta"
-          valor={formatCurrency(indicadores.ganancia)}
+          valor={formatCurrency(Math.round(gananciaAnim))}
           sub={`Bruto (s/desc.): ${formatCurrency(indicadores.bruto)}`}
           icon={PiggyBank}
           loading={ventasQ.isLoading || productosLookupQ.isLoading}
         />
         <KpiCard
           titulo="Cobrado en efectivo"
-          valor={formatCurrency(indicadores.efectivo)}
+          valor={formatCurrency(Math.round(efectivoAnim))}
           sub={`${pctTexto(indicadores.efectivo, totalRango)} del total`}
           icon={Banknote}
           loading={ventasQ.isLoading}
         />
         <KpiCard
           titulo="Otros cobros"
-          valor={formatCurrency(indicadores.otros)}
+          valor={formatCurrency(Math.round(otrosAnim))}
           sub="Tarjeta · QR · Transf."
           icon={CreditCard}
           loading={ventasQ.isLoading}
@@ -320,14 +332,14 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         <KpiCard
           titulo="Mercadería al costo"
-          valor={formatCurrency(valuacion.totalCosto)}
+          valor={formatCurrency(Math.round(valuacionCostoAnim))}
           sub={`${valuacion.unidades.toLocaleString('es-AR')} unidades en stock`}
           icon={Warehouse}
           loading={valuacionCargando}
         />
         <KpiCard
           titulo="Valor de venta (consumidor final)"
-          valor={formatCurrency(valuacion.totalPrecio)}
+          valor={formatCurrency(Math.round(valuacionPrecioAnim))}
           sub={`Potencial si se vende todo el stock`}
           icon={Tag}
           loading={valuacionCargando}
@@ -398,10 +410,50 @@ function pctTexto(parte: number, total: number): string {
 }
 
 /**
+ * Anima un valor de 0 a `target` en `durationMs` con ease-out cubic,
+ * actualizando vía `requestAnimationFrame` (sin libs). Re-dispara cuando
+ * el target cambia → al cambiar el rango del dashboard los números se
+ * "rellenan" de nuevo (efecto Google-style cargando).
+ *
+ * Si `target` baja por una nueva carga (p.ej. de mes con mucho a hoy con
+ * poco), arrancamos de 0 igual — es lo que pidió el cliente: que en cada
+ * cambio se sienta como un loader.
+ */
+function useCountUp(target: number, durationMs = 900): number {
+  const [value, setValue] = useState(0);
+  // El frame se cancela en cleanup; ref evita stale closures.
+  const rafRef = useRef<number | null>(null);
+  useEffect(() => {
+    // Cualquier animación previa la cortamos antes de empezar la nueva.
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    if (target === 0) {
+      setValue(0);
+      return;
+    }
+    const start = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
+      setValue(target * eased);
+      if (p < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [target, durationMs]);
+  return value;
+}
+
+/**
  * Donut de "cómo cobramos" en el período. Solo 2 slices: efectivo vs el
  * resto. Inline SVG con `pathLength=100` para que el dasharray sea el
- * porcentaje directo — sin lib externa. El sub-cálculo de monto/porcentaje
- * lo hacemos arriba en `indicadores`.
+ * porcentaje directo — sin lib externa.
+ *
+ * Animación: `useCountUp` anima efectivo y otros de 0 al target en sync.
+ * Como el donut deriva los porcentajes de esos valores animados, se
+ * "rellena" solo. Además aplicamos un fade-in suave la primera vez que
+ * los datos están disponibles.
  */
 function DonutCobros({
   efectivo,
@@ -412,10 +464,29 @@ function DonutCobros({
   otros: number;
   loading?: boolean;
 }) {
+  // Valores animados (cuentan de 0 al target con ease-out). Usamos
+  // duraciones idénticas → quedan en sync sin que tengamos que combinarlos
+  // en un único rAF.
+  const efectivoAnim = useCountUp(efectivo);
+  const otrosAnim = useCountUp(otros);
+
+  // Fade-in la primera vez que `loading` pasa de true → false. Después se
+  // queda visible; los cambios de rango se sienten vía el count-up.
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (loading) return undefined;
+    // Un tick para que el navegador pinte opacity-0 antes del transition.
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, [loading]);
+
   const total = efectivo + otros;
-  // Si total = 0, mostramos un anillo gris (placeholder vacío).
-  const pctEfectivo = total > 0 ? (efectivo / total) * 100 : 0;
-  const pctOtros = total > 0 ? (otros / total) * 100 : 0;
+  const totalAnim = efectivoAnim + otrosAnim;
+  const pctEfectivoAnim = total > 0 ? (efectivoAnim / total) * 100 : 0;
+  const pctOtrosAnim = total > 0 ? (otrosAnim / total) * 100 : 0;
+  // Target del slice efectivo: lo usamos como offset del slice "otros" para
+  // que su posición de arranque NO se mueva durante la animación.
+  const pctEfectivoTarget = total > 0 ? (efectivo / total) * 100 : 0;
 
   // Tailwind no resuelve clases interpoladas → uso colores hex directos
   // tomados de la paleta del proyecto (verde-600 efectivo, índigo-500 otros).
@@ -436,23 +507,29 @@ function DonutCobros({
         {loading ? (
           <Skeleton className="h-44" />
         ) : (
-          <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8">
+          <div
+            className={`flex flex-col items-center gap-6 transition-opacity duration-700 ease-out sm:flex-row sm:items-center sm:gap-8 ${
+              visible ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
             {/* SVG donut.
                 Usamos pathLength=100 → el strokeDasharray se expresa
-                directamente como porcentaje. Cada slice empieza donde
-                termina el anterior (strokeDashoffset). */}
+                directamente como porcentaje. Las longitudes se animan
+                con un transition CSS para que el "fill" del donut sea
+                suave incluso si el count-up va a 60fps. */}
             <div className="relative h-44 w-44 shrink-0">
               <svg viewBox="0 0 100 100" className="-rotate-90">
-                {total === 0 ? (
-                  <circle
-                    cx={50}
-                    cy={50}
-                    r={42}
-                    fill="none"
-                    stroke={COLOR_VACIO}
-                    strokeWidth={14}
-                  />
-                ) : (
+                {/* Track de fondo gris — referencia visual cuando todavía
+                    está rellenando o cuando no hay cobros. */}
+                <circle
+                  cx={50}
+                  cy={50}
+                  r={42}
+                  fill="none"
+                  stroke={COLOR_VACIO}
+                  strokeWidth={14}
+                />
+                {total > 0 && (
                   <>
                     {/* Slice 1 — efectivo (verde) */}
                     <circle
@@ -463,10 +540,13 @@ function DonutCobros({
                       stroke={COLOR_EFECTIVO}
                       strokeWidth={14}
                       pathLength={100}
-                      strokeDasharray={`${pctEfectivo} ${100 - pctEfectivo}`}
+                      strokeDasharray={`${pctEfectivoAnim} ${100 - pctEfectivoAnim}`}
                       strokeDashoffset={0}
+                      strokeLinecap="butt"
                     />
-                    {/* Slice 2 — otros (índigo), empieza donde termina el efectivo */}
+                    {/* Slice 2 — otros (índigo), empieza donde termina el
+                        efectivo (target, no animado — para que no se "corra"
+                        a medida que el efectivo crece). */}
                     <circle
                       cx={50}
                       cy={50}
@@ -475,37 +555,38 @@ function DonutCobros({
                       stroke={COLOR_OTROS}
                       strokeWidth={14}
                       pathLength={100}
-                      strokeDasharray={`${pctOtros} ${100 - pctOtros}`}
-                      strokeDashoffset={-pctEfectivo}
+                      strokeDasharray={`${pctOtrosAnim} ${100 - pctOtrosAnim}`}
+                      strokeDashoffset={-pctEfectivoTarget}
+                      strokeLinecap="butt"
                     />
                   </>
                 )}
               </svg>
-              {/* Centro: total cobrado del período */}
+              {/* Centro: total cobrado del período (animado). */}
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   Total cobrado
                 </span>
                 <span className="text-lg font-bold tabular-nums">
-                  {formatCurrency(total)}
+                  {formatCurrency(Math.round(totalAnim))}
                 </span>
               </div>
             </div>
 
-            {/* Leyenda con monto + porcentaje por slice */}
+            {/* Leyenda con monto + porcentaje por slice (también animados). */}
             <div className="flex-1 space-y-3 text-sm">
               <LeyendaSlice
                 color={COLOR_EFECTIVO}
                 etiqueta="Efectivo"
-                monto={efectivo}
-                pct={pctEfectivo}
+                montoAnim={efectivoAnim}
+                pctAnim={pctEfectivoAnim}
                 total={total}
               />
               <LeyendaSlice
                 color={COLOR_OTROS}
                 etiqueta="Otros (tarjeta · QR · transf. · cta. cte.)"
-                monto={otros}
-                pct={pctOtros}
+                montoAnim={otrosAnim}
+                pctAnim={pctOtrosAnim}
                 total={total}
               />
               {total === 0 && (
@@ -524,14 +605,14 @@ function DonutCobros({
 function LeyendaSlice({
   color,
   etiqueta,
-  monto,
-  pct,
+  montoAnim,
+  pctAnim,
   total,
 }: {
   color: string;
   etiqueta: string;
-  monto: number;
-  pct: number;
+  montoAnim: number;
+  pctAnim: number;
   total: number;
 }) {
   return (
@@ -546,10 +627,10 @@ function LeyendaSlice({
       </div>
       <div className="text-right">
         <div className="font-semibold tabular-nums">
-          {formatCurrency(monto)}
+          {formatCurrency(Math.round(montoAnim))}
         </div>
         <div className="text-[11px] text-muted-foreground tabular-nums">
-          {total > 0 ? `${pct.toFixed(1)}%` : '—'}
+          {total > 0 ? `${pctAnim.toFixed(1)}%` : '—'}
         </div>
       </div>
     </div>
@@ -592,7 +673,15 @@ function KpiCard({
         {loading ? (
           <Skeleton className="h-7 w-24" />
         ) : (
-          <div className={`font-bold tabular-nums ${destacado ? 'text-3xl' : 'text-2xl'}`}>
+          <div
+            // El "fade-in" del valor lo logramos vía el count-up de los
+            // hooks `useCountUp` aplicados arriba: el número sube desde 0
+            // al target con ease-out, así que la aparición ya se siente
+            // dinámica sin necesidad de una animación de opacidad extra.
+            className={`font-bold tabular-nums ${
+              destacado ? 'text-3xl' : 'text-2xl'
+            }`}
+          >
             {valor}
           </div>
         )}
