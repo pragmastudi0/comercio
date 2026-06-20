@@ -282,6 +282,17 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Distribución de cobros — efectivo vs el resto, en donut chart.
+          Respeta el rango seleccionado (toma `indicadores`, que ya está
+          filtrado). Si no hubo cobros en el período mostramos vacío. */}
+      <div className="mb-4">
+        <DonutCobros
+          efectivo={indicadores.efectivo}
+          otros={indicadores.otros}
+          loading={ventasQ.isLoading}
+        />
+      </div>
+
       {/* Sección operativa — alertas y estado de cajas. */}
       <div className="mb-4 grid gap-4 sm:grid-cols-2">
         <Link href="/caja" className="block">
@@ -384,6 +395,165 @@ export default function DashboardPage() {
 function pctTexto(parte: number, total: number): string {
   if (!total || total <= 0) return '—';
   return `${Math.round((parte / total) * 100)}%`;
+}
+
+/**
+ * Donut de "cómo cobramos" en el período. Solo 2 slices: efectivo vs el
+ * resto. Inline SVG con `pathLength=100` para que el dasharray sea el
+ * porcentaje directo — sin lib externa. El sub-cálculo de monto/porcentaje
+ * lo hacemos arriba en `indicadores`.
+ */
+function DonutCobros({
+  efectivo,
+  otros,
+  loading,
+}: {
+  efectivo: number;
+  otros: number;
+  loading?: boolean;
+}) {
+  const total = efectivo + otros;
+  // Si total = 0, mostramos un anillo gris (placeholder vacío).
+  const pctEfectivo = total > 0 ? (efectivo / total) * 100 : 0;
+  const pctOtros = total > 0 ? (otros / total) * 100 : 0;
+
+  // Tailwind no resuelve clases interpoladas → uso colores hex directos
+  // tomados de la paleta del proyecto (verde-600 efectivo, índigo-500 otros).
+  const COLOR_EFECTIVO = '#16a34a';
+  const COLOR_OTROS = '#6366f1';
+  const COLOR_VACIO = 'rgb(229 231 235)'; // gris claro (placeholder)
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Cobros por método</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Distribución del período seleccionado · efectivo vs el resto
+          (tarjeta · QR · transferencia · cta. cte.).
+        </p>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <Skeleton className="h-44" />
+        ) : (
+          <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8">
+            {/* SVG donut.
+                Usamos pathLength=100 → el strokeDasharray se expresa
+                directamente como porcentaje. Cada slice empieza donde
+                termina el anterior (strokeDashoffset). */}
+            <div className="relative h-44 w-44 shrink-0">
+              <svg viewBox="0 0 100 100" className="-rotate-90">
+                {total === 0 ? (
+                  <circle
+                    cx={50}
+                    cy={50}
+                    r={42}
+                    fill="none"
+                    stroke={COLOR_VACIO}
+                    strokeWidth={14}
+                  />
+                ) : (
+                  <>
+                    {/* Slice 1 — efectivo (verde) */}
+                    <circle
+                      cx={50}
+                      cy={50}
+                      r={42}
+                      fill="none"
+                      stroke={COLOR_EFECTIVO}
+                      strokeWidth={14}
+                      pathLength={100}
+                      strokeDasharray={`${pctEfectivo} ${100 - pctEfectivo}`}
+                      strokeDashoffset={0}
+                    />
+                    {/* Slice 2 — otros (índigo), empieza donde termina el efectivo */}
+                    <circle
+                      cx={50}
+                      cy={50}
+                      r={42}
+                      fill="none"
+                      stroke={COLOR_OTROS}
+                      strokeWidth={14}
+                      pathLength={100}
+                      strokeDasharray={`${pctOtros} ${100 - pctOtros}`}
+                      strokeDashoffset={-pctEfectivo}
+                    />
+                  </>
+                )}
+              </svg>
+              {/* Centro: total cobrado del período */}
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Total cobrado
+                </span>
+                <span className="text-lg font-bold tabular-nums">
+                  {formatCurrency(total)}
+                </span>
+              </div>
+            </div>
+
+            {/* Leyenda con monto + porcentaje por slice */}
+            <div className="flex-1 space-y-3 text-sm">
+              <LeyendaSlice
+                color={COLOR_EFECTIVO}
+                etiqueta="Efectivo"
+                monto={efectivo}
+                pct={pctEfectivo}
+                total={total}
+              />
+              <LeyendaSlice
+                color={COLOR_OTROS}
+                etiqueta="Otros (tarjeta · QR · transf. · cta. cte.)"
+                monto={otros}
+                pct={pctOtros}
+                total={total}
+              />
+              {total === 0 && (
+                <p className="text-xs italic text-muted-foreground">
+                  Sin cobros registrados en el período.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LeyendaSlice({
+  color,
+  etiqueta,
+  monto,
+  pct,
+  total,
+}: {
+  color: string;
+  etiqueta: string;
+  monto: number;
+  pct: number;
+  total: number;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border bg-card/40 px-3 py-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          className="h-3 w-3 shrink-0 rounded-sm"
+          style={{ backgroundColor: color }}
+          aria-hidden
+        />
+        <span className="truncate text-sm">{etiqueta}</span>
+      </div>
+      <div className="text-right">
+        <div className="font-semibold tabular-nums">
+          {formatCurrency(monto)}
+        </div>
+        <div className="text-[11px] text-muted-foreground tabular-nums">
+          {total > 0 ? `${pct.toFixed(1)}%` : '—'}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function KpiCard({
