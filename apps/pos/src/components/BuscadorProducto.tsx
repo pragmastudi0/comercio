@@ -7,7 +7,6 @@ import { PRESET_IDS } from '@comercio/db';
 import { useVenta } from '@/stores/venta';
 import { useDepositoActivo } from '@/lib/deposito-activo';
 import { Input } from '@comercio/ui/input';
-import { formatCurrency } from '@comercio/ui/utils';
 
 // Acepta tanto el UUID real de Supabase como el ID legacy del mock 'lp_cf'.
 const LISTA_CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
@@ -252,9 +251,8 @@ export function BuscadorProducto() {
                       {stock.otros} u en {stock.otrosNombres.join(' / ')}
                     </span>
                   )}
-                  <span className="text-muted-foreground">
-                    Costo {formatCurrency(p.costo)}
-                  </span>
+                  {/* Se sacó el costo de venta: es info sensible (margen)
+                      que los cajeros no deben ver. Solo mostramos stock. */}
                 </div>
               </button>
             );

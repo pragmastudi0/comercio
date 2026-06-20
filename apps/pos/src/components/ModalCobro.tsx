@@ -544,6 +544,73 @@ export function ModalCobro({
                   <span className="text-destructive">Identificar cliente antes (F3)</span>
                 )}
               </p>
+
+              {/* Calculadora de vuelto INLINE — visible apenas el cajero
+                  elige Efectivo, antes de confirmar el pago. Así puede
+                  tipear el billete que recibe y ver el vuelto al toque,
+                  sin tener que primero "agregar pago" y después fijarse
+                  arriba. La calculadora se basa en `proximoPagoMonto`
+                  (ya tiene el descuento aplicado). */}
+              {metodo === 'efectivo' && (() => {
+                const aPagar = proximoPagoMonto;
+                const entrega = parseFloat(montoRecibido) || 0;
+                const vueltoLive = Math.max(0, entrega - aPagar);
+                const falta = Math.max(0, aPagar - entrega);
+                return (
+                  <div className="mt-3 rounded-md border bg-muted/30 p-2">
+                    <Label className="mb-1 block text-xs uppercase">
+                      Calculadora de vuelto · cliente entrega
+                    </Label>
+                    <Input
+                      type="number"
+                      step="100"
+                      value={montoRecibido}
+                      onChange={(e) => setMontoRecibido(e.target.value)}
+                      placeholder={`p.ej. ${Math.ceil(aPagar / 1000) * 1000}`}
+                      className="text-right text-base"
+                    />
+                    {entrega > 0 && (
+                      <div
+                        className={`mt-2 rounded p-2 text-sm font-medium ${
+                          vueltoLive > 0
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : falta > 0
+                              ? 'bg-destructive/10 text-destructive'
+                              : 'bg-green-100 text-green-700'
+                        }`}
+                      >
+                        {vueltoLive > 0
+                          ? `Vuelto a entregar: ${formatCurrency(vueltoLive)}`
+                          : falta > 0
+                            ? `Falta: ${formatCurrency(falta)}`
+                            : 'Pago justo'}
+                      </div>
+                    )}
+                    {/* Sugerencias rápidas: billetes redondos por encima
+                        del monto, para que el cajero no tipee. */}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {sugerenciasVuelto(aPagar).map((b) => (
+                        <button
+                          key={b}
+                          type="button"
+                          onClick={() => setMontoRecibido(String(b))}
+                          className="rounded border border-input bg-card px-2 py-1 text-xs font-medium hover:bg-accent"
+                        >
+                          {formatCurrency(b)}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setMontoRecibido(String(aPagar))}
+                        className="rounded border border-input bg-card px-2 py-1 text-xs font-medium hover:bg-accent"
+                      >
+                        Justo
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <Button className="mt-2 w-full" onClick={agregarPagoActual}>
                 Agregar pago de {formatCurrency(proximoPagoMonto)}
               </Button>
@@ -575,4 +642,28 @@ export function ModalCobro({
 
 function labelMetodo(m: MetodoPago): string {
   return METODOS.find((x) => x.metodo === m)?.label ?? m;
+}
+
+/**
+ * Sugerencias de billete típico que probablemente entrega un cliente para
+ * un monto dado. Devuelve hasta 3 valores redondos POR ENCIMA del monto
+ * para que el cajero los toque y se autocomplete la entrega.
+ *
+ * Heurística simple: redondea hacia arriba al siguiente billete de 1.000
+ * y agrega los dos siguientes saltos típicos (2.000, 5.000, 10.000…).
+ * Filtra duplicados y descarta los que igualen el monto exacto (esos
+ * están cubiertos por el botón "Justo").
+ */
+function sugerenciasVuelto(aPagar: number): number[] {
+  if (!aPagar || aPagar <= 0) return [];
+  // Denominaciones comunes en AR. Si el monto excede, escalamos.
+  const denoms = [1000, 2000, 5000, 10000, 20000];
+  const out = new Set<number>();
+  for (const d of denoms) {
+    // Múltiplo de `d` inmediatamente superior al monto a pagar.
+    const candidato = Math.ceil(aPagar / d) * d;
+    if (candidato > aPagar) out.add(candidato);
+    if (out.size >= 3) break;
+  }
+  return Array.from(out).slice(0, 3);
 }
