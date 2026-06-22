@@ -87,7 +87,9 @@ export default function EditarEmpleadoPage() {
   const eliminarMut = useMutation({
     mutationFn: () => db.empleados.delete(id),
     onSuccess: async () => {
-      toast.success('Empleado eliminado');
+      toast.success(
+        'Empleado desactivado. Ya no puede ingresar pero su historial queda intacto.',
+      );
       await qc.invalidateQueries({ queryKey: ['empleados'] });
       router.push('/empleados');
     },
@@ -126,20 +128,28 @@ export default function EditarEmpleadoPage() {
           <p className="text-sm text-muted-foreground">{email}</p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (
-                confirm(
-                  '¿Eliminar este empleado? Esta acción no se puede deshacer y queda registrada en auditoría.',
+          {/* Soft delete: el empleado queda inactivo (no puede loguearse)
+              pero se preserva el historial. Si después vuelve, se reactiva
+              cambiando el switch "Activo" en el tab Datos. */}
+          {activo && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (
+                  confirm(
+                    '¿Desactivar este empleado?\n\n' +
+                      'Ya no va a poder iniciar sesión, pero su historial ' +
+                      '(ventas, movimientos, cajas) queda intacto. Si vuelve ' +
+                      'más adelante podés reactivarlo desde acá mismo.',
+                  )
                 )
-              )
-                eliminarMut.mutate();
-            }}
-            className="text-destructive"
-          >
-            Eliminar
-          </Button>
+                  eliminarMut.mutate();
+              }}
+              className="text-destructive"
+            >
+              Desactivar
+            </Button>
+          )}
           <Button onClick={() => guardarMut.mutate()} disabled={guardarMut.isPending}>
             {guardarMut.isPending ? 'Guardando…' : 'Guardar cambios'}
           </Button>

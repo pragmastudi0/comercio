@@ -62,7 +62,21 @@ export function makeEmpleadosRepo(sb: SupabaseClient): EmpleadosRepo {
       );
     },
     async delete(id) {
-      const { error } = await sb.from('empleados').delete().eq('id', id);
+      // SOFT delete: en un sistema con historial (ventas, movimientos de
+      // stock, sesiones de caja, cuentas corrientes…), el empleado está
+      // referenciado por FK desde varias tablas. Un DELETE físico falla
+      // con "violates foreign key constraint" apenas el empleado tiene
+      // una venta a su nombre.
+      //
+      // Lo correcto es marcarlo como inactivo: ya no puede loguearse
+      // (autenticar chequea activo=true), no aparece en los selectores
+      // de cajeros, pero TODO el historial sigue intacto y consistente.
+      // Se puede reactivar desde la misma pantalla de edición si el
+      // empleado vuelve más adelante.
+      const { error } = await sb
+        .from('empleados')
+        .update({ activo: false })
+        .eq('id', id);
       if (error) throw new Error(`empleados.delete: ${error.message}`);
     },
     async setOverridePermisos(id, override) {

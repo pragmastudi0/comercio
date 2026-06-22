@@ -38,7 +38,11 @@ export function makeEmpleadosRepo(store: Store): EmpleadosRepo {
       return clone(store.empleados[idx]!);
     },
     async delete(id) {
-      store.empleados = store.empleados.filter((e) => e.id !== id);
+      // Soft delete (paridad con el repo de Supabase, ver comentario allá):
+      // marcar inactivo en vez de borrar para preservar el historial.
+      const idx = store.empleados.findIndex((e) => e.id === id);
+      if (idx === -1) return;
+      store.empleados[idx] = { ...store.empleados[idx]!, activo: false };
     },
     async setOverridePermisos(id, override) {
       const idx = store.empleados.findIndex((x) => x.id === id);
