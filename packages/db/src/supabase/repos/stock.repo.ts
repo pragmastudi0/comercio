@@ -64,7 +64,7 @@ async function aplicarDeltaStock(
   // 2) UPDATE si existe la fila exacta, INSERT si no. Mismo filtro
   //    estricto por variante_id que usamos en el SELECT, así no tocamos
   //    una fila de otra variante por accidente.
-  if (existente) {
+  const hacerUpdate = async () => {
     let upd = sb
       .from('stock_items')
       .update({ cantidad: cantidadNueva })
@@ -75,14 +75,50 @@ async function aplicarDeltaStock(
       : upd.eq('variante_id', opts.variante_id);
     const { error } = await upd;
     if (error) throw new Error(error.message);
+  };
+
+  if (existente) {
+    await hacerUpdate();
   } else {
+    // Intentar INSERT. Si choca con el unique parcial (la fila ya existe
+    // pero el SELECT no la vio — race, RLS, lo que sea), caemos a UPDATE
+    // automáticamente. Belt-and-suspenders contra el bug histórico de
+    // "duplicate key on stock_items_unique_sin_variante".
     const { error } = await sb.from('stock_items').insert({
       producto_id: opts.producto_id,
       variante_id: opts.variante_id,
       deposito_id: opts.deposito_id,
       cantidad: cantidadNueva,
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      const esDuplicate =
+        /duplicate key|stock_items_unique|23505/i.test(error.message);
+      if (!esDuplicate) throw new Error(error.message);
+      // La fila existe (aunque no la vimos). Releemos la cantidad real,
+      // recalculamos el nuevo y hacemos UPDATE con eso.
+      let resel = sb
+        .from('stock_items')
+        .select('cantidad')
+        .eq('producto_id', opts.producto_id)
+        .eq('deposito_id', opts.deposito_id);
+      resel = opts.variante_id === null
+        ? resel.is('variante_id', null)
+        : resel.eq('variante_id', opts.variante_id);
+      const { data: ahora } = await resel.maybeSingle();
+      const cantReal = Number(ahora?.cantidad ?? 0);
+      const cantidadNuevaReal = cantReal + opts.delta;
+      let upd = sb
+        .from('stock_items')
+        .update({ cantidad: cantidadNuevaReal })
+        .eq('producto_id', opts.producto_id)
+        .eq('deposito_id', opts.deposito_id);
+      upd = opts.variante_id === null
+        ? upd.is('variante_id', null)
+        : upd.eq('variante_id', opts.variante_id);
+      const { error: updErr } = await upd;
+      if (updErr) throw new Error(updErr.message);
+      return { cantidadAnterior: cantReal, cantidadNueva: cantidadNuevaReal };
+    }
   }
 
   return { cantidadAnterior, cantidadNueva };
