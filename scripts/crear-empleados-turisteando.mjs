@@ -138,6 +138,13 @@ const EMPLEADOS = [
     password: 'juan7985',
     rol_id: ROL_CAJERO,
   },
+  {
+    nombre: 'Andres Eduardo',
+    apellido: 'Barros Nores',
+    email: 'andybarrosnores@gmail.com',
+    password: 'andres3686',
+    rol_id: ROL_CAJERO,
+  },
   // Acceso de soporte de Pragma — rol admin (acceso total) para que el
   // equipo pueda intervenir si hace falta. Password más larga porque es
   // un acceso sensible (admin), aún así legible para no tener que
@@ -150,6 +157,15 @@ const EMPLEADOS = [
     password: 'PragmaSoporte2026',
     rol_id: ROL_ADMIN,
   },
+];
+
+// Emails de empleados viejos / placeholder que tenemos que dar de baja
+// limpia. Por cada email: marcamos activo=false en la tabla y borramos
+// el usuario correspondiente de Supabase Auth (si existe) para que no
+// quede fantasma. Si la fila de empleados todavía no existe o la cuenta
+// de Auth tampoco, lo logueamos como skip.
+const EMPLEADOS_A_DESACTIVAR = [
+  'gregorio@turisteando.local', // duplicado del Gregorio Icikson real
 ];
 
 // ---------- Helpers ----------
@@ -232,6 +248,44 @@ async function crearOActualizar(emp) {
   }
 }
 
+async function desactivar(email) {
+  console.log(`→ desactivar ${email}`);
+  // 1) Tabla empleados: marcar inactivo (NO hard delete por FKs de
+  //    historial). Si la fila no existe, lo logueamos y seguimos.
+  const { data: emp, error: selErr } = await admin
+    .from('empleados')
+    .select('id, activo')
+    .ilike('email', email)
+    .maybeSingle();
+  if (selErr) throw new Error(`empleados.select ${email}: ${selErr.message}`);
+  if (!emp) {
+    console.log(`  · sin fila en empleados (skip)`);
+  } else if (!emp.activo) {
+    console.log(`  · ya estaba inactivo en empleados`);
+  } else {
+    const { error: updErr } = await admin
+      .from('empleados')
+      .update({ activo: false })
+      .eq('id', emp.id);
+    if (updErr) {
+      throw new Error(`empleados.update ${email}: ${updErr.message}`);
+    }
+    console.log(`  ✓ Marcado inactivo en empleados`);
+  }
+
+  // 2) Supabase Auth: borrar el usuario para que no quede fantasma.
+  const yaAuth = await buscarUsuarioEnAuth(email);
+  if (!yaAuth) {
+    console.log(`  · sin cuenta en Auth (skip)`);
+  } else {
+    const { error: delErr } = await admin.auth.admin.deleteUser(yaAuth.id);
+    if (delErr) {
+      throw new Error(`auth.deleteUser ${email}: ${delErr.message}`);
+    }
+    console.log(`  ✓ Borrado de Supabase Auth`);
+  }
+}
+
 // ---------- Main ----------
 async function main() {
   console.log('Creando/actualizando empleados de Turisteando…\n');
@@ -243,6 +297,18 @@ async function main() {
     } catch (e) {
       console.error(`  ✗ ${e.message}`);
       errores.push({ emp, msg: e.message });
+    }
+  }
+
+  if (EMPLEADOS_A_DESACTIVAR.length > 0) {
+    console.log('\nLimpieza de empleados viejos / duplicados…');
+    for (const email of EMPLEADOS_A_DESACTIVAR) {
+      try {
+        await desactivar(email);
+      } catch (e) {
+        console.error(`  ✗ ${e.message}`);
+        errores.push({ emp: { email }, msg: e.message });
+      }
     }
   }
 
