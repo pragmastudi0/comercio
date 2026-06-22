@@ -90,10 +90,11 @@ export default function DashboardPage() {
     queryFn: () => db.productos.list(),
   });
   // Saldo inicial cargado por el admin para arranques a mitad de mes.
+  // Usamos el MISMO queryKey que /admin/configuracion para que al guardar
+  // se invalide y el dashboard refleje el cambio sin esperar el cache.
   const configQ = useQuery({
-    queryKey: ['config-dashboard'],
+    queryKey: ['config'],
     queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
-    staleTime: 5 * 60_000,
   });
 
   // Valuación de mercadería (independiente del rango — es snapshot al
@@ -155,12 +156,14 @@ export default function DashboardPage() {
   // de mes. No tiene desglose por método ni por ganancia, así que SOLO
   // se suma al total facturado y a la cuenta de tickets.
   const arranque = configQ.data?.arranque;
+  // Comparar con Date objects en vez de strings ISO (más robusto contra
+  // diferencias de zona horaria entre el rango y la fecha guardada).
   const saldoInicialAplica = !!(
     arranque?.desde_fecha &&
     arranque.facturacion_acumulada &&
     arranque.facturacion_acumulada > 0 &&
-    // El rango del dashboard arranca igual o antes que la fecha config.
-    desde <= new Date(`${arranque.desde_fecha}T00:00:00`).toISOString()
+    new Date(desde).getTime() <=
+      new Date(`${arranque.desde_fecha}T23:59:59`).getTime()
   );
   const arranqueFact = saldoInicialAplica
     ? arranque?.facturacion_acumulada ?? 0
