@@ -167,8 +167,15 @@ export default function VentasPage() {
     const e = empleadosQ.data?.find((x) => x.id === id);
     return e ? `${e.nombre} ${e.apellido}` : '—';
   };
-  const localNombre = (id: string) =>
-    localesQ.data?.find((l) => l.id === id)?.nombre ?? '—';
+  // En la tabla y en el detalle solo queremos la sigla del local (ej.
+  // "B12", "C11") — el nombre completo en DB es "#Turisteando B12" pero
+  // ese prefijo es redundante porque el admin ya es de Turisteando.
+  // Sacamos el "#turisteando" del principio en cualquier capitalización.
+  const localNombre = (id: string) => {
+    const nombre = localesQ.data?.find((l) => l.id === id)?.nombre;
+    if (!nombre) return '—';
+    return nombre.replace(/^#?\s*turisteando\s*/i, '').trim() || nombre;
+  };
 
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
