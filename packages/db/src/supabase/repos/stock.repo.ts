@@ -3,6 +3,59 @@ import type { StockRepo } from '../../repos/stock.repo';
 import type { MovimientoStock, StockItem } from '../../types';
 import { ok, okList } from '../helpers';
 
+/**
+ * "Upsert manual" sobre `stock_items`.
+ *
+ * El upsert de supabase-js NO funciona acá: la tabla tiene un unique
+ * parcial `stock_items_unique_sin_variante` (producto_id, deposito_id)
+ * WHERE variante_id IS NULL. PostgreSQL no acepta ON CONFLICT con
+ * unique parcial sin que se especifique el WHERE, y supabase-js no
+ * lo expone. Resultado: cuando un upsert "sin variante" choca con una
+ * fila ya existente, falla con
+ *   `duplicate key value violates unique constraint
+ *    "stock_items_unique_sin_variante"`.
+ *
+ * Workaround: comparar contra el SELECT que ya tenemos y decidir si va
+ * UPDATE o INSERT explícito. No es atómico (otra TX podría insertar
+ * entre el SELECT y nuestro INSERT), pero estas operaciones se hacen
+ * desde admin/PoS sin concurrencia alta y el peor caso es repetir.
+ *
+ * Para venta concurrente real seguimos usando rpc_crear_venta, que sí
+ * es atómica vía SELECT…FOR UPDATE.
+ */
+async function setStockCantidad(
+  sb: SupabaseClient,
+  opts: {
+    producto_id: string;
+    variante_id: string | null;
+    deposito_id: string;
+    cantidad: number;
+    yaExiste: boolean;
+  },
+): Promise<void> {
+  if (opts.yaExiste) {
+    let q = sb
+      .from('stock_items')
+      .update({ cantidad: opts.cantidad })
+      .eq('producto_id', opts.producto_id)
+      .eq('deposito_id', opts.deposito_id);
+    // .is('col', null) vs .eq para matchear el unique parcial correcto.
+    q = opts.variante_id === null
+      ? q.is('variante_id', null)
+      : q.eq('variante_id', opts.variante_id);
+    const { error } = await q;
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await sb.from('stock_items').insert({
+      producto_id: opts.producto_id,
+      variante_id: opts.variante_id,
+      deposito_id: opts.deposito_id,
+      cantidad: opts.cantidad,
+    });
+    if (error) throw new Error(error.message);
+  }
+}
+
 export function makeStockRepo(sb: SupabaseClient): StockRepo {
   return {
     async porProducto(productoId) {
@@ -69,8 +122,7 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
     },
     async ajustar(input) {
       const { producto_id, variante_id, deposito_id, cantidad, motivo, empleado_id } = input;
-      // Upsert + update con delta. Mejor: leer, sumar, escribir (no atómico pero
-      // ajuste es manual).
+      // Leer, sumar, escribir. No atómico — ajuste es manual.
       const { data: existente } = await sb
         .from('stock_items')
         .select('cantidad')
@@ -78,13 +130,17 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
         .eq('deposito_id', deposito_id)
         .maybeSingle();
       const nuevo = (existente?.cantidad ?? 0) + cantidad;
-      const { error } = await sb.from('stock_items').upsert({
-        producto_id,
-        variante_id: variante_id ?? null,
-        deposito_id,
-        cantidad: nuevo,
-      });
-      if (error) throw new Error(`stock.ajustar: ${error.message}`);
+      try {
+        await setStockCantidad(sb, {
+          producto_id,
+          variante_id: variante_id ?? null,
+          deposito_id,
+          cantidad: nuevo,
+          yaExiste: !!existente,
+        });
+      } catch (e) {
+        throw new Error(`stock.ajustar: ${(e as Error).message}`);
+      }
       return ok<MovimientoStock>(
         await sb
           .from('movimientos_stock')
@@ -108,13 +164,17 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
         .eq('deposito_id', deposito_id)
         .maybeSingle();
       const nuevo = (existente?.cantidad ?? 0) - cantidad;
-      const { error } = await sb.from('stock_items').upsert({
-        producto_id,
-        variante_id: variante_id ?? null,
-        deposito_id,
-        cantidad: nuevo,
-      });
-      if (error) throw new Error(`stock.registrarMerma: ${error.message}`);
+      try {
+        await setStockCantidad(sb, {
+          producto_id,
+          variante_id: variante_id ?? null,
+          deposito_id,
+          cantidad: nuevo,
+          yaExiste: !!existente,
+        });
+      } catch (e) {
+        throw new Error(`stock.registrarMerma: ${(e as Error).message}`);
+      }
       return ok<MovimientoStock>(
         await sb
           .from('movimientos_stock')
@@ -141,13 +201,17 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
       if (!permitirSinStock && actual < cantidad) {
         throw new Error(`Stock insuficiente para producto ${producto_id} en depósito ${deposito_id}`);
       }
-      const { error } = await sb.from('stock_items').upsert({
-        producto_id,
-        variante_id: variante_id ?? null,
-        deposito_id,
-        cantidad: actual - cantidad,
-      });
-      if (error) throw new Error(`stock.descontarPorVenta: ${error.message}`);
+      try {
+        await setStockCantidad(sb, {
+          producto_id,
+          variante_id: variante_id ?? null,
+          deposito_id,
+          cantidad: actual - cantidad,
+          yaExiste: !!existente,
+        });
+      } catch (e) {
+        throw new Error(`stock.descontarPorVenta: ${(e as Error).message}`);
+      }
       return ok<MovimientoStock>(
         await sb
           .from('movimientos_stock')
