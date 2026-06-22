@@ -26,7 +26,9 @@ import {
   Database,
   LogOut,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { BRAND } from '@comercio/business';
+import { PRESET_IDS } from '@comercio/db';
 import { cn } from '@comercio/ui/utils';
 import { Button } from '@comercio/ui/button';
 
@@ -141,10 +143,34 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     }
   }, [empleado, isLoginRoute, router]);
 
+  // Guard por rol: el admin NO es para cajeros. Si un usuario con rol
+  // cajero preset entra acá (por URL directa, link compartido, etc.) lo
+  // desloguemos y mandamos a /login con un mensaje claro. El panel admin
+  // es solo para admin/encargado o roles custom creados a propósito.
+  //
+  // Nota: solo bloqueamos el rol cajero EXACTO preset. Si más adelante el
+  // dueño crea un rol custom "mostrador" y le quiere dar acceso al admin,
+  // simplemente no le asigna el rol cajero — el sidebar va a filtrar por
+  // permisos como ya lo hace.
+  const esCajeroPreset = empleado?.rol_id === PRESET_IDS.roles.cajero;
+  useEffect(() => {
+    if (esCajeroPreset && !isLoginRoute) {
+      toast.error(
+        'Como cajero tenés que usar el sistema de caja (PoS), no el panel admin.',
+        { duration: 5000 },
+      );
+      logout();
+      router.replace('/login');
+    }
+  }, [esCajeroPreset, isLoginRoute, router, logout]);
+
   // En la ruta /login, no renderizamos el shell (login fullscreen).
   if (isLoginRoute) return <>{children}</>;
   // Mientras carga el redirect, no renderizamos nada (evita flash).
   if (!empleado) return null;
+  // Mismo principio para cajeros: que NO se vea ni siquiera un parpadeo
+  // del admin mientras el useEffect de arriba dispara el logout.
+  if (esCajeroPreset) return null;
 
   return (
     <div className="flex min-h-screen bg-muted/20">
