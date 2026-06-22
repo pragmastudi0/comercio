@@ -89,6 +89,12 @@ export default function DashboardPage() {
     queryKey: ['productos-list'],
     queryFn: () => db.productos.list(),
   });
+  // Saldo inicial cargado por el admin para arranques a mitad de mes.
+  const configQ = useQuery({
+    queryKey: ['config-dashboard'],
+    queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
+    staleTime: 5 * 60_000,
+  });
 
   // Valuación de mercadería (independiente del rango — es snapshot al
   // momento). Se actualiza cada 5 min porque no cambia tanto como las
@@ -139,8 +145,31 @@ export default function DashboardPage() {
     productosLookupQ.isLoading;
 
   const ventasRango = ventasQ.data ?? [];
-  const totalRango = ventasRango.reduce((acc, v) => acc + v.total, 0);
+  const totalRangoSistema = ventasRango.reduce((acc, v) => acc + v.total, 0);
   const sesionesAbiertas = (sesionesQ.data ?? []).filter((s) => s.estado === 'abierta').length;
+
+  // Saldo inicial (cargado en /admin/configuracion) — se suma a los KPIs
+  // de "Facturado" y "tickets" cuando el rango del dashboard arranca
+  // igual o antes de la fecha indicada en la config. Sirve para no partir
+  // los reportes mensuales cuando el sistema se empieza a usar a mitad
+  // de mes. No tiene desglose por método ni por ganancia, así que SOLO
+  // se suma al total facturado y a la cuenta de tickets.
+  const arranque = configQ.data?.arranque;
+  const saldoInicialAplica = !!(
+    arranque?.desde_fecha &&
+    arranque.facturacion_acumulada &&
+    arranque.facturacion_acumulada > 0 &&
+    // El rango del dashboard arranca igual o antes que la fecha config.
+    desde <= new Date(`${arranque.desde_fecha}T00:00:00`).toISOString()
+  );
+  const arranqueFact = saldoInicialAplica
+    ? arranque?.facturacion_acumulada ?? 0
+    : 0;
+  const arranqueTickets = saldoInicialAplica
+    ? arranque?.ventas_acumuladas ?? 0
+    : 0;
+  const totalRango = totalRangoSistema + arranqueFact;
+  const ticketsRango = ventasRango.length + arranqueTickets;
 
   // Indicadores financieros del día.
   const indicadores = useMemo(() => {
@@ -265,7 +294,11 @@ export default function DashboardPage() {
           <KpiCard
             titulo={`Facturado ${LABEL_RANGO[rango].toLowerCase()}`}
             valor={formatCurrency(Math.round(totalRangoAnim))}
-            sub={`${ventasRango.length} tickets · ver historial`}
+            sub={
+              saldoInicialAplica
+                ? `${ticketsRango} tickets · incluye ${formatCurrency(arranqueFact)} previo al sistema`
+                : `${ticketsRango} tickets · ver historial`
+            }
             icon={TrendingUp}
             loading={ventasQ.isLoading}
             destacado

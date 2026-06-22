@@ -42,6 +42,12 @@ function ConfiguracionInner() {
   const [logoUrl, setLogoUrl] = useState('');
   const [pedidoMinimo, setPedidoMinimo] = useState(0);
   const [waTemplate, setWaTemplate] = useState('');
+  // Saldo inicial del comercio (lo que ya facturó antes de arrancar el
+  // sistema). Se carga manualmente para que arrancar a mitad de mes no
+  // parta los reportes mensuales del dashboard.
+  const [arranqueFacturacion, setArranqueFacturacion] = useState(0);
+  const [arranqueVentas, setArranqueVentas] = useState(0);
+  const [arranqueDesde, setArranqueDesde] = useState('');
 
   useEffect(() => {
     if (configQ.data) {
@@ -58,6 +64,9 @@ function ConfiguracionInner() {
       setLogoUrl(configQ.data.comercio?.logo_url ?? '');
       setPedidoMinimo(configQ.data.pedido_minimo_web ?? 0);
       setWaTemplate(configQ.data.mensaje_wa_template ?? '');
+      setArranqueFacturacion(configQ.data.arranque?.facturacion_acumulada ?? 0);
+      setArranqueVentas(configQ.data.arranque?.ventas_acumuladas ?? 0);
+      setArranqueDesde(configQ.data.arranque?.desde_fecha ?? '');
     }
   }, [configQ.data]);
 
@@ -79,6 +88,11 @@ function ConfiguracionInner() {
         },
         pedido_minimo_web: pedidoMinimo,
         mensaje_wa_template: waTemplate,
+        arranque: {
+          facturacion_acumulada: arranqueFacturacion || 0,
+          ventas_acumuladas: arranqueVentas || 0,
+          desde_fecha: arranqueDesde || undefined,
+        },
       }),
     onSuccess: () => {
       toast.success('Configuración guardada');
@@ -224,6 +238,66 @@ function ConfiguracionInner() {
               <Plus className="mr-1 h-3 w-3" />
               Agregar opción de cuota
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Saldo inicial — para arrancar a mitad de mes sin partir reportes. */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Saldo inicial del comercio</CardTitle>
+            <CardDescription>
+              Si arrancás a usar el sistema a mitad de mes y querés que el
+              dashboard muestre el TOTAL real del período (no solo lo que
+              cargó el sistema), poné acá la facturación y la cantidad de
+              tickets que ya hiciste antes de empezar. Se suma a los KPIs
+              cuando el rango del dashboard arranca igual o antes de la
+              fecha indicada. Podés actualizarlo cuando quieras.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <Label className="text-sm">Facturación acumulada ($)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={arranqueFacturacion}
+                onChange={(e) =>
+                  setArranqueFacturacion(parseFloat(e.target.value) || 0)
+                }
+                placeholder="0"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Total facturado fuera del sistema.
+              </p>
+            </div>
+            <div>
+              <Label className="text-sm">Cantidad de ventas (tickets)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={arranqueVentas}
+                onChange={(e) =>
+                  setArranqueVentas(parseInt(e.target.value, 10) || 0)
+                }
+                placeholder="0"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Cantidad de operaciones (no unidades).
+              </p>
+            </div>
+            <div>
+              <Label className="text-sm">Desde qué fecha cuenta</Label>
+              <Input
+                type="date"
+                value={arranqueDesde}
+                onChange={(e) => setArranqueDesde(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Típicamente el 1ro del mes en curso.
+              </p>
+            </div>
           </CardContent>
         </Card>
 

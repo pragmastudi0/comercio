@@ -304,6 +304,27 @@ export type ConfiguracionEmpresa = {
    *  {cliente.cuit}, {cliente.email}, {cliente.direccion}, {items}, {total},
    *  {metodoPago}, {entrega}, {notas}. */
   mensaje_wa_template?: string;
+  /**
+   * "Saldo inicial" del comercio previo al arranque del sistema. Lo carga
+   * el admin para no partir los reportes mensuales cuando se arranca con
+   * el sistema a mitad de mes (ej. arrancamos el 20 pero queremos que el
+   * dashboard de "Este mes" muestre el total real, incluyendo lo facturado
+   * antes del 20 fuera del sistema).
+   *
+   * El dashboard suma estos valores al rango cuando la fecha `desde` del
+   * rango es <= `arranque_fecha`. El dueño puede editarlo en cualquier
+   * momento desde /admin/configuracion.
+   */
+  arranque?: {
+    /** Monto facturado acumulado previo al sistema (en pesos). */
+    facturacion_acumulada?: number;
+    /** Cantidad de ventas (tickets) previas al sistema. */
+    ventas_acumuladas?: number;
+    /** Fecha desde la cual cuentan estos acumulados (ISO yyyy-MM-dd).
+     *  Si el rango del dashboard empieza igual o antes de esta fecha, se
+     *  suman los acumulados; si empieza después, no se suman. */
+    desde_fecha?: string;
+  };
 };
 
 export type LogAuditoria = {

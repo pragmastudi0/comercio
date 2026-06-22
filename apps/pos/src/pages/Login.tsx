@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { LogIn } from 'lucide-react';
@@ -18,12 +18,6 @@ export function Login() {
   const setEmpleado = useSesion((s) => s.setEmpleado);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
-  // Sólo en demo: lista los emails seed para que sea fácil probar.
-  const empleadosQ = useQuery({
-    queryKey: ['empleados-demo'],
-    queryFn: () => db.empleados.list({ activo: true }),
-  });
 
   const loginMut = useMutation({
     mutationFn: async () => {
@@ -94,38 +88,6 @@ export function Login() {
         </CardContent>
       </Card>
 
-      {/* Bloque demo: lista de usuarios de prueba. Quitar cuando pase a producción. */}
-      <div className="mt-6 rounded-md border border-dashed bg-muted/30 p-3 text-xs">
-        <div className="mb-2 font-medium text-muted-foreground">Usuarios demo</div>
-        <div className="space-y-1">
-          {(empleadosQ.data ?? []).map((e) => {
-            const passwordDemo =
-              e.id === 'emp_admin'
-                ? 'admin123'
-                : e.id === 'emp_enc'
-                  ? 'encargado123'
-                  : e.id === 'emp_caj1'
-                    ? 'cajero123'
-                    : e.id === 'emp_cat'
-                      ? 'catalogo123'
-                      : '—';
-            return (
-              <button
-                key={e.id}
-                type="button"
-                onClick={() => {
-                  setEmail(e.email);
-                  setPassword(passwordDemo);
-                }}
-                className="block w-full rounded px-2 py-1 text-left hover:bg-accent"
-              >
-                <span className="font-mono">{e.email}</span>
-                <span className="text-muted-foreground"> · {passwordDemo}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
     </main>
   );
 }
