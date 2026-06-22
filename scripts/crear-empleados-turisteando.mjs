@@ -20,10 +20,21 @@
 //
 // Volver a correrlo es seguro: solo cambia passwords y campos.
 
-import { createClient } from '@supabase/supabase-js';
+// `@supabase/supabase-js` está instalada como dep de `packages/db` (no en
+// la raíz del monorepo), así que para evitar el ERR_MODULE_NOT_FOUND
+// cuando se corre desde `scripts/` lo resolvemos con createRequire
+// apuntando a un archivo que SÍ esté en un workspace que tenga la dep.
+import { createRequire } from 'node:module';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const __here = dirname(fileURLToPath(import.meta.url));
+const requireFromDb = createRequire(
+  resolve(__here, '..', 'packages', 'db', 'package.json'),
+);
+const supabaseModulePath = requireFromDb.resolve('@supabase/supabase-js');
+const { createClient } = await import(supabaseModulePath);
 
 // ---------- Cargar env vars desde apps/admin/.env.local si existen ----------
 function cargarEnvLocal() {
@@ -42,16 +53,26 @@ function cargarEnvLocal() {
 }
 cargarEnvLocal();
 
-const SUPABASE_URL =
+const SUPABASE_URL_RAW =
   process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!SUPABASE_URL || !SERVICE_ROLE) {
+if (!SUPABASE_URL_RAW || !SERVICE_ROLE) {
   console.error(
     '✗ Faltan env vars. Necesito SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.',
   );
   console.error('  Exportalas o ponelas en apps/admin/.env.local.');
   process.exit(1);
+}
+
+// Defensa contra pegar la URL "completa" del API (ej. con /rest/v1/ al
+// final). El cliente de supabase-js quiere solo el host raíz.
+const SUPABASE_URL = SUPABASE_URL_RAW.replace(/\/rest\/v1\/?$/i, '').replace(
+  /\/+$/,
+  '',
+);
+if (SUPABASE_URL !== SUPABASE_URL_RAW) {
+  console.log(`ℹ Normalizada la URL: ${SUPABASE_URL_RAW} → ${SUPABASE_URL}\n`);
 }
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
