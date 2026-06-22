@@ -9,6 +9,8 @@ export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
       let q = sb.from('ventas').select('*').order('fecha', { ascending: false });
       if (filtro.local_id) q = q.eq('local_id', filtro.local_id);
       if (filtro.caja_id) q = q.eq('caja_id', filtro.caja_id);
+      if (filtro.sesion_caja_id)
+        q = q.eq('sesion_caja_id', filtro.sesion_caja_id);
       if (filtro.empleado_id) q = q.eq('empleado_id', filtro.empleado_id);
       if (filtro.cliente_id) q = q.eq('cliente_id', filtro.cliente_id);
       if (filtro.estado) q = q.eq('estado', filtro.estado);

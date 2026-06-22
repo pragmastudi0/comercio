@@ -4,15 +4,23 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Receipt, Search } from 'lucide-react';
+import { Eye, Receipt, Search } from 'lucide-react';
 import { getDb } from '@/lib/db';
+import { Button } from '@comercio/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@comercio/ui/table';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { Badge } from '@comercio/ui/badge';
+import {
+  Dialog,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@comercio/ui/dialog';
 import { formatCurrency, formatDate } from '@comercio/ui/utils';
+import type { NotaCredito } from '@comercio/db';
 
 export default function NotasCreditoPage() {
   const db = getDb();
@@ -23,6 +31,8 @@ export default function NotasCreditoPage() {
   const [hasta, setHasta] = useState(hoy);
   const [empleadoId, setEmpleadoId] = useState('');
   const [texto, setTexto] = useState('');
+  // NC seleccionada para ver el detalle en el popup.
+  const [ncDetalle, setNcDetalle] = useState<NotaCredito | null>(null);
 
   const notasQ = useQuery({
     queryKey: ['notas-credito-admin', desde, hasta],
@@ -36,6 +46,12 @@ export default function NotasCreditoPage() {
   const ventasQ = useQuery({
     queryKey: ['ventas-todas-nc'],
     queryFn: () => db.ventas.list(),
+  });
+  // Catálogo para resolver nombre de cada producto en el detalle.
+  const productosQ = useQuery({
+    queryKey: ['productos-list'],
+    queryFn: () => db.productos.list(),
+    enabled: !!ncDetalle,
   });
 
   const empleadoNombre = (id: string) => {
@@ -134,13 +150,18 @@ export default function NotasCreditoPage() {
                   <TableHead>Items</TableHead>
                   <TableHead>Motivo</TableHead>
                   <TableHead className="text-right">Monto</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {visiblesOrdenadas.map((n) => (
-                  <TableRow key={n.id}>
+                  <TableRow
+                    key={n.id}
+                    onClick={() => setNcDetalle(n)}
+                    className="cursor-pointer hover:bg-muted/40"
+                  >
                     <TableCell className="font-mono text-xs">{n.numero}</TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <Link
                         href={`/ventas?q=${ventaNumero(n.venta_id)}`}
                         className="font-mono text-xs hover:underline"
@@ -159,6 +180,19 @@ export default function NotasCreditoPage() {
                     <TableCell className="text-right font-semibold tabular-nums">
                       {formatCurrency(n.monto_total)}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Ver detalle"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setNcDetalle(n);
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -166,6 +200,136 @@ export default function NotasCreditoPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Detalle de NC en popup */}
+      <Dialog
+        open={!!ncDetalle}
+        onOpenChange={(v) => !v && setNcDetalle(null)}
+        className="max-w-2xl"
+      >
+        {ncDetalle && (
+          <DetalleNotaCredito
+            nc={ncDetalle}
+            ventaNumero={ventaNumero(ncDetalle.venta_id)}
+            empleadoNombre={empleadoNombre(ncDetalle.empleado_id)}
+            productosCache={productosQ.data ?? []}
+          />
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setNcDetalle(null)}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
+  );
+}
+
+function DetalleNotaCredito({
+  nc,
+  ventaNumero,
+  empleadoNombre,
+  productosCache,
+}: {
+  nc: NotaCredito;
+  ventaNumero: string;
+  empleadoNombre: string;
+  productosCache: { id: string; codigo_interno: string; nombre: string }[];
+}) {
+  const productoInfo = (id: string) =>
+    productosCache.find((p) => p.id === id);
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>
+          Nota de crédito {nc.numero} ·{' '}
+          <span className="text-muted-foreground">{formatDate(nc.fecha)}</span>
+        </DialogTitle>
+      </DialogHeader>
+
+      {/* Cabecera */}
+      <div className="grid grid-cols-2 gap-3 rounded-md bg-muted/40 p-3 text-sm">
+        <div>
+          <div className="text-xs text-muted-foreground">Venta original</div>
+          <div className="font-medium">
+            <Link
+              href={`/ventas?q=${ventaNumero}`}
+              className="font-mono hover:underline"
+            >
+              {ventaNumero}
+            </Link>
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Emitida por</div>
+          <div className="font-medium">{empleadoNombre}</div>
+        </div>
+        <div className="col-span-2">
+          <div className="text-xs text-muted-foreground">Motivo</div>
+          <div className="font-medium">{nc.motivo || '—'}</div>
+        </div>
+      </div>
+
+      {/* Items devueltos */}
+      <div className="mt-3">
+        <div className="mb-2 text-sm font-medium">Productos devueltos</div>
+        <div className="rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-xs text-muted-foreground">
+              <tr>
+                <th className="px-2 py-1.5 text-left">Código</th>
+                <th className="px-2 py-1.5 text-left">Producto</th>
+                <th className="px-2 py-1.5 text-right">Cant.</th>
+                <th className="px-2 py-1.5 text-right">Precio</th>
+                <th className="px-2 py-1.5 text-right">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nc.items.map((it, i) => {
+                const p = productoInfo(it.producto_id);
+                const subtotal = it.cantidad * it.precio_unitario;
+                return (
+                  <tr key={i} className="border-t">
+                    <td className="px-2 py-1.5 font-mono text-xs">
+                      {p?.codigo_interno ?? '—'}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {p?.nombre ?? (
+                        <span className="text-xs text-muted-foreground">
+                          Producto eliminado
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {it.cantidad}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {formatCurrency(it.precio_unitario)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {formatCurrency(subtotal)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Total */}
+      <div className="mt-3 rounded-md bg-muted/40 p-3 text-sm">
+        <div className="flex items-center justify-between text-base font-semibold">
+          <span>Total devuelto</span>
+          <span className="tabular-nums text-green-700">
+            {formatCurrency(nc.monto_total)}
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          El stock de estos productos volvió al depósito de la venta original.
+        </p>
+      </div>
+    </>
   );
 }

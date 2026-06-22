@@ -93,7 +93,19 @@ export function CerrarCaja() {
       setCaja(null);
       navigate('/abrir-caja');
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      // Cierre idempotente: si el admin u otro cajero ya cerró la sesión,
+      // limpiamos el estado local y mandamos a abrir caja sin asustar al
+      // cajero con un toast rojo.
+      if (e.name === 'SesionYaCerrada') {
+        toast.info(e.message);
+        setSesionCaja(null);
+        setCaja(null);
+        navigate('/abrir-caja');
+      } else {
+        toast.error(e.message);
+      }
+    },
   });
 
   if (!sesion) {

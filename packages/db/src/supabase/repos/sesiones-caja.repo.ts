@@ -42,9 +42,14 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
         .maybeSingle();
       if (error) throw new Error(`sesiones_caja.cerrar: ${error.message}`);
       if (!data) {
-        throw new Error(
-          'La caja ya estaba cerrada (otra persona la cerró primero).',
+        // No es un error de bug — es una condición esperada (admin y cajero
+        // cerraron la misma sesión "en simultáneo"). El UI distingue este
+        // caso por el `name` para mostrarlo como info amigable, no rojo.
+        const err = new Error(
+          'Esta caja ya había sido cerrada (alguien la cerró antes).',
         );
+        err.name = 'SesionYaCerrada';
+        throw err;
       }
       return data as SesionCaja;
     },

@@ -22,6 +22,7 @@ export function makeVentasRepo(store: Store): VentasRepo {
         store.ventas.filter((v) => {
           if (filtro?.local_id && v.local_id !== filtro.local_id) return false;
           if (filtro?.caja_id && v.caja_id !== filtro.caja_id) return false;
+          if (filtro?.sesion_caja_id && v.sesion_caja_id !== filtro.sesion_caja_id) return false;
           if (filtro?.empleado_id && v.empleado_id !== filtro.empleado_id) return false;
           if (filtro?.cliente_id && v.cliente_id !== filtro.cliente_id) return false;
           if (filtro?.estado && v.estado !== filtro.estado) return false;

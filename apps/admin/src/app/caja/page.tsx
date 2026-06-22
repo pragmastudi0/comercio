@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Wallet, LockOpen, Lock } from 'lucide-react';
+import { Wallet, LockOpen, Lock, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
 import { RequierePermiso } from '@/lib/permisos';
@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from '@comercio/ui/dialog';
 import { formatCurrency, formatDate } from '@comercio/ui/utils';
-import type { MetodoPago, MovimientoCaja, SesionCaja } from '@comercio/db';
+import type { MetodoPago, MovimientoCaja, SesionCaja, Venta } from '@comercio/db';
 
 const METODOS: MetodoPago[] = ['efectivo', 'transferencia', 'debito', 'credito', 'qr', 'cta_cte'];
 
@@ -32,6 +32,8 @@ export default function CajasPage() {
   });
   const empleadosQ = useQuery({ queryKey: ['empleados'], queryFn: () => db.empleados.list() });
   const cajasQ = useQuery({ queryKey: ['cajas'], queryFn: () => db.cajas.list() });
+  // Sesión seleccionada para ver detalle (ventas + movs + arqueo).
+  const [sesionDetalle, setSesionDetalle] = useState<SesionCaja | null>(null);
 
   const empleadoNombre = (id: string) => {
     const e = empleadosQ.data?.find((x) => x.id === id);
@@ -72,6 +74,7 @@ export default function CajasPage() {
                   sesion={s}
                   cajaNombre={cajaNombre(s.caja_id)}
                   empleadoNombre={empleadoNombre(s.empleado_id)}
+                  onVerDetalle={() => setSesionDetalle(s)}
                 />
               ))}
             </div>
@@ -104,6 +107,7 @@ export default function CajasPage() {
                   <th className="whitespace-nowrap px-3 py-2 text-right">Esperado</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Declarado</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Diferencia</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right"></th>
                 </tr>
               </thead>
               <tbody>
@@ -113,6 +117,7 @@ export default function CajasPage() {
                     sesion={s}
                     cajaNombre={cajaNombre(s.caja_id)}
                     empleadoNombre={empleadoNombre(s.empleado_id)}
+                    onVerDetalle={() => setSesionDetalle(s)}
                   />
                 ))}
               </tbody>
@@ -121,11 +126,31 @@ export default function CajasPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Detalle de sesión: ventas + movimientos + arqueo */}
+      <Dialog
+        open={!!sesionDetalle}
+        onOpenChange={(v) => !v && setSesionDetalle(null)}
+        className="max-w-3xl"
+      >
+        {sesionDetalle && (
+          <DetalleSesion
+            sesion={sesionDetalle}
+            cajaNombre={cajaNombre(sesionDetalle.caja_id)}
+            empleadoNombre={empleadoNombre(sesionDetalle.empleado_id)}
+          />
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setSesionDetalle(null)}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   );
 }
 
-function FilaSesionCerrada({
+function DetalleSesion({
   sesion,
   cajaNombre,
   empleadoNombre,
@@ -133,6 +158,272 @@ function FilaSesionCerrada({
   sesion: SesionCaja;
   cajaNombre: string;
   empleadoNombre: string;
+}) {
+  const db = getDb();
+  // Ventas de la sesión + movimientos de caja en paralelo.
+  const ventasQ = useQuery({
+    queryKey: ['detalle-sesion-ventas', sesion.id],
+    queryFn: () => db.ventas.list({ sesion_caja_id: sesion.id }),
+  });
+  const movsQ = useQuery({
+    queryKey: ['detalle-sesion-movs', sesion.id],
+    queryFn: () => db.sesionesCaja.movimientos(sesion.id),
+  });
+
+  const ventas = (ventasQ.data ?? []) as Venta[];
+  const ventasCompletadas = ventas.filter((v) => v.estado === 'completada');
+  const ventasAnuladas = ventas.filter((v) => v.estado === 'anulada');
+  const totalVentas = ventasCompletadas.reduce((acc, v) => acc + v.total, 0);
+
+  // Totales por método de pago (solo ventas completadas).
+  const porMetodo = new Map<MetodoPago, number>();
+  for (const v of ventasCompletadas) {
+    for (const p of v.pagos) {
+      porMetodo.set(p.metodo, (porMetodo.get(p.metodo) ?? 0) + p.monto);
+    }
+  }
+
+  // Arqueo (mismo cálculo que la fila resumen).
+  let efectivoMovs = 0;
+  for (const m of (movsQ.data ?? []) as MovimientoCaja[]) {
+    if (m.metodo !== 'efectivo') continue;
+    const signo =
+      m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'anulacion'
+        ? -1
+        : 1;
+    efectivoMovs += signo * m.monto;
+  }
+  const declarado = sesion.saldo_final_declarado ?? 0;
+  const esperado = sesion.saldo_inicial + efectivoMovs;
+  const dif = declarado - esperado;
+  const cerrada = sesion.estado === 'cerrada';
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>
+          Caja {cajaNombre} · {empleadoNombre}
+        </DialogTitle>
+      </DialogHeader>
+
+      {/* Cabecera con tiempos */}
+      <div className="grid grid-cols-2 gap-3 rounded-md bg-muted/40 p-3 text-sm">
+        <div>
+          <div className="text-xs text-muted-foreground">Apertura</div>
+          <div className="font-medium">{formatDate(sesion.abierta_en)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Cierre</div>
+          <div className="font-medium">
+            {sesion.cerrada_en ? (
+              formatDate(sesion.cerrada_en)
+            ) : (
+              <Badge variant="secondary">Abierta ahora</Badge>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Ventas del turno */}
+      <div className="mt-3">
+        <div className="mb-2 text-sm font-medium">
+          Ventas del turno ({ventasCompletadas.length} completadas
+          {ventasAnuladas.length > 0 && ` · ${ventasAnuladas.length} anuladas`})
+        </div>
+        {ventasQ.isLoading ? (
+          <Skeleton className="h-24" />
+        ) : ventas.length === 0 ? (
+          <p className="rounded border border-dashed py-4 text-center text-xs text-muted-foreground">
+            Sin ventas en este turno.
+          </p>
+        ) : (
+          <div className="max-h-56 overflow-y-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-muted/40 text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-1.5 text-left">N°</th>
+                  <th className="px-2 py-1.5 text-left">Fecha</th>
+                  <th className="px-2 py-1.5 text-left">Método</th>
+                  <th className="px-2 py-1.5 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventas.map((v) => {
+                  const ms = Array.from(new Set(v.pagos.map((p) => p.metodo)));
+                  const metodoLabel = ms.length > 1 ? 'Mixto' : ms[0] ?? '—';
+                  const anulada = v.estado === 'anulada';
+                  return (
+                    <tr
+                      key={v.id}
+                      className={`border-t ${anulada ? 'bg-red-50/40' : ''}`}
+                    >
+                      <td className="px-2 py-1.5 font-mono text-xs">
+                        {v.numero}
+                      </td>
+                      <td className="px-2 py-1.5 text-xs text-muted-foreground">
+                        {formatDate(v.fecha)}
+                      </td>
+                      <td className="px-2 py-1.5 text-xs">{metodoLabel}</td>
+                      <td
+                        className={`px-2 py-1.5 text-right tabular-nums ${
+                          anulada ? 'text-red-700 line-through' : ''
+                        }`}
+                      >
+                        {formatCurrency(v.total)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+          <span>Total facturado del turno</span>
+          <span className="font-semibold tabular-nums">
+            {formatCurrency(totalVentas)}
+          </span>
+        </div>
+      </div>
+
+      {/* Desglose por método (solo si hay) */}
+      {porMetodo.size > 0 && (
+        <div className="mt-3">
+          <div className="mb-2 text-sm font-medium">Cobrado por método</div>
+          <div className="grid grid-cols-2 gap-1 rounded-md border p-2 text-sm sm:grid-cols-3">
+            {METODOS.filter((m) => porMetodo.has(m)).map((m) => (
+              <div
+                key={m}
+                className="flex items-center justify-between rounded px-2 py-1"
+              >
+                <span className="text-xs capitalize text-muted-foreground">
+                  {m}
+                </span>
+                <span className="font-medium tabular-nums">
+                  {formatCurrency(porMetodo.get(m) ?? 0)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Movimientos extras de caja (ingresos/egresos manuales) */}
+      <div className="mt-3">
+        <div className="mb-2 text-sm font-medium">
+          Movimientos de caja ({(movsQ.data ?? []).length})
+        </div>
+        {movsQ.isLoading ? (
+          <Skeleton className="h-16" />
+        ) : (movsQ.data ?? []).length === 0 ? (
+          <p className="rounded border border-dashed py-3 text-center text-xs text-muted-foreground">
+            Sin movimientos manuales (solo ventas).
+          </p>
+        ) : (
+          <div className="max-h-40 overflow-y-auto rounded-md border">
+            <table className="w-full text-sm">
+              <tbody>
+                {(movsQ.data as MovimientoCaja[]).map((m) => {
+                  const negativo =
+                    m.tipo === 'egreso' ||
+                    m.tipo === 'retiro' ||
+                    m.tipo === 'anulacion';
+                  return (
+                    <tr key={m.id} className="border-t first:border-0">
+                      <td className="px-2 py-1.5 text-xs capitalize">
+                        {m.tipo}
+                      </td>
+                      <td className="px-2 py-1.5 text-xs text-muted-foreground">
+                        {m.metodo}
+                      </td>
+                      <td className="max-w-xs px-2 py-1.5 text-xs">
+                        {m.motivo ?? '—'}
+                      </td>
+                      <td
+                        className={`px-2 py-1.5 text-right tabular-nums ${
+                          negativo ? 'text-destructive' : 'text-green-700'
+                        }`}
+                      >
+                        {negativo ? '−' : '+'}
+                        {formatCurrency(m.monto)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Arqueo final */}
+      <div className="mt-3 rounded-md bg-muted/40 p-3 text-sm">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">
+          Arqueo de efectivo
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-y-1">
+          <span className="text-muted-foreground">Saldo inicial</span>
+          <span className="text-right tabular-nums">
+            {formatCurrency(sesion.saldo_inicial)}
+          </span>
+          <span className="text-muted-foreground">Movimientos en efectivo</span>
+          <span className="text-right tabular-nums">
+            {(efectivoMovs >= 0 ? '+' : '') + formatCurrency(efectivoMovs)}
+          </span>
+          <span className="font-medium">Esperado en caja</span>
+          <span className="text-right font-medium tabular-nums">
+            {formatCurrency(esperado)}
+          </span>
+          {cerrada && (
+            <>
+              <span className="text-muted-foreground">Declarado por cajero</span>
+              <span className="text-right tabular-nums">
+                {formatCurrency(declarado)}
+              </span>
+              <span
+                className={`font-semibold ${
+                  Math.abs(dif) < 0.01
+                    ? 'text-green-700'
+                    : dif < 0
+                      ? 'text-destructive'
+                      : 'text-orange-600'
+                }`}
+              >
+                {Math.abs(dif) < 0.01
+                  ? 'Cuadró exacto'
+                  : dif < 0
+                    ? 'Faltó'
+                    : 'Sobró'}
+              </span>
+              <span
+                className={`text-right font-semibold tabular-nums ${
+                  Math.abs(dif) < 0.01
+                    ? 'text-green-700'
+                    : dif < 0
+                      ? 'text-destructive'
+                      : 'text-orange-600'
+                }`}
+              >
+                {formatCurrency(dif)}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function FilaSesionCerrada({
+  sesion,
+  cajaNombre,
+  empleadoNombre,
+  onVerDetalle,
+}: {
+  sesion: SesionCaja;
+  cajaNombre: string;
+  empleadoNombre: string;
+  onVerDetalle: () => void;
 }) {
   const db = getDb();
   // Traemos movimientos de la sesión para calcular el efectivo del turno.
@@ -175,7 +466,10 @@ function FilaSesionCerrada({
   }
 
   return (
-    <tr className={`border-b last:border-0 ${claseFila}`}>
+    <tr
+      className={`cursor-pointer border-b last:border-0 hover:bg-muted/40 ${claseFila}`}
+      onClick={onVerDetalle}
+    >
       <td className="whitespace-nowrap px-3 py-2">{cajaNombre}</td>
       <td className="whitespace-nowrap px-3 py-2">{empleadoNombre}</td>
       <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
@@ -203,6 +497,9 @@ function FilaSesionCerrada({
           </div>
         )}
       </td>
+      <td className="whitespace-nowrap px-3 py-2 text-right">
+        <Eye className="inline h-4 w-4 text-muted-foreground" />
+      </td>
     </tr>
   );
 }
@@ -211,10 +508,12 @@ function SesionCard({
   sesion,
   cajaNombre,
   empleadoNombre,
+  onVerDetalle,
 }: {
   sesion: SesionCaja;
   cajaNombre: string;
   empleadoNombre: string;
+  onVerDetalle: () => void;
 }) {
   const db = getDb();
   const qc = useQueryClient();
@@ -254,7 +553,17 @@ function SesionCard({
       setCerrarOpen(false);
       qc.invalidateQueries({ queryKey: ['sesiones-caja-todas'] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      // Cierre idempotente: si otro cerró primero, mostrar como info
+      // amigable y refrescar la vista. Para todo otro error, rojo.
+      if (e.name === 'SesionYaCerrada') {
+        toast.info(e.message);
+        setCerrarOpen(false);
+        qc.invalidateQueries({ queryKey: ['sesiones-caja-todas'] });
+      } else {
+        toast.error(e.message);
+      }
+    },
   });
 
   function abrirDialog() {
@@ -305,19 +614,28 @@ function SesionCard({
         </div>
       </div>
 
-      <RequierePermiso modulo="caja" accion="cerrar">
-        <div className="mt-3 border-t pt-3">
+      <div className="mt-3 border-t pt-3 flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1"
+          onClick={onVerDetalle}
+        >
+          <Eye className="mr-2 h-4 w-4" />
+          Ver detalle
+        </Button>
+        <RequierePermiso modulo="caja" accion="cerrar">
           <Button
             variant="outline"
             size="sm"
-            className="w-full"
+            className="flex-1"
             onClick={abrirDialog}
           >
             <Lock className="mr-2 h-4 w-4" />
             Cerrar caja
           </Button>
-        </div>
-      </RequierePermiso>
+        </RequierePermiso>
+      </div>
 
       <Dialog open={cerrarOpen} onOpenChange={setCerrarOpen}>
         <DialogHeader>

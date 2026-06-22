@@ -5,6 +5,9 @@ export type FiltroVentas = {
   hasta?: string;
   local_id?: ID;
   caja_id?: ID;
+  /** Filtra por una sesión específica (turno de cajero). Útil para ver
+   *  las ventas de un cierre en particular. */
+  sesion_caja_id?: ID;
   empleado_id?: ID;
   cliente_id?: ID;
   estado?: Venta['estado'];
