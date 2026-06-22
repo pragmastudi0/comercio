@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Search, Printer, Eye } from 'lucide-react';
+import { Search, Printer, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@comercio/ui/table';
@@ -44,6 +44,9 @@ export default function VentasPage() {
   const [estado, setEstado] = useState<string>('');
   // Venta seleccionada para ver el detalle en el popup.
   const [ventaDetalle, setVentaDetalle] = useState<Venta | null>(null);
+  // Orden por fecha. Default desc (más nueva arriba) — lo más útil para
+  // el dueño que abre la pantalla a chequear lo del momento.
+  const [ordenDesc, setOrdenDesc] = useState(true);
 
   const ventasQ = useQuery({
     queryKey: ['ventas-admin', desde, hasta, empleadoId, localId],
@@ -288,7 +291,25 @@ export default function VentasPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>N°</TableHead>
-                  <TableHead>Fecha</TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      onClick={() => setOrdenDesc((v) => !v)}
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      title={
+                        ordenDesc
+                          ? 'Más nueva arriba (click para invertir)'
+                          : 'Más vieja arriba (click para invertir)'
+                      }
+                    >
+                      Fecha
+                      {ordenDesc ? (
+                        <ChevronDown className="h-3 w-3" />
+                      ) : (
+                        <ChevronUp className="h-3 w-3" />
+                      )}
+                    </button>
+                  </TableHead>
                   <TableHead>Cajero</TableHead>
                   <TableHead>Local</TableHead>
                   <TableHead>Items</TableHead>
@@ -300,7 +321,14 @@ export default function VentasPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {[...ventas].reverse().flatMap((v) => {
+                {[...ventas]
+                  .sort((a, b) => {
+                    // Ordenar por fecha según el toggle. localeCompare
+                    // sobre ISO strings es seguro (lexicográfico = cronológico).
+                    const cmp = a.fecha.localeCompare(b.fecha);
+                    return ordenDesc ? -cmp : cmp;
+                  })
+                  .flatMap((v) => {
                   const anulada = v.estado === 'anulada';
                   const cancelada = v.estado === 'cancelada';
                   const rows = [
