@@ -81,6 +81,7 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
 
 // ---------- IDs preset alineados con migrations/0001 ----------
 const EMPRESA_ID = '00000000-0000-0000-0000-000000000001';
+const ROL_ADMIN = '00000000-0000-0000-0000-000000000010';
 const ROL_ENCARGADO = '00000000-0000-0000-0000-000000000011';
 const ROL_CAJERO = '00000000-0000-0000-0000-000000000012';
 
@@ -129,6 +130,25 @@ const EMPLEADOS = [
     email: 'diez13sep@gmail.com',
     password: 'diego0670',
     rol_id: ROL_ENCARGADO,
+  },
+  {
+    nombre: 'Juan Manuel',
+    apellido: 'García',
+    email: 'otomander@gmail.com',
+    password: 'juan7985',
+    rol_id: ROL_CAJERO,
+  },
+  // Acceso de soporte de Pragma — rol admin (acceso total) para que el
+  // equipo pueda intervenir si hace falta. Password más larga porque es
+  // un acceso sensible (admin), aún así legible para no tener que
+  // copiar/pegar de un manager. Cambiala desde /admin/empleados cuando
+  // quieras rotar el credencial.
+  {
+    nombre: 'Pragma',
+    apellido: 'Soporte',
+    email: 'pragmasolucionesdigitales@gmail.com',
+    password: 'PragmaSoporte2026',
+    rol_id: ROL_ADMIN,
   },
 ];
 
@@ -230,7 +250,12 @@ async function main() {
   console.log('  Credenciales — para entregar a cada empleado');
   console.log('────────────────────────────────────────────────');
   for (const e of EMPLEADOS) {
-    const rol = e.rol_id === ROL_ENCARGADO ? 'Encargado' : 'Cajero';
+    const rol =
+      e.rol_id === ROL_ADMIN
+        ? 'Admin'
+        : e.rol_id === ROL_ENCARGADO
+          ? 'Encargado'
+          : 'Cajero';
     console.log(`\n  ${e.nombre} ${e.apellido} · ${rol}`);
     console.log(`    Email:    ${e.email}`);
     console.log(`    Password: ${e.password}`);
