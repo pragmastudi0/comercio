@@ -249,9 +249,12 @@ async function crearOActualizar(emp) {
 }
 
 async function desactivar(email) {
-  console.log(`→ desactivar ${email}`);
-  // 1) Tabla empleados: marcar inactivo (NO hard delete por FKs de
-  //    historial). Si la fila no existe, lo logueamos y seguimos.
+  console.log(`→ borrar ${email}`);
+  // 1) Tabla empleados: intentamos hard DELETE primero (lo más limpio).
+  //    Si la fila no existe, skip. Si existe y tiene referencias en
+  //    historial (movimientos_stock, ventas, sesiones, etc.), Postgres
+  //    rechaza el delete con FK violation → caemos a soft delete para
+  //    no romper la integridad histórica.
   const { data: emp, error: selErr } = await admin
     .from('empleados')
     .select('id, activo')
@@ -260,20 +263,41 @@ async function desactivar(email) {
   if (selErr) throw new Error(`empleados.select ${email}: ${selErr.message}`);
   if (!emp) {
     console.log(`  · sin fila en empleados (skip)`);
-  } else if (!emp.activo) {
-    console.log(`  · ya estaba inactivo en empleados`);
   } else {
-    const { error: updErr } = await admin
+    const { error: delErr } = await admin
       .from('empleados')
-      .update({ activo: false })
+      .delete()
       .eq('id', emp.id);
-    if (updErr) {
-      throw new Error(`empleados.update ${email}: ${updErr.message}`);
+    if (!delErr) {
+      console.log(`  ✓ Borrado físico de empleados (no tenía historial)`);
+    } else if (
+      // PostgREST devuelve mensajes con "foreign key" / "violates"
+      // cuando hay FK constraint. Cualquiera de las dos basta.
+      /foreign key|violates|23503/i.test(delErr.message)
+    ) {
+      console.log(
+        `  · No se puede borrar (tiene historial): ${delErr.message.split('\n')[0]}`,
+      );
+      if (emp.activo) {
+        const { error: updErr } = await admin
+          .from('empleados')
+          .update({ activo: false })
+          .eq('id', emp.id);
+        if (updErr) {
+          throw new Error(`empleados.update ${email}: ${updErr.message}`);
+        }
+        console.log(`  ✓ Marcado inactivo (fallback)`);
+      } else {
+        console.log(`  · Ya estaba inactivo`);
+      }
+    } else {
+      throw new Error(`empleados.delete ${email}: ${delErr.message}`);
     }
-    console.log(`  ✓ Marcado inactivo en empleados`);
   }
 
   // 2) Supabase Auth: borrar el usuario para que no quede fantasma.
+  //    Esto se hace siempre, tanto si el hard delete funcionó como si
+  //    cayó al soft delete — el objetivo es que no pueda loguearse más.
   const yaAuth = await buscarUsuarioEnAuth(email);
   if (!yaAuth) {
     console.log(`  · sin cuenta en Auth (skip)`);
