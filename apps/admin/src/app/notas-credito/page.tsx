@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Eye, Receipt, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, Receipt, Search } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Button } from '@comercio/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
@@ -33,6 +33,8 @@ export default function NotasCreditoPage() {
   const [texto, setTexto] = useState('');
   // NC seleccionada para ver el detalle en el popup.
   const [ncDetalle, setNcDetalle] = useState<NotaCredito | null>(null);
+  // Orden por fecha. Default: más nueva arriba (mismo patrón que /ventas).
+  const [ordenDesc, setOrdenDesc] = useState(true);
 
   const notasQ = useQuery({
     queryKey: ['notas-credito-admin', desde, hasta],
@@ -72,7 +74,12 @@ export default function NotasCreditoPage() {
         ventaNumero(n.venta_id).toLowerCase().includes(q),
     );
   }
-  const visiblesOrdenadas = [...visibles].reverse();
+  // Ordenamos por fecha según el toggle. localeCompare sobre ISO strings
+  // es seguro (lexicográfico = cronológico).
+  const visiblesOrdenadas = [...visibles].sort((a, b) => {
+    const cmp = a.fecha.localeCompare(b.fecha);
+    return ordenDesc ? -cmp : cmp;
+  });
   const totalDevuelto = visibles.reduce((acc, n) => acc + n.monto_total, 0);
 
   return (
@@ -145,10 +152,27 @@ export default function NotasCreditoPage() {
                 <TableRow>
                   <TableHead>N° NC</TableHead>
                   <TableHead>Venta</TableHead>
-                  <TableHead>Fecha</TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      onClick={() => setOrdenDesc((v) => !v)}
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      title={
+                        ordenDesc
+                          ? 'Más nueva arriba (click para invertir)'
+                          : 'Más vieja arriba (click para invertir)'
+                      }
+                    >
+                      Fecha
+                      {ordenDesc ? (
+                        <ChevronDown className="h-3 w-3" />
+                      ) : (
+                        <ChevronUp className="h-3 w-3" />
+                      )}
+                    </button>
+                  </TableHead>
                   <TableHead>Cajero</TableHead>
                   <TableHead>Items</TableHead>
-                  <TableHead>Motivo</TableHead>
                   <TableHead className="text-right">Monto</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -176,7 +200,6 @@ export default function NotasCreditoPage() {
                         {n.items.reduce((acc, i) => acc + i.cantidad, 0)} u
                       </Badge>
                     </TableCell>
-                    <TableCell className="max-w-xs truncate text-sm">{n.motivo}</TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
                       {formatCurrency(n.monto_total)}
                     </TableCell>
