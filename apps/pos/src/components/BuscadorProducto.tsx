@@ -51,6 +51,7 @@ export function BuscadorProducto() {
     staleTime: 5 * 60_000,
   });
 
+
   // Stocks de los productos visibles en los resultados (con breakdown
   // local vs otros depósitos). Antes solo traíamos el del local, lo que
   // hacía que productos disponibles en B12 desde la caja C11 figuraran
@@ -74,7 +75,12 @@ export function BuscadorProducto() {
             local += cant;
           } else if (cant > 0) {
             otros += cant;
-            const n = nombrePorDep.get(it.deposito_id) ?? 'otro depósito';
+            // Sacamos prefijo "#Turisteando" y deduplicamos. Si no
+            // pudimos resolver el nombre, omitimos (no agregamos
+            // "otro depósito" para no ensuciar el mensaje).
+            const raw = nombrePorDep.get(it.deposito_id);
+            if (!raw) continue;
+            const n = raw.replace(/^#?\s*turisteando\s*/i, '').trim() || raw;
             if (!otrosNombres.includes(n)) otrosNombres.push(n);
           }
         }
@@ -117,12 +123,21 @@ export function BuscadorProducto() {
       toast.error(`"${p.nombre}" no tiene stock en ningún depósito.`);
       return { ok: false };
     }
-    const nombrePorDep = new Map(
-      (depositosQ.data ?? []).map((d) => [d.id, d.nombre]),
-    );
-    const nombresOtros = [...otrosPorDep.keys()].map(
-      (id) => nombrePorDep.get(id) ?? 'otro depósito',
-    );
+    // Si depositosQ todavía no cargó (race contra el primer click después
+    // de abrir la pantalla), forzamos el fetch acá. Sin esto los nombres
+    // caen al fallback y el toast queda con "otro depósito o otro depósito".
+    const depositos =
+      depositosQ.data ?? (await db.depositos.list().catch(() => []));
+    const nombrePorDep = new Map(depositos.map((d) => [d.id, d.nombre]));
+    // Resolvemos nombres reales (B12/C11/Central, sin "#Turisteando"),
+    // deduplicando y descartando los que no pudimos resolver.
+    const nombresOtros: string[] = [];
+    for (const id of otrosPorDep.keys()) {
+      const raw = nombrePorDep.get(id);
+      if (!raw) continue;
+      const n = raw.replace(/^#?\s*turisteando\s*/i, '').trim() || raw;
+      if (!nombresOtros.includes(n)) nombresOtros.push(n);
+    }
     return { ok: true, crossDeposito: true, nombresOtros };
   }
 
@@ -143,8 +158,11 @@ export function BuscadorProducto() {
     setQ('');
     setMostrarLista(false);
     if (eval_.crossDeposito) {
+      const lugares = eval_.nombresOtros.length > 0
+        ? `pedilo a ${eval_.nombresOtros.join(' o ')}`
+        : 'pedilo al otro local';
       toast.warning(
-        `+ ${p.nombre} · pedilo a ${eval_.nombresOtros.join(' o ')}, no hay en tu caja`,
+        `+ ${p.nombre} · ${lugares}, no hay en tu caja`,
         { duration: 5000 },
       );
     } else {
@@ -164,8 +182,11 @@ export function BuscadorProducto() {
     setQ('');
     setMostrarLista(false);
     if (eval_.crossDeposito) {
+      const lugares = eval_.nombresOtros.length > 0
+        ? `pedilo a ${eval_.nombresOtros.join(' o ')}`
+        : 'pedilo al otro local';
       toast.warning(
-        `+ ${p.nombre} · pedilo a ${eval_.nombresOtros.join(' o ')}, no hay en tu caja`,
+        `+ ${p.nombre} · ${lugares}, no hay en tu caja`,
         { duration: 5000 },
       );
     } else {
