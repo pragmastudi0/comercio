@@ -6,6 +6,27 @@ import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 
+// ─── Helpers de fecha amigable (compartidos entre PreciosFields y
+// el campo costo) ─────────────────────────────────────────────────
+function tiempoDesde(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const dias = Math.floor(ms / (1000 * 60 * 60 * 24));
+  if (dias < 1) return 'hoy';
+  if (dias < 2) return 'ayer';
+  if (dias < 30) return `hace ${dias} días`;
+  if (dias < 365) {
+    const meses = Math.floor(dias / 30);
+    return meses <= 1 ? 'hace 1 mes' : `hace ${meses} meses`;
+  }
+  const anios = Math.floor(dias / 365);
+  return anios <= 1 ? 'hace 1 año' : `hace ${anios} años`;
+}
+function fechaCorta(iso: string): string {
+  return new Date(iso).toLocaleDateString('es-AR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+}
+
 export type ProductoFormValues = {
   codigo_interno: string;
   nombre: string;
@@ -51,11 +72,15 @@ export function ProductoFormFields({
   onChange,
   categorias,
   proveedores,
+  /** Última vez que se cambió el costo (ISO). Si se pasa, se muestra
+   *  al lado del label "Costo" como "Actualizado hace X días". */
+  costoActualizadoEn,
 }: {
   values: ProductoFormValues;
   onChange: (next: ProductoFormValues) => void;
   categorias: CategoriaConAttrs[];
   proveedores: { id: string; nombre: string }[];
+  costoActualizadoEn?: string;
 }) {
   const catActual = categorias.find((c) => c.id === values.categoria_id);
   const atrDefs = catActual?.atributos
@@ -83,7 +108,26 @@ export function ProductoFormFields({
             />
           </div>
           <div>
-            <Label className="mb-1 block">Costo</Label>
+            <div className="mb-1 flex items-baseline justify-between gap-2">
+              <Label className="block">Costo</Label>
+              {/* Misma lógica que en PreciosFields: si el caller pasó la
+                  prop pero no hay valor (típico en alta de producto),
+                  mostramos "Sin fecha registrada". */}
+              {costoActualizadoEn !== undefined && (
+                costoActualizadoEn ? (
+                  <span
+                    className="text-xs text-muted-foreground"
+                    title={`Última modificación: ${fechaCorta(costoActualizadoEn)}`}
+                  >
+                    Actualizado {tiempoDesde(costoActualizadoEn)}
+                  </span>
+                ) : (
+                  <span className="text-xs italic text-muted-foreground/60">
+                    Sin fecha registrada
+                  </span>
+                )
+              )}
+            </div>
             <Input
               type="number"
               min="0"
@@ -317,25 +361,6 @@ export function PreciosFields({
   listas: { id: string; nombre: string }[];
   ultimaActualizacionPorLista?: Record<string, string | undefined>;
 }) {
-  // Helper para texto "hace X días" en formato amigable.
-  function tiempoDesde(iso: string): string {
-    const ms = Date.now() - new Date(iso).getTime();
-    const dias = Math.floor(ms / (1000 * 60 * 60 * 24));
-    if (dias < 1) return 'hoy';
-    if (dias < 2) return 'ayer';
-    if (dias < 30) return `hace ${dias} días`;
-    if (dias < 365) {
-      const meses = Math.floor(dias / 30);
-      return meses <= 1 ? 'hace 1 mes' : `hace ${meses} meses`;
-    }
-    const anios = Math.floor(dias / 365);
-    return anios <= 1 ? 'hace 1 año' : `hace ${anios} años`;
-  }
-  function fechaCorta(iso: string): string {
-    return new Date(iso).toLocaleDateString('es-AR', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-    });
-  }
   function setEscala(listaId: string, idx: number, patch: Partial<{ desde: number; precio: number }>) {
     onChange(
       precios.map((p) =>

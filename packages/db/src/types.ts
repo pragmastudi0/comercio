@@ -118,6 +118,10 @@ export type Producto = {
   categoria_id: ID;
   proveedor_id?: ID;
   costo: number;
+  /** Última vez que se modificó el costo. Mantenido por trigger en DB
+   *  — el cliente no necesita setearlo. Útil para mostrar "actualizado
+   *  hace X días" en el detalle del producto. */
+  costo_actualizado_en?: string;
   // Atributos dinámicos según la categoría
   atributos?: Record<string, string | number | boolean>;
   publicado_web: boolean;
