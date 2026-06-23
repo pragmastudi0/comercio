@@ -72,15 +72,16 @@ export function ProductoFormFields({
   onChange,
   categorias,
   proveedores,
-  /** Última vez que se cambió el costo (ISO). Si se pasa, se muestra
-   *  al lado del label "Costo" como "Actualizado hace X días". */
+  /** Última vez que se cambió el costo. Si se pasa string con valor →
+   *  "Actualizado hace X". Si se pasa null/'' → "Sin fecha registrada".
+   *  Si se omite (undefined) → no se muestra nada (caso alta nueva). */
   costoActualizadoEn,
 }: {
   values: ProductoFormValues;
   onChange: (next: ProductoFormValues) => void;
   categorias: CategoriaConAttrs[];
   proveedores: { id: string; nombre: string }[];
-  costoActualizadoEn?: string;
+  costoActualizadoEn?: string | null;
 }) {
   const catActual = categorias.find((c) => c.id === values.categoria_id);
   const atrDefs = catActual?.atributos

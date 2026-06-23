@@ -162,7 +162,7 @@ export default function EditarProductoPage() {
           onChange={setValues}
           categorias={categoriasQ.data ?? []}
           proveedores={proveedoresQ.data ?? []}
-          costoActualizadoEn={prodQ.data.costo_actualizado_en}
+          costoActualizadoEn={prodQ.data.costo_actualizado_en ?? null}
         />
         <PreciosFields
           precios={precios}
