@@ -96,6 +96,10 @@ export type ProductoListaPrecio = {
   producto_id: ID;
   lista_precio_id: ID;
   escalas: EscalaPrecio[]; // si solo hay una escala con desde=1, es precio plano
+  /** Última vez que se modificó el precio (escalas). Mantenido por
+   *  trigger en DB — el cliente no necesita setearlo. Útil para mostrar
+   *  "actualizado hace X días" en el detalle del producto. */
+  actualizado_en?: string;
 };
 
 export type ProductoImagen = {

@@ -163,7 +163,17 @@ export default function EditarProductoPage() {
           categorias={categoriasQ.data ?? []}
           proveedores={proveedoresQ.data ?? []}
         />
-        <PreciosFields precios={precios} onChange={setPrecios} listas={listasQ.data ?? []} />
+        <PreciosFields
+          precios={precios}
+          onChange={setPrecios}
+          listas={listasQ.data ?? []}
+          ultimaActualizacionPorLista={Object.fromEntries(
+            (preciosActQ.data ?? []).map((p) => [
+              p.lista_precio_id,
+              p.actualizado_en,
+            ]),
+          )}
+        />
 
         <ImagenesProducto productoId={id} />
 

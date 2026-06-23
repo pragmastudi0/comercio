@@ -305,13 +305,37 @@ export function PreciosFields({
   precios,
   onChange,
   listas,
+  /** Map listaId → fecha ISO de última actualización del precio.
+   *  Si está, mostramos "actualizado hace X días" al lado del nombre.
+   *  Opcional para no romper otros callers (creación de producto nuevo). */
+  ultimaActualizacionPorLista,
 }: {
   precios: { listaId: string; escalas: { desde: number; precio: number }[] }[];
   onChange: (
     next: { listaId: string; escalas: { desde: number; precio: number }[] }[],
   ) => void;
   listas: { id: string; nombre: string }[];
+  ultimaActualizacionPorLista?: Record<string, string | undefined>;
 }) {
+  // Helper para texto "hace X días" en formato amigable.
+  function tiempoDesde(iso: string): string {
+    const ms = Date.now() - new Date(iso).getTime();
+    const dias = Math.floor(ms / (1000 * 60 * 60 * 24));
+    if (dias < 1) return 'hoy';
+    if (dias < 2) return 'ayer';
+    if (dias < 30) return `hace ${dias} días`;
+    if (dias < 365) {
+      const meses = Math.floor(dias / 30);
+      return meses <= 1 ? 'hace 1 mes' : `hace ${meses} meses`;
+    }
+    const anios = Math.floor(dias / 365);
+    return anios <= 1 ? 'hace 1 año' : `hace ${anios} años`;
+  }
+  function fechaCorta(iso: string): string {
+    return new Date(iso).toLocaleDateString('es-AR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    });
+  }
   function setEscala(listaId: string, idx: number, patch: Partial<{ desde: number; precio: number }>) {
     onChange(
       precios.map((p) =>
@@ -355,9 +379,20 @@ export function PreciosFields({
         {listas.map((lista) => {
           const p = precios.find((x) => x.listaId === lista.id);
           if (!p) return null;
+          const actualizado = ultimaActualizacionPorLista?.[lista.id];
           return (
             <div key={lista.id}>
-              <div className="mb-2 text-sm font-semibold">{lista.nombre}</div>
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold">{lista.nombre}</span>
+                {actualizado && (
+                  <span
+                    className="text-xs text-muted-foreground"
+                    title={`Última modificación: ${fechaCorta(actualizado)}`}
+                  >
+                    Actualizado {tiempoDesde(actualizado)}
+                  </span>
+                )}
+              </div>
               {p.escalas.map((esc, idx) => (
                 <div key={idx} className="mb-2 grid grid-cols-[1fr_1fr_auto] gap-2">
                   <div>
