@@ -147,44 +147,59 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
       if (error) throw new Error(`productos.delete: ${error.message}`);
     },
     async aumentoMasivo(filtro, porcentaje, listaPrecioId) {
-      // 1) Traer productos que matchean el filtro. Paginamos para
-      //    sortear el límite de 1000 filas por request de PostgREST.
+      // Estrategia:
+      // - Si hay filtro (categoría / proveedor / texto), traemos los
+      //   ids del filtro y los matcheamos del lado cliente. Evitamos
+      //   `.in('producto_id', ids)` porque con muchos UUIDs supera el
+      //   límite de URL de PostgREST y devuelve "Bad Request".
+      // - Si NO hay filtro (aumento a TODOS los productos), saltamos
+      //   ese paso: traemos directamente todos los precios de la lista.
+      const filtroVacio =
+        !filtro.categoria_id && !filtro.proveedor_id && !filtro.texto;
+
+      // 1) Si hay filtro, traer los ids de productos que matchean
+      //    (paginado para sortear el cap de 1000 filas).
+      let idsFiltro: Set<string> | null = null;
+      if (!filtroVacio) {
+        idsFiltro = new Set<string>();
+        const PAGE = 1000;
+        let from = 0;
+        while (true) {
+          let q = sb
+            .from('productos')
+            .select('id')
+            .range(from, from + PAGE - 1);
+          q = aplicarFiltro(q, filtro);
+          const chunk = okList<{ id: string }>(
+            await q,
+            'productos.aumentoMasivo (list)',
+          );
+          for (const p of chunk) idsFiltro.add(p.id);
+          if (chunk.length < PAGE) break;
+          from += PAGE;
+        }
+        if (idsFiltro.size === 0) return 0;
+      }
+
+      // 2) Traer TODOS los precios de la lista (paginado). Si hay
+      //    filtro, descartamos in-memory los que no matchean.
       const PAGE = 1000;
-      const ids: string[] = [];
+      const precios: PrecioRow[] = [];
       let from = 0;
       while (true) {
-        let q = sb
-          .from('productos')
-          .select('id')
-          .range(from, from + PAGE - 1);
-        q = aplicarFiltro(q, filtro);
-        const chunk = okList<{ id: string }>(
-          await q,
-          'productos.aumentoMasivo (list)',
-        );
-        for (const p of chunk) ids.push(p.id);
-        if (chunk.length < PAGE) break;
-        from += PAGE;
-      }
-      if (ids.length === 0) return 0;
-
-      // 2) Traer precios actuales para esa lista. Chunkeamos el .in()
-      //    en bloques chicos porque PostgREST mete los IDs en la URL
-      //    del GET y con muchos UUIDs supera el límite de longitud
-      //    (devuelve "Bad Request" sin contexto).
-      const IN_CHUNK = 100;
-      const precios: PrecioRow[] = [];
-      for (let i = 0; i < ids.length; i += IN_CHUNK) {
-        const slice = ids.slice(i, i + IN_CHUNK);
         const chunk = okList<PrecioRow>(
           await sb
             .from('producto_lista_precio')
             .select('*')
-            .in('producto_id', slice)
-            .eq('lista_precio_id', listaPrecioId),
+            .eq('lista_precio_id', listaPrecioId)
+            .range(from, from + PAGE - 1),
           'productos.aumentoMasivo (precios)',
         );
-        precios.push(...chunk);
+        for (const p of chunk) {
+          if (!idsFiltro || idsFiltro.has(p.producto_id)) precios.push(p);
+        }
+        if (chunk.length < PAGE) break;
+        from += PAGE;
       }
 
       // 3) Aplicar el aumento — uno por uno, secuencial. El trigger

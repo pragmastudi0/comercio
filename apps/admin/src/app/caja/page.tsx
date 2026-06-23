@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Wallet, LockOpen, Lock, Eye } from 'lucide-react';
+import { Wallet, LockOpen, Lock, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
 import { RequierePermiso } from '@/lib/permisos';
@@ -35,15 +36,40 @@ export default function CajasPage() {
   // Sesión seleccionada para ver detalle (ventas + movs + arqueo).
   const [sesionDetalle, setSesionDetalle] = useState<SesionCaja | null>(null);
 
+  // Filtros y orden del historial de sesiones cerradas.
+  const hoy = format(new Date(), 'yyyy-MM-dd');
+  const hace30 = format(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    'yyyy-MM-dd',
+  );
+  const [desde, setDesde] = useState(hace30);
+  const [hasta, setHasta] = useState(hoy);
+  // Default: más nueva arriba.
+  const [ordenDesc, setOrdenDesc] = useState(true);
+
   const empleadoNombre = (id: string) => {
     const e = empleadosQ.data?.find((x) => x.id === id);
     return e ? `${e.nombre} ${e.apellido}` : '—';
   };
   const cajaNombre = (id: string) => cajasQ.data?.find((c) => c.id === id)?.nombre ?? '—';
 
-  const sesiones = (sesionesQ.data ?? []).slice().reverse();
+  const sesiones = sesionesQ.data ?? [];
   const abiertas = sesiones.filter((s) => s.estado === 'abierta');
-  const cerradas = sesiones.filter((s) => s.estado === 'cerrada').slice(0, 10);
+  // Historial completo (filtro fecha cierre + orden), sin cap de 10.
+  const desdeIso = new Date(`${desde}T00:00:00`).toISOString();
+  const hastaIso = new Date(`${hasta}T23:59:59`).toISOString();
+  const cerradas = sesiones
+    .filter((s) => {
+      if (s.estado !== 'cerrada') return false;
+      const ref = s.cerrada_en ?? s.abierta_en;
+      return ref >= desdeIso && ref <= hastaIso;
+    })
+    .sort((a, b) => {
+      const aRef = a.cerrada_en ?? a.abierta_en;
+      const bRef = b.cerrada_en ?? b.abierta_en;
+      const cmp = aRef.localeCompare(bRef);
+      return ordenDesc ? -cmp : cmp;
+    });
 
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
@@ -83,17 +109,44 @@ export default function CajasPage() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="gap-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Lock className="h-4 w-4" />
-            Últimas 10 sesiones cerradas
+            Historial de sesiones cerradas ({cerradas.length})
           </CardTitle>
+          {/* Filtros por fecha de cierre. */}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr]">
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
+                Desde
+              </label>
+              <Input
+                type="date"
+                value={desde}
+                onChange={(e) => setDesde(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
+                Hasta
+              </label>
+              <Input
+                type="date"
+                value={hasta}
+                onChange={(e) => setHasta(e.target.value)}
+                className="h-9"
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {sesionesQ.isLoading ? (
             <Skeleton className="h-32" />
           ) : cerradas.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin sesiones cerradas todavía.</p>
+            <p className="text-sm text-muted-foreground">
+              No hay sesiones cerradas en el rango seleccionado. Ampliá las fechas si esperabas ver alguna.
+            </p>
           ) : (
             <div className="-mx-4 overflow-x-auto sm:mx-0">
               <table className="w-full min-w-[760px] text-sm">
@@ -102,7 +155,25 @@ export default function CajasPage() {
                   <th className="whitespace-nowrap px-3 py-2 text-left">Caja</th>
                   <th className="whitespace-nowrap px-3 py-2 text-left">Cajero</th>
                   <th className="whitespace-nowrap px-3 py-2 text-left">Apertura</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left">Cierre</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left">
+                    <button
+                      type="button"
+                      onClick={() => setOrdenDesc((v) => !v)}
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      title={
+                        ordenDesc
+                          ? 'Más nueva arriba (click para invertir)'
+                          : 'Más vieja arriba (click para invertir)'
+                      }
+                    >
+                      Cierre
+                      {ordenDesc ? (
+                        <ChevronDown className="h-3 w-3" />
+                      ) : (
+                        <ChevronUp className="h-3 w-3" />
+                      )}
+                    </button>
+                  </th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Inicial</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Esperado</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Declarado</th>
