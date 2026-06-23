@@ -49,6 +49,15 @@ function ConfiguracionInner() {
   const [arranqueVentas, setArranqueVentas] = useState(0);
   const [arranqueDesde, setArranqueDesde] = useState('');
 
+  // Clamp helper: el HTML min/max se respeta al enviar el form, pero el
+  // state interno puede tener valores fuera de rango si el usuario los
+  // escribe a mano. Esto los corta al guardar en state. Si NaN o no es
+  // finito, fallback al valor anterior.
+  function clamp(n: number, min: number, max: number, fallback: number) {
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+  }
+
   useEffect(() => {
     if (configQ.data) {
       setDescuentoEfPct(configQ.data.descuento_efectivo_pct);
@@ -151,7 +160,11 @@ function ConfiguracionInner() {
               max="100"
               step="0.5"
               value={descuentoEfPct}
-              onChange={(e) => setDescuentoEfPct(parseFloat(e.target.value) || 0)}
+              onChange={(e) =>
+                setDescuentoEfPct(
+                  clamp(parseFloat(e.target.value), 0, 100, descuentoEfPct),
+                )
+              }
             />
           </CardContent>
         </Card>
@@ -169,8 +182,13 @@ function ConfiguracionInner() {
                 id="val"
                 type="number"
                 min="1"
+                max="365"
                 value={validezPresup}
-                onChange={(e) => setValidezPresup(parseInt(e.target.value) || 1)}
+                onChange={(e) =>
+                  setValidezPresup(
+                    clamp(parseInt(e.target.value), 1, 365, validezPresup),
+                  )
+                }
               />
             </div>
             <div className="flex items-center gap-2">
@@ -208,9 +226,12 @@ function ConfiguracionInner() {
                   <Input
                     type="number"
                     min="1"
+                    max="36"
                     value={c.cuotas}
                     onChange={(e) =>
-                      editarCuota(i, { cuotas: parseInt(e.target.value) || 1 })
+                      editarCuota(i, {
+                        cuotas: clamp(parseInt(e.target.value), 1, 36, c.cuotas),
+                      })
                     }
                   />
                   <Input
@@ -220,7 +241,14 @@ function ConfiguracionInner() {
                     step="0.5"
                     value={c.recargo_pct}
                     onChange={(e) =>
-                      editarCuota(i, { recargo_pct: parseFloat(e.target.value) || 0 })
+                      editarCuota(i, {
+                        recargo_pct: clamp(
+                          parseFloat(e.target.value),
+                          0,
+                          200,
+                          c.recargo_pct,
+                        ),
+                      })
                     }
                   />
                   <Button variant="ghost" size="icon" onClick={() => quitarCuota(i)}>
@@ -263,7 +291,9 @@ function ConfiguracionInner() {
                 step="0.01"
                 value={arranqueFacturacion}
                 onChange={(e) =>
-                  setArranqueFacturacion(parseFloat(e.target.value) || 0)
+                  setArranqueFacturacion(
+                    clamp(parseFloat(e.target.value), 0, 9_999_999_999, arranqueFacturacion),
+                  )
                 }
                 placeholder="0"
               />
@@ -279,7 +309,9 @@ function ConfiguracionInner() {
                 step="1"
                 value={arranqueVentas}
                 onChange={(e) =>
-                  setArranqueVentas(parseInt(e.target.value, 10) || 0)
+                  setArranqueVentas(
+                    clamp(parseInt(e.target.value, 10), 0, 1_000_000, arranqueVentas),
+                  )
                 }
                 placeholder="0"
               />
@@ -369,7 +401,11 @@ function ConfiguracionInner() {
                 min={0}
                 step={1000}
                 value={pedidoMinimo}
-                onChange={(e) => setPedidoMinimo(parseFloat(e.target.value) || 0)}
+                onChange={(e) =>
+                  setPedidoMinimo(
+                    clamp(parseFloat(e.target.value), 0, 9_999_999, pedidoMinimo),
+                  )
+                }
                 className="max-w-xs"
               />
               <p className="mt-1 text-xs text-muted-foreground">

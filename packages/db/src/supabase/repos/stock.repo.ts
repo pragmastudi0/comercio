@@ -29,7 +29,7 @@ import { ok, okList } from '../helpers';
  * Si `validar` devuelve un Error, abortamos sin escribir (caller decide
  * mensaje).
  */
-async function aplicarDeltaStock(
+export async function aplicarDeltaStock(
   sb: SupabaseClient,
   opts: {
     producto_id: string;

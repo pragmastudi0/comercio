@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VentasRepo } from '../../repos/ventas.repo';
 import type { Venta } from '../../types';
 import { ok, okList, okMaybe } from '../helpers';
+import { aplicarDeltaStock } from './stock.repo';
 
 export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
   return {
@@ -54,6 +55,13 @@ export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
       return data as Venta;
     },
     async anular(id, empleadoId, motivo) {
+      // NOTA: idealmente esto debería ser una RPC atómica (devuelve
+      // stock + registra movs + revierte caja en una sola TX). Hoy
+      // son 3 pasos sueltos — si falla a la mitad, el resto no se
+      // revierte. Pendiente: migrar a `rpc_anular_venta`. Mientras
+      // tanto, cada paso tiene su try/catch claro para que un error
+      // diga DÓNDE falló, no un mensaje genérico.
+
       // 1) Marcar la venta como anulada
       const venta = ok<Venta>(
         await sb
@@ -71,22 +79,25 @@ export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
         'ventas.anular',
       );
 
-      // 2) Devolver stock + registrar movimientos de stock + revertir movimientos de caja
+      // 2) Devolver stock + registrar movimientos. Usamos
+      //    `aplicarDeltaStock` para evitar el bug del upsert con
+      //    unique parcial (ver stock.repo.ts).
       for (const it of venta.items) {
-        const { data: existente } = await sb
-          .from('stock_items')
-          .select('cantidad')
-          .eq('producto_id', it.producto_id)
-          .eq('deposito_id', venta.deposito_id)
-          .maybeSingle();
-        const actual = Number(existente?.cantidad ?? 0);
-        await sb.from('stock_items').upsert({
+        try {
+          await aplicarDeltaStock(sb, {
+            producto_id: it.producto_id,
+            variante_id: it.variante_id ?? null,
+            deposito_id: venta.deposito_id,
+            delta: it.cantidad,
+          });
+        } catch (e) {
+          throw new Error(
+            `ventas.anular (stock prod=${it.producto_id}): ${(e as Error).message}`,
+          );
+        }
+        const { error: movErr } = await sb.from('movimientos_stock').insert({
           producto_id: it.producto_id,
-          deposito_id: venta.deposito_id,
-          cantidad: actual + it.cantidad,
-        });
-        await sb.from('movimientos_stock').insert({
-          producto_id: it.producto_id,
+          variante_id: it.variante_id ?? null,
           deposito_id: venta.deposito_id,
           tipo: 'devolucion',
           cantidad: it.cantidad,
@@ -94,9 +105,16 @@ export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
           empleado_id: empleadoId,
           motivo,
         });
+        if (movErr) {
+          throw new Error(
+            `ventas.anular (movimiento stock prod=${it.producto_id}): ${movErr.message}`,
+          );
+        }
       }
+
+      // 3) Revertir movimientos de caja (uno por método de pago original).
       for (const pago of venta.pagos) {
-        await sb.from('movimientos_caja').insert({
+        const { error: cajaErr } = await sb.from('movimientos_caja').insert({
           sesion_caja_id: venta.sesion_caja_id,
           tipo: 'anulacion',
           metodo: pago.metodo,
@@ -104,6 +122,11 @@ export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
           venta_id: venta.id,
           empleado_id: empleadoId,
         });
+        if (cajaErr) {
+          throw new Error(
+            `ventas.anular (movimiento caja método=${pago.metodo}): ${cajaErr.message}`,
+          );
+        }
       }
 
       return venta;

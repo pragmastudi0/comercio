@@ -135,10 +135,19 @@ export function ModalCobro({
     return base;
   }
 
+  // Parser robusto: devuelve un número finito y >= 0, o el fallback.
+  // Sin esto, "abc" → NaN (manejado), pero "Infinity" o "-5" pasaban
+  // y rompían los cálculos posteriores.
+  function montoSeguro(input: string, fallback: number): number {
+    const n = parseFloat(input);
+    if (!Number.isFinite(n) || n < 0) return fallback;
+    return n;
+  }
+
   // Total que cobra el cajero (suma de pagos)
   const totalCobrado = pagos.reduce((acc, p) => acc + p.monto, 0);
   // Adelanto de cuánto sería el "pago actual" si se agregara
-  const montoCubrirActual = parseFloat(montoInput) || restante;
+  const montoCubrirActual = montoSeguro(montoInput, restante);
   const proximoPagoMonto = calcularPagoFinal(
     montoCubrirActual,
     metodo,
@@ -151,7 +160,7 @@ export function ModalCobro({
   const esSoloEfectivo =
     pagos.length === 1 && pagos[0]?.metodo === 'efectivo' && restante < 0.01;
   const totalAPagar = totalCobrado;
-  const recibido = parseFloat(montoRecibido) || 0;
+  const recibido = montoSeguro(montoRecibido, 0);
   const vuelto = esSoloEfectivo ? Math.max(0, recibido - totalAPagar) : 0;
 
   function agregarPagoActual() {
@@ -160,7 +169,7 @@ export function ModalCobro({
       toast.error('Cuenta corriente requiere cliente identificado');
       return;
     }
-    const montoCubrir = parseFloat(montoInput) || restante;
+    const montoCubrir = montoSeguro(montoInput, restante);
     if (montoCubrir <= 0) {
       toast.error('Monto inválido');
       return;
@@ -553,7 +562,7 @@ export function ModalCobro({
                   (ya tiene el descuento aplicado). */}
               {metodo === 'efectivo' && (() => {
                 const aPagar = proximoPagoMonto;
-                const entrega = parseFloat(montoRecibido) || 0;
+                const entrega = montoSeguro(montoRecibido, 0);
                 const vueltoLive = Math.max(0, entrega - aPagar);
                 const falta = Math.max(0, aPagar - entrega);
                 return (
