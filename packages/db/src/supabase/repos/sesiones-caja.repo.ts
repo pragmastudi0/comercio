@@ -29,7 +29,12 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
       // (caso típico: el admin cierra la sesión desde /admin/caja y el
       // cajero la cierra desde el PoS simultáneamente — sin este filtro,
       // el segundo update pasaba sin error pero no afectaba nada).
-      const { data, error } = await sb
+      //
+      // Usamos .select() que devuelve array (no .maybeSingle): así
+      // distinguimos "0 filas afectadas → ya estaba cerrada" sin caer en
+      // los quirks de PostgREST que a veces tira "Cannot coerce to single
+      // JSON object" cuando maybeSingle recibe 0 rows con ciertos headers.
+      const { data: filas, error } = await sb
         .from('sesiones_caja')
         .update({
           estado: 'cerrada',
@@ -38,10 +43,9 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
         })
         .eq('id', id)
         .eq('estado', 'abierta')
-        .select('*')
-        .maybeSingle();
+        .select('*');
       if (error) throw new Error(`sesiones_caja.cerrar: ${error.message}`);
-      if (!data) {
+      if (!filas || filas.length === 0) {
         // No es un error de bug — es una condición esperada (admin y cajero
         // cerraron la misma sesión "en simultáneo"). El UI distingue este
         // caso por el `name` para mostrarlo como info amigable, no rojo.
@@ -51,7 +55,7 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
         err.name = 'SesionYaCerrada';
         throw err;
       }
-      return data as SesionCaja;
+      return filas[0] as SesionCaja;
     },
     async sesionActivaDe(empleadoId, cajaId) {
       return okMaybe<SesionCaja>(
