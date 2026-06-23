@@ -147,23 +147,49 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
       if (error) throw new Error(`productos.delete: ${error.message}`);
     },
     async aumentoMasivo(filtro, porcentaje, listaPrecioId) {
-      // Traer productos que matchean el filtro
-      let q = sb.from('productos').select('id');
-      q = aplicarFiltro(q, filtro);
-      const prods = okList<{ id: string }>(await q, 'productos.aumentoMasivo (list)');
-      if (prods.length === 0) return 0;
-      const ids = prods.map((p) => p.id);
+      // 1) Traer productos que matchean el filtro. Paginamos para
+      //    sortear el límite de 1000 filas por request de PostgREST.
+      const PAGE = 1000;
+      const ids: string[] = [];
+      let from = 0;
+      while (true) {
+        let q = sb
+          .from('productos')
+          .select('id')
+          .range(from, from + PAGE - 1);
+        q = aplicarFiltro(q, filtro);
+        const chunk = okList<{ id: string }>(
+          await q,
+          'productos.aumentoMasivo (list)',
+        );
+        for (const p of chunk) ids.push(p.id);
+        if (chunk.length < PAGE) break;
+        from += PAGE;
+      }
+      if (ids.length === 0) return 0;
 
-      // Traer precios actuales para esa lista
-      const precios = okList<PrecioRow>(
-        await sb
-          .from('producto_lista_precio')
-          .select('*')
-          .in('producto_id', ids)
-          .eq('lista_precio_id', listaPrecioId),
-        'productos.aumentoMasivo (precios)',
-      );
+      // 2) Traer precios actuales para esa lista. Chunkeamos el .in()
+      //    en bloques chicos porque PostgREST mete los IDs en la URL
+      //    del GET y con muchos UUIDs supera el límite de longitud
+      //    (devuelve "Bad Request" sin contexto).
+      const IN_CHUNK = 100;
+      const precios: PrecioRow[] = [];
+      for (let i = 0; i < ids.length; i += IN_CHUNK) {
+        const slice = ids.slice(i, i + IN_CHUNK);
+        const chunk = okList<PrecioRow>(
+          await sb
+            .from('producto_lista_precio')
+            .select('*')
+            .in('producto_id', slice)
+            .eq('lista_precio_id', listaPrecioId),
+          'productos.aumentoMasivo (precios)',
+        );
+        precios.push(...chunk);
+      }
 
+      // 3) Aplicar el aumento — uno por uno, secuencial. El trigger
+      //    trg_precio_actualizado_en (migración 0009) refresca la
+      //    fecha en DB cuando escalas cambia, así que no la tocamos.
       const factor = 1 + porcentaje / 100;
       let actualizados = 0;
       for (const p of precios) {
