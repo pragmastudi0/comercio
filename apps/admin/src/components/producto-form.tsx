@@ -380,17 +380,28 @@ export function PreciosFields({
           const p = precios.find((x) => x.listaId === lista.id);
           if (!p) return null;
           const actualizado = ultimaActualizacionPorLista?.[lista.id];
+          // Si el prop está presente pero no hay valor para esta lista,
+          // mostramos "sin fecha registrada" para que sea evidente que
+          // la feature está y que solo falta el dato (típicamente, ese
+          // precio nunca se editó desde que se agregó el tracking).
+          const mostrarFecha = ultimaActualizacionPorLista !== undefined;
           return (
             <div key={lista.id}>
               <div className="mb-2 flex items-baseline justify-between gap-2">
                 <span className="text-sm font-semibold">{lista.nombre}</span>
-                {actualizado && (
-                  <span
-                    className="text-xs text-muted-foreground"
-                    title={`Última modificación: ${fechaCorta(actualizado)}`}
-                  >
-                    Actualizado {tiempoDesde(actualizado)}
-                  </span>
+                {mostrarFecha && (
+                  actualizado ? (
+                    <span
+                      className="text-xs text-muted-foreground"
+                      title={`Última modificación: ${fechaCorta(actualizado)}`}
+                    >
+                      Actualizado {tiempoDesde(actualizado)}
+                    </span>
+                  ) : (
+                    <span className="text-xs italic text-muted-foreground/60">
+                      Sin fecha registrada
+                    </span>
+                  )
                 )}
               </div>
               {p.escalas.map((esc, idx) => (
