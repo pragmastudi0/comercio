@@ -145,25 +145,20 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
         )}
       </div>
 
-      {/* TOTAL gigante: ocupa TODO el espacio sobrante, centrado vertical.
-          Así se aprovecha el aside completo y el cliente lee el monto
-          desde el otro lado del mostrador. */}
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-3 py-4">
-        <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Total a cobrar
-        </div>
-        <div
-          className="mt-1 w-full text-center font-bold leading-none tabular-nums"
-          style={{
-            fontSize: 'clamp(2.5rem, 6vw, 5rem)',
-          }}
-        >
+      {/* Total a cobrar (tamaño normal). NO absorbe espacio sobrante. */}
+      <div className="px-3 py-3">
+        <div className="text-[10px] uppercase text-muted-foreground">Total a cobrar</div>
+        <div className="text-3xl font-bold leading-tight tabular-nums">
           {formatCurrency(baseVenta)}
         </div>
-        <div className="mt-2 text-center text-[10px] leading-tight text-muted-foreground">
-          Recargos por forma de pago se aplican al elegir el método.
-        </div>
+        <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
+          Recargos/descuentos por forma de pago se aplican al elegir el método.
+        </p>
       </div>
+
+      {/* Spacer flexible: absorbe todo el espacio sobrante para que el
+          footer (cobro + cancelar) quede pegado al fondo del aside. */}
+      <div className="min-h-0 flex-1" />
 
       <div className="border-t bg-background p-3">
         <div className="mb-2 grid grid-cols-3 gap-2">
