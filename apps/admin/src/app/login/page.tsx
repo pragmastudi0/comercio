@@ -42,10 +42,13 @@ export default function LoginPage() {
       // el toast "Bienvenido". Acá lo cortamos limpio: signOut + tirar
       // error claro. Solo aparece UN toast.
       if (emp.rol_id === PRESET_IDS.roles.cajero) {
+        // SignOut en background (sin await) para no bloquear el throw.
+        // Si esperamos al signOut y la red está lenta, el botón queda
+        // "Verificando..." indefinido. El error se muestra al toque.
         const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
         const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
         if (url && key) {
-          await createSupabaseRaw(url, key).auth.signOut();
+          createSupabaseRaw(url, key).auth.signOut().catch(() => {});
         }
         throw new Error(
           'Como cajero tenés que usar el sistema de caja (PoS), no el panel admin.',
