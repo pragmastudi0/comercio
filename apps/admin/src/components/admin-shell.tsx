@@ -329,16 +329,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 flex-shrink-0"
-                onClick={async () => {
+                onClick={() => {
                   if (!confirm('¿Cerrar sesión?')) return;
+                  // Matamos el state local PRIMERO + navegamos. No
+                  // esperamos al signOut de Supabase para no quedar
+                  // bloqueados si la red está lenta o si el listener
+                  // de auth ignora el evento por el doble-check.
+                  logout();
+                  router.push('/login');
                   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
                   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
                   if (url && key) {
-                    const { createSupabaseRaw } = await import('@comercio/db');
-                    await createSupabaseRaw(url, key).auth.signOut();
+                    import('@comercio/db').then(({ createSupabaseRaw }) => {
+                      createSupabaseRaw(url, key).auth.signOut().catch(() => {});
+                    });
                   }
-                  logout();
-                  router.push('/login');
                 }}
                 title="Cerrar sesión"
               >
@@ -350,16 +355,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               variant="ghost"
               size="icon"
               className="h-10 w-10"
-              onClick={async () => {
+              onClick={() => {
                 if (!confirm('¿Cerrar sesión?')) return;
+                // Mismo patrón que el botón expandido: state local primero,
+                // signOut después en background.
+                logout();
+                router.push('/login');
                 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
                 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
                 if (url && key) {
-                  const { createSupabaseRaw } = await import('@comercio/db');
-                  await createSupabaseRaw(url, key).auth.signOut();
+                  import('@comercio/db').then(({ createSupabaseRaw }) => {
+                    createSupabaseRaw(url, key).auth.signOut().catch(() => {});
+                  });
                 }
-                logout();
-                router.push('/login');
               }}
               title="Cerrar sesión"
             >
