@@ -40,3 +40,13 @@ test-results/
 # misc
 *.local
 .vercel
+
+# entrega cliente y materiales locales (no commitear)
+Turisteando.zip
+turisteando-backup_*.xlsx
+*-turisteando.pdf
+Presentacion-*.pdf
+Snapshot-turisteando-*/
+entrega-cliente/
+pendientes.md
+usuarios-contra.png

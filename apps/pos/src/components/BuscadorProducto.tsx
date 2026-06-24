@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowRightLeft } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { PRESET_IDS } from '@comercio/db';
 import { useVenta } from '@/stores/venta';
 import { useDepositoActivo } from '@/lib/deposito-activo';
 import { Input } from '@comercio/ui/input';
+import { formatCurrency } from '@comercio/ui/utils';
 
 // Acepta tanto el UUID real de Supabase como el ID legacy del mock 'lp_cf'.
 const LISTA_CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
@@ -31,6 +31,7 @@ export function BuscadorProducto() {
   const [mostrarLista, setMostrarLista] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const agregar = useVenta((s) => s.agregar);
+  const quitar = useVenta((s) => s.quitar);
   const itemsEnCarrito = useVenta((s) => s.items);
 
   useEffect(() => {
@@ -50,6 +51,27 @@ export function BuscadorProducto() {
     queryFn: () => db.depositos.list(),
     staleTime: 5 * 60_000,
   });
+
+  // Precios de la lista Consumidor Final, para mostrarlos en el dropdown
+  // (antes el cajero tenía que agregar al carrito para verlos). Se trae
+  // una sola vez y se cachea — ~1900 filas chicas, sin impacto.
+  const preciosQ = useQuery({
+    queryKey: ['pos-precios-cf'],
+    queryFn: () => db.productos.preciosDeLista(PRESET_IDS.listas.consumidorFinal),
+    staleTime: 5 * 60_000,
+  });
+  // Map producto_id → precio base (escala desde 1).
+  const precioPorProducto = (() => {
+    const m = new Map<string, number>();
+    for (const r of preciosQ.data ?? []) {
+      const esc = [...r.escalas].sort((a, b) => a.desde - b.desde)[0];
+      if (esc) m.set(r.producto_id, esc.precio);
+    }
+    return m;
+  })();
+
+  // Item resaltado en el dropdown (para navegar con flechas).
+  const [resaltadoIdx, setResaltadoIdx] = useState(0);
 
 
   // Stocks de los productos visibles en los resultados (con breakdown
@@ -207,74 +229,73 @@ export function BuscadorProducto() {
         onChange={(e) => {
           setQ(e.target.value);
           setMostrarLista(true);
+          setResaltadoIdx(0); // resetear al cambiar la búsqueda
         }}
         onKeyDown={(e) => {
+          const lista = resultadosQ.data ?? [];
           if (e.key === 'Enter') {
-            // Si hay un resultado único, agregalo. Si no, intenta por código exacto.
-            const lista = resultadosQ.data ?? [];
-            if (lista.length === 1) {
-              agregarProducto(lista[0]!.id);
+            // Si hay resultados, agregar el resaltado (default: primero).
+            // Si no, intentar código exacto.
+            if (lista.length > 0) {
+              const target = lista[Math.min(resaltadoIdx, lista.length - 1)];
+              if (target) agregarProducto(target.id);
             } else {
               void agregarPorCodigoExacto();
             }
+          } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setResaltadoIdx((i) => Math.min(i + 1, lista.length - 1));
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setResaltadoIdx((i) => Math.max(0, i - 1));
           } else if (e.key === 'Escape') {
             setQ('');
             setMostrarLista(false);
+            setResaltadoIdx(0);
+          } else if (e.key === 'Delete' && q === '') {
+            // Suprimir con el buscador vacío → borrar último item.
+            // Si el cajero está tipeando, no se dispara (q !== '').
+            e.preventDefault();
+            const ultimo = itemsEnCarrito[itemsEnCarrito.length - 1];
+            if (ultimo) {
+              quitar(ultimo.producto.id);
+              toast.info(`− ${ultimo.producto.nombre}`);
+            }
           }
         }}
-        placeholder="Código (ej: 1003) o nombre — Enter para agregar"
+        placeholder="Código (ej: 1003) o nombre — ↑↓ para navegar, Enter para agregar"
         className="h-14 text-lg"
       />
       {mostrarLista && q.trim().length > 0 && (resultadosQ.data?.length ?? 0) > 0 && (
         <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-80 overflow-y-auto rounded-md border bg-popover shadow-lg">
-          {resultadosQ.data!.map((p) => {
-            const stock = stockDeProducto(p.id);
-            const cantEnCarrito = yaEnCarrito(p.id);
-            const dispLocal = stock.local - cantEnCarrito;
-            const hayLocal = dispLocal > 0;
-            const hayEnOtro = stock.otros > 0;
-            // Política Turisteando: permitir vender SIEMPRE, incluso si
-            // queda negativo. NO bloqueamos el botón nunca.
-            const noHayNada = !hayLocal && !hayEnOtro && !stocksQ.isLoading;
+          {resultadosQ.data!.map((p, idx) => {
+            const precio = precioPorProducto.get(p.id);
+            const resaltado = idx === resaltadoIdx;
             return (
               <button
                 key={p.id}
                 onClick={() => agregarProducto(p.id)}
-                className={`flex w-full items-center justify-between border-b px-4 py-3 text-left last:border-0 hover:bg-accent ${
-                  noHayNada ? 'bg-orange-50/40' : ''
+                onMouseEnter={() => setResaltadoIdx(idx)}
+                className={`flex w-full items-center justify-between border-b px-4 py-3 text-left last:border-0 ${
+                  resaltado ? 'bg-accent' : 'hover:bg-accent'
                 }`}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="font-mono text-xs text-muted-foreground">{p.codigo_interno}</div>
+                  <div className="font-mono text-xs text-muted-foreground">
+                    {p.codigo_interno}
+                  </div>
                   <div className="truncate font-medium">{p.nombre}</div>
                 </div>
-                <div className="ml-3 flex flex-col items-end gap-1 text-xs">
-                  {stocksQ.isLoading ? (
+                <div className="ml-3 flex flex-col items-end gap-0.5 text-xs">
+                  {precio !== undefined ? (
+                    <span className="text-lg font-bold tabular-nums text-foreground">
+                      {formatCurrency(precio)}
+                    </span>
+                  ) : preciosQ.isLoading ? (
                     <span className="text-muted-foreground">…</span>
-                  ) : noHayNada ? (
-                    <span className="flex items-center gap-1 font-medium text-orange-700">
-                      <AlertTriangle className="h-3 w-3" />
-                      Sin stock (vende igual)
-                    </span>
-                  ) : hayLocal ? (
-                    <span
-                      className={
-                        dispLocal <= 3
-                          ? 'font-medium text-orange-600'
-                          : 'font-medium text-green-700'
-                      }
-                    >
-                      {dispLocal} u en tu caja
-                    </span>
                   ) : (
-                    // Solo hay en otro depósito.
-                    <span className="flex items-center gap-1 font-medium text-amber-700">
-                      <ArrowRightLeft className="h-3 w-3" />
-                      {stock.otros} u en {stock.otrosNombres.join(' / ')}
-                    </span>
+                    <span className="text-orange-700">Sin precio</span>
                   )}
-                  {/* Se sacó el costo de venta: es info sensible (margen)
-                      que los cajeros no deben ver. Solo mostramos stock. */}
                 </div>
               </button>
             );

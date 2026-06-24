@@ -139,7 +139,7 @@ export function Caja() {
         </div>
       </header>
 
-      <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_340px] lg:grid-cols-[1fr_340px_260px]">
+      <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_340px]">
         <div className="flex flex-col overflow-hidden">
           <div className="border-b p-4">
             <BuscadorProducto />
@@ -163,6 +163,9 @@ export function Caja() {
               </span>
               <span className="text-muted-foreground/70">
                 Cobro: F5 Efectivo · F6 Tarjeta · F7 QR
+              </span>
+              <span className="text-muted-foreground/70">
+                Buscador: ↑↓ navegar · Enter agregar · Supr borrar último
               </span>
             </div>
           </div>
