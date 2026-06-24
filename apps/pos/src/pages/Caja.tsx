@@ -12,7 +12,6 @@ import { BuscadorProducto } from '@/components/BuscadorProducto';
 import { Carrito } from '@/components/Carrito';
 import { ResumenVenta } from '@/components/ResumenVenta';
 import { ModalCobro } from '@/components/ModalCobro';
-import { VentasDelDia } from '@/components/VentasDelDia';
 import { SHORTCUTS, SHORTCUT_LABELS } from '@/lib/shortcuts';
 import { Button } from '@comercio/ui/button';
 import type { MetodoPago } from '@comercio/db';
@@ -179,10 +178,6 @@ export function Caja() {
             onCobrar={(m) => abrirCobro(m)}
             onCancelar={cancelarVenta}
           />
-        </aside>
-
-        <aside className="hidden min-h-0 flex-col overflow-hidden border-l lg:flex">
-          <VentasDelDia />
         </aside>
       </div>
 
