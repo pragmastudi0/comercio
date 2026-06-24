@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
@@ -63,7 +64,24 @@ export default function ProveedoresPage() {
           { header: 'Email', cell: (r) => r.email ?? '—' },
           {
             header: 'Productos',
-            cell: (r) => <span className="text-muted-foreground">{cantProductos(r.id)}</span>,
+            cell: (r) => {
+              const cant = cantProductos(r.id);
+              // Si tiene productos, link al listado filtrado. Si no, gris
+              // y sin link para no confundir.
+              if (cant === 0) {
+                return <span className="text-muted-foreground">0</span>;
+              }
+              return (
+                <Link
+                  href={`/productos?proveedor=${r.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="font-medium text-primary hover:underline"
+                  title="Ver productos de este proveedor"
+                >
+                  {cant} →
+                </Link>
+              );
+            },
           },
           {
             header: 'Estado',

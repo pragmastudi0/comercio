@@ -31,26 +31,29 @@ function ProductosPageInner() {
   // Lee filtros iniciales de la URL para que los deep-links funcionen:
   //   /productos?stock=sin            ← KPI del dashboard
   //   /productos?categoria=<uuid>     ← clickear "N productos" en categorías
+  //   /productos?proveedor=<uuid>     ← clickear "N productos" en proveedores
   const stockInicial = (params.get('stock') ?? '') as FiltroStock;
   const [filtroStock, setFiltroStock] = useState<FiltroStock>(
     stockInicial === 'sin' || stockInicial === 'bajo' ? stockInicial : '',
   );
   const [categoriaId, setCategoriaId] = useState(params.get('categoria') ?? '');
+  const [proveedorId, setProveedorId] = useState(params.get('proveedor') ?? '');
   const [page, setPage] = useState(0);
 
   // Cuando cambia filtro, volver a página 0.
   useEffect(() => {
     setPage(0);
-  }, [texto, categoriaId, filtroStock]);
+  }, [texto, categoriaId, proveedorId, filtroStock]);
 
   const productosQ = useQuery({
-    queryKey: ['productos-admin', texto, categoriaId, filtroStock, page],
+    queryKey: ['productos-admin', texto, categoriaId, proveedorId, filtroStock, page],
     queryFn: () =>
       db.productos.listPaginado({
         page,
         pageSize: PAGE_SIZE,
         texto: texto || undefined,
         categoria_id: categoriaId || undefined,
+        proveedor_id: proveedorId || undefined,
         sin_stock: filtroStock === 'sin' || undefined,
         bajo_stock: filtroStock === 'bajo' || undefined,
         umbral_bajo_stock: filtroStock === 'bajo' ? UMBRAL_BAJO_STOCK : undefined,
@@ -59,6 +62,16 @@ function ProductosPageInner() {
     placeholderData: (prev) => prev,
   });
   const categoriasQ = useQuery({ queryKey: ['categorias'], queryFn: () => db.categorias.list() });
+  // Para resolver el nombre del proveedor cuando se está filtrando por uno
+  // (banner "Mostrando productos de X").
+  const proveedoresQ = useQuery({
+    queryKey: ['proveedores'],
+    queryFn: () => db.proveedores.list(),
+    enabled: !!proveedorId,
+  });
+  const proveedorActual = proveedorId
+    ? proveedoresQ.data?.find((p) => p.id === proveedorId)
+    : undefined;
 
   const total = productosQ.data?.total ?? 0;
   const rows = productosQ.data?.rows ?? [];
@@ -153,6 +166,26 @@ function ProductosPageInner() {
               ))}
             </select>
           </div>
+          {/* Banner discreto cuando se filtra por proveedor (deep-link desde
+              /admin/proveedores). Le doy al usuario un botón "Limpiar" para
+              salir del filtro sin tener que armar otra URL. */}
+          {proveedorId && (
+            <div className="md:col-span-3 flex items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm">
+              <span>
+                Mostrando productos del proveedor{' '}
+                <span className="font-semibold">
+                  {proveedorActual?.nombre ?? '…'}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setProveedorId('')}
+                className="text-xs font-medium text-amber-800 hover:underline"
+              >
+                Limpiar filtro
+              </button>
+            </div>
+          )}
           <div>
             <Label className="mb-1 block text-xs">Stock</Label>
             <select
