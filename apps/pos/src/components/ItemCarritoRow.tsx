@@ -14,6 +14,8 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
   const setPrecio = useVenta((s) => s.setPrecio);
   const setDescuento = useVenta((s) => s.setDescuentoLinea);
   const quitar = useVenta((s) => s.quitar);
+  const seleccionar = useVenta((s) => s.seleccionar);
+  const seleccionado = useVenta((s) => s.seleccionadoId === item.producto.id);
 
   const { depositoId } = useDepositoActivo();
   // Traemos el stock por TODOS los depósitos del producto. Así el cajero ve
@@ -69,7 +71,12 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
   }
 
   return (
-    <tr className="border-b align-top last:border-0">
+    <tr
+      onClick={() => seleccionar(item.producto.id)}
+      className={`cursor-pointer border-b align-top last:border-0 ${
+        seleccionado ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : 'hover:bg-muted/40'
+      }`}
+    >
       <td className="px-3 py-3 font-mono text-xs">{item.producto.codigo_interno}</td>
       <td className="px-3 py-3">
         <div className="font-medium">{item.producto.nombre}</div>

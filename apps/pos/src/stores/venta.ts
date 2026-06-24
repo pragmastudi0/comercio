@@ -19,6 +19,10 @@ export type ModoDescuento = 'pct' | 'monto';
 type VentaState = {
   items: ItemCarrito[];
   clienteId: string | null;
+  /** Id del producto resaltado en el carrito. Se usa para que la cajera
+   * pueda seleccionar una fila (clic o teclado) y borrarla con Supr/Del.
+   * Se auto-asigna al último agregado y se desplaza al vecino al quitar. */
+  seleccionadoId: string | null;
   descuentoModo: ModoDescuento;
   descuentoValor: number;
   motivoDescuento?: string;
@@ -27,6 +31,8 @@ type VentaState = {
   setPrecio: (productoId: string, precio: number) => void;
   setDescuentoLinea: (productoId: string, pct: number | undefined) => void;
   quitar: (productoId: string) => void;
+  seleccionar: (productoId: string | null) => void;
+  moverSeleccion: (delta: 1 | -1) => void;
   setCliente: (id: string | null) => void;
   setDescuento: (modo: ModoDescuento, valor: number, motivo?: string) => void;
   limpiarDescuento: () => void;
@@ -38,6 +44,7 @@ export const useVenta = create<VentaState>()(
     (set) => ({
       items: [],
       clienteId: null,
+      seleccionadoId: null,
       descuentoModo: 'pct',
       descuentoValor: 0,
       motivoDescuento: undefined,
@@ -49,6 +56,7 @@ export const useVenta = create<VentaState>()(
               items: state.items.map((i) =>
                 i.producto.id === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i,
               ),
+              seleccionadoId: producto.id,
             };
           }
           // Si el precio del producto es 0 (ej. mal seteado en catálogo),
@@ -59,6 +67,7 @@ export const useVenta = create<VentaState>()(
               ...state.items,
               { producto, cantidad: 1, precio_unitario: precioOk, precio_base: precioOk },
             ],
+            seleccionadoId: producto.id,
           };
         }),
       setCantidad: (productoId, cantidad) =>
@@ -84,7 +93,33 @@ export const useVenta = create<VentaState>()(
           ),
         })),
       quitar: (productoId) =>
-        set((state) => ({ items: state.items.filter((i) => i.producto.id !== productoId) })),
+        set((state) => {
+          const idx = state.items.findIndex((i) => i.producto.id === productoId);
+          const itemsNew = state.items.filter((i) => i.producto.id !== productoId);
+          // Si lo borrado era el seleccionado, pasamos al vecino (mismo
+          // índice = el siguiente; si era el último, al anterior).
+          let nuevoSel: string | null = state.seleccionadoId;
+          if (state.seleccionadoId === productoId) {
+            const vecino = itemsNew[idx] ?? itemsNew[idx - 1];
+            nuevoSel = vecino?.producto.id ?? null;
+          }
+          return { items: itemsNew, seleccionadoId: nuevoSel };
+        }),
+      seleccionar: (productoId) => set({ seleccionadoId: productoId }),
+      moverSeleccion: (delta) =>
+        set((state) => {
+          if (state.items.length === 0) return { seleccionadoId: null };
+          const idx = state.items.findIndex((i) => i.producto.id === state.seleccionadoId);
+          // Si no hay nada seleccionado: ↓ va al primero, ↑ al último.
+          if (idx === -1) {
+            return {
+              seleccionadoId:
+                delta > 0 ? state.items[0]!.producto.id : state.items[state.items.length - 1]!.producto.id,
+            };
+          }
+          const next = Math.max(0, Math.min(state.items.length - 1, idx + delta));
+          return { seleccionadoId: state.items[next]!.producto.id };
+        }),
       setCliente: (id) => set({ clienteId: id }),
       setDescuento: (modo, valor, motivo) =>
         set({ descuentoModo: modo, descuentoValor: Math.max(0, valor), motivoDescuento: motivo }),
@@ -93,6 +128,7 @@ export const useVenta = create<VentaState>()(
         set({
           items: [],
           clienteId: null,
+          seleccionadoId: null,
           descuentoModo: 'pct',
           descuentoValor: 0,
           motivoDescuento: undefined,

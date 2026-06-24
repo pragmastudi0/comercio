@@ -164,7 +164,7 @@ export function Caja() {
                 Cobro: F5 Efectivo · F6 Tarjeta · F7 QR
               </span>
               <span className="text-muted-foreground/70">
-                Buscador: ↑↓ navegar · Enter agregar · Supr borrar último
+                Buscador: Enter agrega · ↑↓ navega (resultados o carrito) · Supr borra ítem seleccionado
               </span>
             </div>
           </div>

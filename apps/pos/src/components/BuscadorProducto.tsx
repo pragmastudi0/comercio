@@ -33,6 +33,8 @@ export function BuscadorProducto() {
   const agregar = useVenta((s) => s.agregar);
   const quitar = useVenta((s) => s.quitar);
   const itemsEnCarrito = useVenta((s) => s.items);
+  const seleccionadoId = useVenta((s) => s.seleccionadoId);
+  const moverSeleccion = useVenta((s) => s.moverSeleccion);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -244,26 +246,38 @@ export function BuscadorProducto() {
             }
           } else if (e.key === 'ArrowDown') {
             e.preventDefault();
-            setResaltadoIdx((i) => Math.min(i + 1, lista.length - 1));
+            if (lista.length > 0) {
+              setResaltadoIdx((i) => Math.min(i + 1, lista.length - 1));
+            } else if (q === '') {
+              // Buscador vacío y sin dropdown → ↓ navega items del carrito.
+              moverSeleccion(1);
+            }
           } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            setResaltadoIdx((i) => Math.max(0, i - 1));
+            if (lista.length > 0) {
+              setResaltadoIdx((i) => Math.max(0, i - 1));
+            } else if (q === '') {
+              moverSeleccion(-1);
+            }
           } else if (e.key === 'Escape') {
             setQ('');
             setMostrarLista(false);
             setResaltadoIdx(0);
-          } else if (e.key === 'Delete' && q === '') {
-            // Suprimir con el buscador vacío → borrar último item.
-            // Si el cajero está tipeando, no se dispara (q !== '').
-            e.preventDefault();
-            const ultimo = itemsEnCarrito[itemsEnCarrito.length - 1];
-            if (ultimo) {
-              quitar(ultimo.producto.id);
-              toast.info(`− ${ultimo.producto.nombre}`);
+          } else if ((e.key === 'Delete' || e.key === 'Backspace') && q === '') {
+            // Buscador vacío + Supr/Backspace → borrar el item seleccionado
+            // del carrito (o el último si no hay nada seleccionado). Si el
+            // cajero está tipeando, no se dispara (q !== '').
+            const objetivo =
+              itemsEnCarrito.find((i) => i.producto.id === seleccionadoId) ??
+              itemsEnCarrito[itemsEnCarrito.length - 1];
+            if (objetivo) {
+              e.preventDefault();
+              quitar(objetivo.producto.id);
+              toast.info(`− ${objetivo.producto.nombre}`);
             }
           }
         }}
-        placeholder="Código (ej: 1003) o nombre — ↑↓ para navegar, Enter para agregar"
+        placeholder="Código (ej: 1003) o nombre — Enter agrega · ↑↓ navega · Supr borra"
         className="h-14 text-lg"
       />
       {mostrarLista && q.trim().length > 0 && (resultadosQ.data?.length ?? 0) > 0 && (
