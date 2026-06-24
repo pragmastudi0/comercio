@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Minus, Plus, Trash2, AlertTriangle, Tag } from 'lucide-react';
 import { getDb } from '@/lib/db';
@@ -31,6 +32,24 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
   const dto = item.descuento_pct ? subtotalBruto * (item.descuento_pct / 100) : 0;
   const subtotal = subtotalBruto - dto;
   const precioEditado = item.precio_unitario !== item.precio_base;
+
+  // Input de precio: buffer local de string para que el cajero pueda
+  // borrar todo el campo y tipear el nuevo sin que React fuerce un "0".
+  // Sincroniza al store en onBlur (o al apretar Enter).
+  const [precioTxt, setPrecioTxt] = useState<string>(String(item.precio_unitario));
+  useEffect(() => {
+    setPrecioTxt(String(item.precio_unitario));
+  }, [item.precio_unitario]);
+  function commitPrecio() {
+    const v = precioTxt.replace(',', '.').trim();
+    if (v === '') {
+      setPrecio(item.producto.id, item.precio_base);
+      return;
+    }
+    const n = parseFloat(v);
+    if (isFinite(n) && n >= 0) setPrecio(item.producto.id, n);
+    else setPrecioTxt(String(item.precio_unitario));
+  }
   const stockEnMiDep = Number(
     stocksQ.data?.find((s) => s.deposito_id === depositoId)?.cantidad ?? 0,
   );
@@ -128,11 +147,21 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
       </td>
       <td className="px-3 py-3 text-right">
         <Input
-          type="number"
-          min="0"
-          step="0.01"
-          value={item.precio_unitario}
-          onChange={(e) => setPrecio(item.producto.id, parseFloat(e.target.value) || 0)}
+          type="text"
+          inputMode="decimal"
+          value={precioTxt}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setPrecioTxt(e.target.value)}
+          onBlur={commitPrecio}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              commitPrecio();
+              (e.target as HTMLInputElement).blur();
+            } else if (e.key === 'Escape') {
+              setPrecioTxt(String(item.precio_unitario));
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
           className={`h-8 w-24 text-right ${precioEditado ? 'border-orange-400 bg-orange-50' : ''}`}
         />
       </td>
