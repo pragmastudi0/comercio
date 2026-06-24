@@ -529,8 +529,90 @@ function DetalleVenta({
   cambioComoNueva: CambioInfoView | null;
   productosCache: { id: string; codigo_interno: string; nombre: string }[];
 }) {
+  const db = getDb();
   const productoInfo = (id: string) =>
     productosCache.find((p) => p.id === id);
+
+  // Si esta venta es la ORIGINAL del cambio: traemos la NC para ver
+  // qué se devolvió y la venta nueva para ver qué se llevó.
+  const ncId = cambioComoOriginal?.nc_id ?? null;
+  const ventaNuevaIdOrig = cambioComoOriginal?.venta_nueva_id ?? null;
+  const ncQ = useQuery({
+    queryKey: ['detalle-venta-nc', ncId],
+    queryFn: () => (ncId ? db.notasCredito.get(ncId) : Promise.resolve(null)),
+    enabled: !!ncId,
+  });
+  const ventaNuevaQ = useQuery({
+    queryKey: ['detalle-venta-nueva', ventaNuevaIdOrig],
+    queryFn: () =>
+      ventaNuevaIdOrig ? db.ventas.get(ventaNuevaIdOrig) : Promise.resolve(null),
+    enabled: !!ventaNuevaIdOrig,
+  });
+
+  // Si esta venta es la NUEVA del cambio: traemos la venta original
+  // (qué se compró antes) + la NC asociada (qué se devolvió).
+  const ventaOrigId = cambioComoNueva?.venta_original_id ?? null;
+  const ncNuevaId = cambioComoNueva?.nc_id ?? null;
+  const ventaOrigQ = useQuery({
+    queryKey: ['detalle-venta-orig', ventaOrigId],
+    queryFn: () =>
+      ventaOrigId ? db.ventas.get(ventaOrigId) : Promise.resolve(null),
+    enabled: !!ventaOrigId,
+  });
+  const ncNuevaQ = useQuery({
+    queryKey: ['detalle-venta-nc-nueva', ncNuevaId],
+    queryFn: () =>
+      ncNuevaId ? db.notasCredito.get(ncNuevaId) : Promise.resolve(null),
+    enabled: !!ncNuevaId,
+  });
+
+  // Tabla compacta de items, reusable para "se devolvió" y "se llevó".
+  function TablaItems({
+    items,
+  }: {
+    items: { producto_id: string; cantidad: number; precio_unitario: number; subtotal?: number }[];
+  }) {
+    return (
+      <div className="rounded-md border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-xs text-muted-foreground">
+            <tr>
+              <th className="px-2 py-1.5 text-left">Código</th>
+              <th className="px-2 py-1.5 text-left">Producto</th>
+              <th className="px-2 py-1.5 text-right">Cant.</th>
+              <th className="px-2 py-1.5 text-right">Precio</th>
+              <th className="px-2 py-1.5 text-right">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, i) => {
+              const p = productoInfo(it.producto_id);
+              const subtotal = it.subtotal ?? it.cantidad * it.precio_unitario;
+              return (
+                <tr key={i} className="border-t">
+                  <td className="px-2 py-1.5 font-mono text-xs">
+                    {p?.codigo_interno ?? '—'}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    {p?.nombre ?? '(eliminado)'}
+                  </td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">
+                    {it.cantidad}
+                  </td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">
+                    {formatCurrency(it.precio_unitario)}
+                  </td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">
+                    {formatCurrency(subtotal)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -645,6 +727,25 @@ function DetalleVenta({
               </div>
             )}
           </div>
+
+          {/* Detalle de productos del cambio (esta venta = original). */}
+          {ncQ.data && ncQ.data.items.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-amber-800">
+                Productos devueltos
+              </div>
+              <TablaItems items={ncQ.data.items} />
+            </div>
+          )}
+          {ventaNuevaQ.data && ventaNuevaQ.data.items.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-amber-800">
+                Productos llevados (venta nueva #
+                {cambioComoOriginal.venta_nueva_numero ?? ''})
+              </div>
+              <TablaItems items={ventaNuevaQ.data.items} />
+            </div>
+          )}
         </div>
       )}
 
@@ -690,6 +791,26 @@ function DetalleVenta({
             )}
             .
           </div>
+
+          {/* Detalle: qué compró originalmente + qué devolvió.
+              Esta venta = la "venta nueva" del cambio. */}
+          {ventaOrigQ.data && ventaOrigQ.data.items.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-amber-800">
+                Compra original (
+                {formatDate(ventaOrigQ.data.fecha)})
+              </div>
+              <TablaItems items={ventaOrigQ.data.items} />
+            </div>
+          )}
+          {ncNuevaQ.data && ncNuevaQ.data.items.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-amber-800">
+                Productos devueltos
+              </div>
+              <TablaItems items={ncNuevaQ.data.items} />
+            </div>
+          )}
         </div>
       )}
 
