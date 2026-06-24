@@ -115,13 +115,16 @@ export function BuscadorProducto() {
       else if (cant > 0) otrosPorDep.set(it.deposito_id, cant);
     }
     const cantEnCarrito = yaEnCarrito(p.id);
-    if (local - cantEnCarrito > 0) {
+    // Política Turisteando: permitir vender SIEMPRE, aunque el stock
+    // quede negativo. Si tu depósito tiene cualquier valor (incluso 0
+    // o negativo), vendés desde acá. Solo sugerimos cross-depósito
+    // como warning cuando hay stock positivo en otro lado.
+    if (local > 0 && local - cantEnCarrito > 0) {
       return { ok: true, crossDeposito: false, nombresOtros: [] };
     }
-    // No hay en el local. ¿Hay en otro?
-    if (otrosPorDep.size === 0) {
-      toast.error(`"${p.nombre}" no tiene stock en ningún depósito.`);
-      return { ok: false };
+    if (local <= 0 && otrosPorDep.size === 0) {
+      // Vendemos igual (queda negativo). Aviso pero no bloqueo.
+      return { ok: true, crossDeposito: false, nombresOtros: [] };
     }
     // Si depositosQ todavía no cargó (race contra el primer click después
     // de abrir la pantalla), forzamos el fetch acá. Sin esto los nombres
@@ -230,17 +233,15 @@ export function BuscadorProducto() {
             const dispLocal = stock.local - cantEnCarrito;
             const hayLocal = dispLocal > 0;
             const hayEnOtro = stock.otros > 0;
-            // Bloqueado solo si no hay en ningún depósito.
+            // Política Turisteando: permitir vender SIEMPRE, incluso si
+            // queda negativo. NO bloqueamos el botón nunca.
             const noHayNada = !hayLocal && !hayEnOtro && !stocksQ.isLoading;
             return (
               <button
                 key={p.id}
                 onClick={() => agregarProducto(p.id)}
-                disabled={noHayNada}
-                className={`flex w-full items-center justify-between border-b px-4 py-3 text-left last:border-0 ${
-                  noHayNada
-                    ? 'cursor-not-allowed bg-destructive/5 opacity-70'
-                    : 'hover:bg-accent'
+                className={`flex w-full items-center justify-between border-b px-4 py-3 text-left last:border-0 hover:bg-accent ${
+                  noHayNada ? 'bg-orange-50/40' : ''
                 }`}
               >
                 <div className="min-w-0 flex-1">
@@ -251,9 +252,9 @@ export function BuscadorProducto() {
                   {stocksQ.isLoading ? (
                     <span className="text-muted-foreground">…</span>
                   ) : noHayNada ? (
-                    <span className="flex items-center gap-1 font-medium text-destructive">
+                    <span className="flex items-center gap-1 font-medium text-orange-700">
                       <AlertTriangle className="h-3 w-3" />
-                      Sin stock
+                      Sin stock (vende igual)
                     </span>
                   ) : hayLocal ? (
                     <span
