@@ -259,8 +259,65 @@ function DetalleNotaCredito({
   empleadoNombre: string;
   productosCache: { id: string; codigo_interno: string; nombre: string }[];
 }) {
+  const db = getDb();
   const productoInfo = (id: string) =>
     productosCache.find((p) => p.id === id);
+
+  // Venta original (para fecha de compra + productos comprados).
+  const ventaOrigQ = useQuery({
+    queryKey: ['venta-orig-nc', nc.venta_id],
+    queryFn: () => db.ventas.get(nc.venta_id),
+  });
+
+  // ¿Esta NC fue parte de un cambio? Si sí, traemos del log de auditoría
+  // qué venta nueva se creó y la diferencia cobrada. Buscamos por entidad
+  // y filtramos accion='cambio_venta' que matchee con el id de la venta
+  // original (auditoria lo guarda como entidad_id).
+  const cambioQ = useQuery({
+    queryKey: ['cambio-de-nc', nc.venta_id, nc.fecha],
+    queryFn: async () => {
+      const logs = await db.auditoria.list({
+        entidad: 'venta',
+        // Rango de búsqueda alrededor de la fecha de la NC (±1 día) —
+        // los cambios son operaciones del mismo momento. Reduce el
+        // volumen a procesar.
+        desde: new Date(new Date(nc.fecha).getTime() - 24 * 60 * 60_000).toISOString(),
+        hasta: new Date(new Date(nc.fecha).getTime() + 24 * 60 * 60_000).toISOString(),
+      });
+      const match = logs.find(
+        (l) =>
+          l.accion === 'cambio_venta' &&
+          l.entidad_id === nc.venta_id &&
+          (l.detalle as { nc_id?: string } | null)?.nc_id === nc.id,
+      );
+      return match?.detalle as
+        | {
+            nc_id?: string;
+            nc_numero?: string;
+            venta_nueva_id?: string | null;
+            venta_nueva_numero?: string | null;
+            total_devuelto?: number;
+            total_nuevo?: number;
+            diferencia_cobrada?: number;
+            metodo_diferencia?: string | null;
+          }
+        | null
+        | undefined;
+    },
+  });
+
+  // Si hubo cambio con venta nueva, la traemos para mostrar los items
+  // que el cliente se llevó.
+  const ventaNuevaId = cambioQ.data?.venta_nueva_id ?? null;
+  const ventaNuevaQ = useQuery({
+    queryKey: ['venta-nueva-de-cambio', ventaNuevaId],
+    queryFn: () => (ventaNuevaId ? db.ventas.get(ventaNuevaId) : Promise.resolve(null)),
+    enabled: !!ventaNuevaId,
+  });
+
+  const esCambio = !!cambioQ.data?.venta_nueva_id;
+  const ventaOrig = ventaOrigQ.data;
+  const ventaNueva = ventaNuevaQ.data;
 
   return (
     <>
@@ -282,6 +339,11 @@ function DetalleNotaCredito({
             >
               {ventaNumero}
             </Link>
+            {ventaOrig?.fecha && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                · {formatDate(ventaOrig.fecha)}
+              </span>
+            )}
           </div>
         </div>
         <div>
@@ -292,7 +354,92 @@ function DetalleNotaCredito({
           <div className="text-xs text-muted-foreground">Motivo</div>
           <div className="font-medium">{nc.motivo || '—'}</div>
         </div>
+        {esCambio && (
+          <div className="col-span-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900">
+            <div className="text-xs font-medium uppercase tracking-wider">
+              Esta NC es parte de un cambio
+            </div>
+            <div className="mt-1 text-xs">
+              Devolvió{' '}
+              <span className="font-mono tabular-nums">
+                {formatCurrency(cambioQ.data?.total_devuelto ?? 0)}
+              </span>{' '}
+              · Se llevó{' '}
+              <span className="font-mono tabular-nums">
+                {formatCurrency(cambioQ.data?.total_nuevo ?? 0)}
+              </span>
+              {(cambioQ.data?.diferencia_cobrada ?? 0) > 0 && (
+                <>
+                  {' '}· Diferencia cobrada{' '}
+                  <span className="font-mono tabular-nums">
+                    {formatCurrency(cambioQ.data?.diferencia_cobrada ?? 0)}
+                  </span>
+                  {cambioQ.data?.metodo_diferencia && (
+                    <> en <b>{cambioQ.data.metodo_diferencia}</b></>
+                  )}
+                </>
+              )}
+              {cambioQ.data?.venta_nueva_numero && (
+                <>
+                  {' '}(venta nueva{' '}
+                  <Link
+                    href={`/ventas?q=${cambioQ.data.venta_nueva_numero}`}
+                    className="font-mono hover:underline"
+                  >
+                    #{cambioQ.data.venta_nueva_numero}
+                  </Link>
+                  )
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Si fue parte de un cambio, mostramos primero qué se compró
+          originalmente (todo el contenido de la venta original). Si fue
+          una devolución pura (sin cambio), se entiende implícitamente —
+          "Productos devueltos" abajo es todo. */}
+      {esCambio && ventaOrig && (
+        <div className="mt-3">
+          <div className="mb-2 text-sm font-medium">
+            Compra original ({formatDate(ventaOrig.fecha)})
+          </div>
+          <div className="rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-1.5 text-left">Código</th>
+                  <th className="px-2 py-1.5 text-left">Producto</th>
+                  <th className="px-2 py-1.5 text-right">Cant.</th>
+                  <th className="px-2 py-1.5 text-right">Precio</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventaOrig.items.map((it, i) => {
+                  const p = productoInfo(it.producto_id);
+                  return (
+                    <tr key={i} className="border-t">
+                      <td className="px-2 py-1.5 font-mono text-xs">
+                        {p?.codigo_interno ?? '—'}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        {p?.nombre ?? '(eliminado)'}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {it.cantidad}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {formatCurrency(it.precio_unitario)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Items devueltos */}
       <div className="mt-3">
@@ -340,6 +487,53 @@ function DetalleNotaCredito({
           </table>
         </div>
       </div>
+
+      {/* Productos NUEVOS (lo que se llevó en el cambio) — solo si esta
+          NC vino de un cambio con venta nueva. */}
+      {esCambio && ventaNueva && (
+        <div className="mt-3">
+          <div className="mb-2 text-sm font-medium">
+            Se llevó (venta nueva #{cambioQ.data?.venta_nueva_numero})
+          </div>
+          <div className="rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-1.5 text-left">Código</th>
+                  <th className="px-2 py-1.5 text-left">Producto</th>
+                  <th className="px-2 py-1.5 text-right">Cant.</th>
+                  <th className="px-2 py-1.5 text-right">Precio</th>
+                  <th className="px-2 py-1.5 text-right">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventaNueva.items.map((it, i) => {
+                  const p = productoInfo(it.producto_id);
+                  return (
+                    <tr key={i} className="border-t">
+                      <td className="px-2 py-1.5 font-mono text-xs">
+                        {p?.codigo_interno ?? '—'}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        {p?.nombre ?? '(eliminado)'}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {it.cantidad}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {formatCurrency(it.precio_unitario)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {formatCurrency(it.subtotal)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Total */}
       <div className="mt-3 rounded-md bg-muted/40 p-3 text-sm">
