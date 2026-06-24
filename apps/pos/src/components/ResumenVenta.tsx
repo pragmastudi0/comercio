@@ -9,7 +9,6 @@ import {
 import { useSesion } from '@/stores/sesion';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
-import { Label } from '@comercio/ui/label';
 import { formatCurrency } from '@comercio/ui/utils';
 import { SHORTCUT_LABELS } from '@/lib/shortcuts';
 import type { MetodoPago } from '@comercio/db';
@@ -42,26 +41,16 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
 
   return (
     <div className="flex h-full flex-col bg-muted/30">
-      <div className="border-b p-4">
-        <div className="text-xs text-muted-foreground">Cajero</div>
-        <div className="font-medium">
-          {empleado?.nombre} {empleado?.apellido}
-        </div>
-        <div className="mt-2 text-xs text-muted-foreground">Caja</div>
-        <div className="text-sm">
-          {caja?.nombre} · sesión #{sesion?.id.slice(-6)}
-        </div>
-      </div>
-
-      <div className="border-b p-4">
-        <div className="mb-1 text-xs text-muted-foreground">Cliente</div>
-        <div className="text-sm text-muted-foreground">Consumidor final</div>
+      {/* Header súper compacto: la info ya está en el header global de Caja.tsx;
+          acá solo dejamos un recordatorio mínimo en 1 línea. */}
+      <div className="border-b px-3 py-1.5 text-[11px] text-muted-foreground">
+        {empleado?.nombre} {empleado?.apellido} · {caja?.nombre} · sesión #{sesion?.id.slice(-6)} · Consumidor final
       </div>
 
       {/* min-h-0 es necesario para que overflow-y-auto funcione dentro
           de un flex column; sin esto el contenido empuja y desborda. */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="space-y-1 text-sm">
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="space-y-0.5 text-sm">
           <div className="flex justify-between text-muted-foreground">
             <span>Items</span>
             <span>{cant}</span>
@@ -83,51 +72,50 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
           )}
         </div>
 
-        <div className="mt-3">
+        <div className="mt-2">
           {editDto ? (
-            <div className="space-y-2 rounded-md border bg-background p-3">
-              <div className="flex gap-2">
+            <div className="space-y-2 rounded-md border bg-background p-2">
+              {/* Modo + valor en una fila: ahorra altura considerable. */}
+              <div className="flex items-stretch gap-1">
                 <Button
                   size="sm"
                   variant={descuentoModo === 'pct' ? 'default' : 'outline'}
                   onClick={() => setDescuento('pct', descuentoValor, motivoDescuento)}
-                  className="flex-1"
+                  className="h-9 w-10 shrink-0 px-0 text-base font-semibold"
+                  title="Porcentaje"
                 >
-                  % Porcentaje
+                  %
                 </Button>
                 <Button
                   size="sm"
                   variant={descuentoModo === 'monto' ? 'default' : 'outline'}
                   onClick={() => setDescuento('monto', descuentoValor, motivoDescuento)}
-                  className="flex-1"
+                  className="h-9 w-10 shrink-0 px-0 text-base font-semibold"
+                  title="Monto fijo"
                 >
-                  $ Monto fijo
+                  $
                 </Button>
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">
-                  {descuentoModo === 'pct' ? '% sobre subtotal' : 'Monto a descontar'}
-                </Label>
                 <Input
                   type="number"
                   min="0"
                   max={descuentoModo === 'pct' ? 100 : subtotal}
-                  value={descuentoValor}
+                  value={descuentoValor || ''}
+                  placeholder={descuentoModo === 'pct' ? '%' : 'monto'}
                   onChange={(e) =>
                     setDescuento(descuentoModo, parseFloat(e.target.value) || 0, motivoDescuento)
                   }
+                  onFocus={(e) => e.currentTarget.select()}
                   autoFocus
+                  className="h-9 flex-1 text-right text-base"
                 />
               </div>
-              <div>
-                <Label className="mb-1 block text-xs">Motivo (queda en auditoría)</Label>
-                <Input
-                  value={motivoDescuento ?? ''}
-                  onChange={(e) => setDescuento(descuentoModo, descuentoValor, e.target.value)}
-                  placeholder="Ej: Promo terminal, cliente VIP"
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
+              <Input
+                value={motivoDescuento ?? ''}
+                onChange={(e) => setDescuento(descuentoModo, descuentoValor, e.target.value)}
+                placeholder="Motivo (queda en auditoría)"
+                className="h-8 text-xs"
+              />
+              <div className="flex gap-1">
                 <Button
                   size="sm"
                   variant="outline"
@@ -135,11 +123,11 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
                     limpiarDescuento();
                     setEditDto(false);
                   }}
-                  className="flex-1"
+                  className="h-8 flex-1 text-xs"
                 >
                   Quitar
                 </Button>
-                <Button size="sm" onClick={() => setEditDto(false)} className="flex-1">
+                <Button size="sm" onClick={() => setEditDto(false)} className="h-8 flex-1 text-xs">
                   Aplicar
                 </Button>
               </div>
@@ -148,7 +136,7 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
             <Button
               variant="outline"
               size="sm"
-              className="w-full"
+              className="h-8 w-full"
               onClick={() => setEditDto(true)}
               disabled={!hayItems}
             >
@@ -162,10 +150,12 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
           )}
         </div>
 
-        <div className="mt-5 border-t pt-3">
-          <div className="text-xs uppercase text-muted-foreground">Total a cobrar</div>
-          <div className="text-4xl font-bold tabular-nums">{formatCurrency(baseVenta)}</div>
-          <p className="mt-1 text-[10px] text-muted-foreground">
+        <div className="mt-3 border-t pt-2">
+          <div className="text-[10px] uppercase text-muted-foreground">Total a cobrar</div>
+          <div className="text-3xl font-bold leading-tight tabular-nums">
+            {formatCurrency(baseVenta)}
+          </div>
+          <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
             Recargos/descuentos por forma de pago se aplican al elegir el método.
           </p>
         </div>
