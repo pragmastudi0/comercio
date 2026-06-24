@@ -111,7 +111,7 @@ async function upsertCategorias() {
     } else {
       const { data: nueva, error: insErr } = await admin
         .from('categorias')
-        .insert({ nombre, activa: true })
+        .insert({ nombre })
         .select('id')
         .single();
       if (insErr) throw new Error(`categorias.insert ${nombre}: ${insErr.message}`);
