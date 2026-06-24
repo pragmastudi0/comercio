@@ -47,6 +47,9 @@ function ConfiguracionInner() {
   // parta los reportes mensuales del dashboard.
   const [arranqueFacturacion, setArranqueFacturacion] = useState(0);
   const [arranqueVentas, setArranqueVentas] = useState(0);
+  const [arranqueGanancia, setArranqueGanancia] = useState(0);
+  const [arranqueEfectivo, setArranqueEfectivo] = useState(0);
+  const [arranqueOtros, setArranqueOtros] = useState(0);
   const [arranqueDesde, setArranqueDesde] = useState('');
 
   // Clamp helper: el HTML min/max se respeta al enviar el form, pero el
@@ -75,6 +78,9 @@ function ConfiguracionInner() {
       setWaTemplate(configQ.data.mensaje_wa_template ?? '');
       setArranqueFacturacion(configQ.data.arranque?.facturacion_acumulada ?? 0);
       setArranqueVentas(configQ.data.arranque?.ventas_acumuladas ?? 0);
+      setArranqueGanancia(configQ.data.arranque?.ganancia_acumulada ?? 0);
+      setArranqueEfectivo(configQ.data.arranque?.cobrado_efectivo_acumulado ?? 0);
+      setArranqueOtros(configQ.data.arranque?.cobrado_otros_acumulado ?? 0);
       setArranqueDesde(configQ.data.arranque?.desde_fecha ?? '');
     }
   }, [configQ.data]);
@@ -100,6 +106,9 @@ function ConfiguracionInner() {
         arranque: {
           facturacion_acumulada: arranqueFacturacion || 0,
           ventas_acumuladas: arranqueVentas || 0,
+          ganancia_acumulada: arranqueGanancia || 0,
+          cobrado_efectivo_acumulado: arranqueEfectivo || 0,
+          cobrado_otros_acumulado: arranqueOtros || 0,
           desde_fecha: arranqueDesde || undefined,
         },
       }),
@@ -275,60 +284,121 @@ function ConfiguracionInner() {
             <CardTitle>Saldo inicial del comercio</CardTitle>
             <CardDescription>
               Si arrancás a usar el sistema a mitad de mes y querés que el
-              dashboard muestre el TOTAL real del período (no solo lo que
-              cargó el sistema), poné acá la facturación y la cantidad de
-              tickets que ya hiciste antes de empezar. Se suma a los KPIs
-              cuando el rango del dashboard arranca igual o antes de la
-              fecha indicada. Podés actualizarlo cuando quieras.
+              dashboard muestre los totales reales del período, cargá acá lo
+              que ya hiciste antes de empezar (facturación, ganancia, tickets,
+              cobros). Cada valor se suma al KPI correspondiente del dashboard
+              cuando el rango seleccionado arranca igual o antes de la fecha
+              indicada. Podés actualizarlo cuando quieras.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <Label className="text-sm">Facturación acumulada ($)</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={arranqueFacturacion}
-                onChange={(e) =>
-                  setArranqueFacturacion(
-                    clamp(parseFloat(e.target.value), 0, 9_999_999_999, arranqueFacturacion),
-                  )
-                }
-                placeholder="0"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Total facturado fuera del sistema.
-              </p>
+          <CardContent className="space-y-4">
+            {/* Fila 1: facturación + ganancia + tickets */}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <Label className="text-sm">Facturación acumulada ($)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={arranqueFacturacion}
+                  onChange={(e) =>
+                    setArranqueFacturacion(
+                      clamp(parseFloat(e.target.value), 0, 9_999_999_999, arranqueFacturacion),
+                    )
+                  }
+                  placeholder="0"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Total facturado fuera del sistema.
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm">Ganancia bruta acumulada ($)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={arranqueGanancia}
+                  onChange={(e) =>
+                    setArranqueGanancia(
+                      clamp(parseFloat(e.target.value), 0, 9_999_999_999, arranqueGanancia),
+                    )
+                  }
+                  placeholder="0"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Ganancia (precio − costo) acumulada. Opcional.
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm">Cantidad de ventas (tickets)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={arranqueVentas}
+                  onChange={(e) =>
+                    setArranqueVentas(
+                      clamp(parseInt(e.target.value, 10), 0, 1_000_000, arranqueVentas),
+                    )
+                  }
+                  placeholder="0"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Cantidad de operaciones (no unidades).
+                </p>
+              </div>
             </div>
-            <div>
-              <Label className="text-sm">Cantidad de ventas (tickets)</Label>
-              <Input
-                type="number"
-                min="0"
-                step="1"
-                value={arranqueVentas}
-                onChange={(e) =>
-                  setArranqueVentas(
-                    clamp(parseInt(e.target.value, 10), 0, 1_000_000, arranqueVentas),
-                  )
-                }
-                placeholder="0"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Cantidad de operaciones (no unidades).
-              </p>
-            </div>
-            <div>
-              <Label className="text-sm">Desde qué fecha cuenta</Label>
-              <Input
-                type="date"
-                value={arranqueDesde}
-                onChange={(e) => setArranqueDesde(e.target.value)}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Típicamente el 1ro del mes en curso.
-              </p>
+
+            {/* Fila 2: cobrado efectivo + otros + desde fecha */}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <Label className="text-sm">Cobrado en efectivo ($)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={arranqueEfectivo}
+                  onChange={(e) =>
+                    setArranqueEfectivo(
+                      clamp(parseFloat(e.target.value), 0, 9_999_999_999, arranqueEfectivo),
+                    )
+                  }
+                  placeholder="0"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Total cobrado en efectivo previo al sistema.
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm">Cobrado en otros métodos ($)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={arranqueOtros}
+                  onChange={(e) =>
+                    setArranqueOtros(
+                      clamp(parseFloat(e.target.value), 0, 9_999_999_999, arranqueOtros),
+                    )
+                  }
+                  placeholder="0"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Tarjeta · QR · Transferencia · Cta. cte.
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm">Desde qué fecha cuenta</Label>
+                <Input
+                  type="date"
+                  value={arranqueDesde}
+                  onChange={(e) => setArranqueDesde(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Típicamente el 1ro del mes en curso.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

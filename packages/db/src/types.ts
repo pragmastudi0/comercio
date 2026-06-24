@@ -328,6 +328,13 @@ export type ConfiguracionEmpresa = {
     facturacion_acumulada?: number;
     /** Cantidad de ventas (tickets) previas al sistema. */
     ventas_acumuladas?: number;
+    /** Ganancia bruta acumulada previa al sistema (en pesos). */
+    ganancia_acumulada?: number;
+    /** Cobrado en efectivo previo al sistema (en pesos). */
+    cobrado_efectivo_acumulado?: number;
+    /** Cobrado en otros métodos (tarjeta/QR/transf/cta. cte.) previo
+     *  al sistema (en pesos). */
+    cobrado_otros_acumulado?: number;
     /** Fecha desde la cual cuentan estos acumulados (ISO yyyy-MM-dd).
      *  Si el rango del dashboard empieza igual o antes de esta fecha, se
      *  suman los acumulados; si empieza después, no se suman. */

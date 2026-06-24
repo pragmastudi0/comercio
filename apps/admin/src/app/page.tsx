@@ -150,18 +150,13 @@ export default function DashboardPage() {
   const sesionesAbiertas = (sesionesQ.data ?? []).filter((s) => s.estado === 'abierta').length;
 
   // Saldo inicial (cargado en /admin/configuracion) — se suma a los KPIs
-  // de "Facturado" y "tickets" cuando el rango del dashboard arranca
-  // igual o antes de la fecha indicada en la config. Sirve para no partir
-  // los reportes mensuales cuando el sistema se empieza a usar a mitad
-  // de mes. No tiene desglose por método ni por ganancia, así que SOLO
-  // se suma al total facturado y a la cuenta de tickets.
+  // del dashboard cuando el rango arranca igual o antes de la fecha
+  // indicada. Sirve para no partir los reportes mensuales cuando el
+  // sistema se empieza a usar a mitad de mes. Cada valor se suma al
+  // KPI correspondiente (facturado, ganancia, efectivo, otros, tickets).
   const arranque = configQ.data?.arranque;
-  // Comparar con Date objects en vez de strings ISO (más robusto contra
-  // diferencias de zona horaria entre el rango y la fecha guardada).
   const saldoInicialAplica = !!(
     arranque?.desde_fecha &&
-    arranque.facturacion_acumulada &&
-    arranque.facturacion_acumulada > 0 &&
     new Date(desde).getTime() <=
       new Date(`${arranque.desde_fecha}T23:59:59`).getTime()
   );
@@ -170,6 +165,15 @@ export default function DashboardPage() {
     : 0;
   const arranqueTickets = saldoInicialAplica
     ? arranque?.ventas_acumuladas ?? 0
+    : 0;
+  const arranqueGanancia = saldoInicialAplica
+    ? arranque?.ganancia_acumulada ?? 0
+    : 0;
+  const arranqueEfectivo = saldoInicialAplica
+    ? arranque?.cobrado_efectivo_acumulado ?? 0
+    : 0;
+  const arranqueOtros = saldoInicialAplica
+    ? arranque?.cobrado_otros_acumulado ?? 0
     : 0;
   const totalRango = totalRangoSistema + arranqueFact;
   const ticketsRango = ventasRango.length + arranqueTickets;
@@ -228,10 +232,14 @@ export default function DashboardPage() {
   // "loader" tipo Google sin agregar libs. Para las tarjetas operativas
   // (cajas abiertas / sin stock) lo dejamos estático, porque son enteros
   // chicos y el efecto no aporta.
+  // Cada animación de KPI incluye el saldo inicial del arranque
+  // (cuando aplica al rango seleccionado). Antes solo Facturado lo
+  // sumaba; ahora también ganancia, efectivo y otros si el admin los
+  // cargó en /configuracion.
   const totalRangoAnim = useCountUp(totalRango);
-  const gananciaAnim = useCountUp(indicadores.ganancia);
-  const efectivoAnim = useCountUp(indicadores.efectivo);
-  const otrosAnim = useCountUp(indicadores.otros);
+  const gananciaAnim = useCountUp(indicadores.ganancia + arranqueGanancia);
+  const efectivoAnim = useCountUp(indicadores.efectivo + arranqueEfectivo);
+  const otrosAnim = useCountUp(indicadores.otros + arranqueOtros);
   const valuacionCostoAnim = useCountUp(valuacion.totalCosto);
   const valuacionPrecioAnim = useCountUp(valuacion.totalPrecio);
 
@@ -310,33 +318,46 @@ export default function DashboardPage() {
         <KpiCard
           titulo="Ganancia bruta"
           valor={formatCurrency(Math.round(gananciaAnim))}
-          sub={`Bruto (s/desc.): ${formatCurrency(indicadores.bruto)}`}
+          sub={
+            arranqueGanancia > 0
+              ? `Incluye ${formatCurrency(arranqueGanancia)} previo al sistema`
+              : `Bruto (s/desc.): ${formatCurrency(indicadores.bruto)}`
+          }
           icon={PiggyBank}
           loading={ventasQ.isLoading || productosLookupQ.isLoading}
         />
         <KpiCard
           titulo="Cobrado en efectivo"
           valor={formatCurrency(Math.round(efectivoAnim))}
-          sub={`${pctTexto(indicadores.efectivo, totalRango)} del total`}
+          sub={
+            arranqueEfectivo > 0
+              ? `Incluye ${formatCurrency(arranqueEfectivo)} previo al sistema`
+              : `${pctTexto(indicadores.efectivo + arranqueEfectivo, totalRango)} del total`
+          }
           icon={Banknote}
           loading={ventasQ.isLoading}
         />
         <KpiCard
           titulo="Otros cobros"
           valor={formatCurrency(Math.round(otrosAnim))}
-          sub="Tarjeta · QR · Transf."
+          sub={
+            arranqueOtros > 0
+              ? `Incluye ${formatCurrency(arranqueOtros)} previo al sistema`
+              : 'Tarjeta · QR · Transf.'
+          }
           icon={CreditCard}
           loading={ventasQ.isLoading}
         />
       </div>
 
       {/* Distribución de cobros — efectivo vs el resto, en donut chart.
-          Respeta el rango seleccionado (toma `indicadores`, que ya está
-          filtrado). Si no hubo cobros en el período mostramos vacío. */}
+          Respeta el rango seleccionado (toma `indicadores` + arranque,
+          igual que los KPIs de arriba). Si no hubo cobros en el período
+          ni acumulado del arranque, muestra vacío. */}
       <div className="mb-4">
         <DonutCobros
-          efectivo={indicadores.efectivo}
-          otros={indicadores.otros}
+          efectivo={indicadores.efectivo + arranqueEfectivo}
+          otros={indicadores.otros + arranqueOtros}
           loading={ventasQ.isLoading}
         />
       </div>
