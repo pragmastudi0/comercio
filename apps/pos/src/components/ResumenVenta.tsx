@@ -44,120 +44,124 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
       {/* Header súper compacto: la info ya está en el header global de Caja.tsx;
           acá solo dejamos un recordatorio mínimo en 1 línea. */}
       <div className="border-b px-3 py-1.5 text-[11px] text-muted-foreground">
-        {empleado?.nombre} {empleado?.apellido} · {caja?.nombre} · sesión #{sesion?.id.slice(-6)} · Consumidor final
+        {empleado?.nombre} {empleado?.apellido} · {caja?.nombre} · #{sesion?.id.slice(-6)} · Consumidor final
       </div>
 
-      {/* min-h-0 es necesario para que overflow-y-auto funcione dentro
-          de un flex column; sin esto el contenido empuja y desborda. */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <div className="space-y-0.5 text-sm">
-          <div className="flex justify-between text-muted-foreground">
-            <span>Items</span>
-            <span>{cant}</span>
-          </div>
-          <div className="flex justify-between text-muted-foreground">
-            <span>Subtotal</span>
-            <span>{formatCurrency(subtotal)}</span>
-          </div>
-          {descuentoValor > 0 && (
-            <div className="flex justify-between text-green-700">
-              <span>
-                Descuento{' '}
-                {descuentoModo === 'pct'
-                  ? `${descuentoValor}%`
-                  : 'monto fijo'}
-              </span>
-              <span>-{formatCurrency(descuentoGlobal)}</span>
-            </div>
-          )}
+      {/* Bloque de números compacto */}
+      <div className="border-b px-3 py-2 text-sm">
+        <div className="flex justify-between text-muted-foreground">
+          <span>Items</span>
+          <span>{cant}</span>
         </div>
+        <div className="flex justify-between text-muted-foreground">
+          <span>Subtotal</span>
+          <span>{formatCurrency(subtotal)}</span>
+        </div>
+        {descuentoValor > 0 && (
+          <div className="flex justify-between text-green-700">
+            <span>
+              Descuento {descuentoModo === 'pct' ? `${descuentoValor}%` : 'monto fijo'}
+            </span>
+            <span>-{formatCurrency(descuentoGlobal)}</span>
+          </div>
+        )}
+      </div>
 
-        <div className="mt-2">
-          {editDto ? (
-            <div className="space-y-2 rounded-md border bg-background p-2">
-              {/* Modo + valor en una fila: ahorra altura considerable. */}
-              <div className="flex items-stretch gap-1">
-                <Button
-                  size="sm"
-                  variant={descuentoModo === 'pct' ? 'default' : 'outline'}
-                  onClick={() => setDescuento('pct', descuentoValor, motivoDescuento)}
-                  className="h-9 w-10 shrink-0 px-0 text-base font-semibold"
-                  title="Porcentaje"
-                >
-                  %
-                </Button>
-                <Button
-                  size="sm"
-                  variant={descuentoModo === 'monto' ? 'default' : 'outline'}
-                  onClick={() => setDescuento('monto', descuentoValor, motivoDescuento)}
-                  className="h-9 w-10 shrink-0 px-0 text-base font-semibold"
-                  title="Monto fijo"
-                >
-                  $
-                </Button>
-                <Input
-                  type="number"
-                  min="0"
-                  max={descuentoModo === 'pct' ? 100 : subtotal}
-                  value={descuentoValor || ''}
-                  placeholder={descuentoModo === 'pct' ? '%' : 'monto'}
-                  onChange={(e) =>
-                    setDescuento(descuentoModo, parseFloat(e.target.value) || 0, motivoDescuento)
-                  }
-                  onFocus={(e) => e.currentTarget.select()}
-                  autoFocus
-                  className="h-9 flex-1 text-right text-base"
-                />
-              </div>
+      {/* Descuento (botón colapsado o form abierto) */}
+      <div className="border-b p-3">
+        {editDto ? (
+          <div className="space-y-2 rounded-md border bg-background p-2">
+            <div className="flex items-stretch gap-1">
+              <Button
+                size="sm"
+                variant={descuentoModo === 'pct' ? 'default' : 'outline'}
+                onClick={() => setDescuento('pct', descuentoValor, motivoDescuento)}
+                className="h-9 w-10 shrink-0 px-0 text-base font-semibold"
+                title="Porcentaje"
+              >
+                %
+              </Button>
+              <Button
+                size="sm"
+                variant={descuentoModo === 'monto' ? 'default' : 'outline'}
+                onClick={() => setDescuento('monto', descuentoValor, motivoDescuento)}
+                className="h-9 w-10 shrink-0 px-0 text-base font-semibold"
+                title="Monto fijo"
+              >
+                $
+              </Button>
               <Input
-                value={motivoDescuento ?? ''}
-                onChange={(e) => setDescuento(descuentoModo, descuentoValor, e.target.value)}
-                placeholder="Motivo (queda en auditoría)"
-                className="h-8 text-xs"
+                type="number"
+                min="0"
+                max={descuentoModo === 'pct' ? 100 : subtotal}
+                value={descuentoValor || ''}
+                placeholder={descuentoModo === 'pct' ? '%' : 'monto'}
+                onChange={(e) =>
+                  setDescuento(descuentoModo, parseFloat(e.target.value) || 0, motivoDescuento)
+                }
+                onFocus={(e) => e.currentTarget.select()}
+                autoFocus
+                className="h-9 flex-1 text-right text-base"
               />
-              <div className="flex gap-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    limpiarDescuento();
-                    setEditDto(false);
-                  }}
-                  className="h-8 flex-1 text-xs"
-                >
-                  Quitar
-                </Button>
-                <Button size="sm" onClick={() => setEditDto(false)} className="h-8 flex-1 text-xs">
-                  Aplicar
-                </Button>
-              </div>
             </div>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 w-full"
-              onClick={() => setEditDto(true)}
-              disabled={!hayItems}
-            >
-              <Tag className="mr-1 h-3 w-3" />
-              {descuentoValor > 0
-                ? descuentoModo === 'pct'
-                  ? `Descuento ${descuentoValor}%`
-                  : `Descuento ${formatCurrency(descuentoValor)}`
-                : 'Agregar descuento'}
-            </Button>
-          )}
-        </div>
-
-        <div className="mt-3 border-t pt-2">
-          <div className="text-[10px] uppercase text-muted-foreground">Total a cobrar</div>
-          <div className="text-3xl font-bold leading-tight tabular-nums">
-            {formatCurrency(baseVenta)}
+            <Input
+              value={motivoDescuento ?? ''}
+              onChange={(e) => setDescuento(descuentoModo, descuentoValor, e.target.value)}
+              placeholder="Motivo (queda en auditoría)"
+              className="h-8 text-xs"
+            />
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  limpiarDescuento();
+                  setEditDto(false);
+                }}
+                className="h-8 flex-1 text-xs"
+              >
+                Quitar
+              </Button>
+              <Button size="sm" onClick={() => setEditDto(false)} className="h-8 flex-1 text-xs">
+                Aplicar
+              </Button>
+            </div>
           </div>
-          <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
-            Recargos/descuentos por forma de pago se aplican al elegir el método.
-          </p>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-full"
+            onClick={() => setEditDto(true)}
+            disabled={!hayItems}
+          >
+            <Tag className="mr-1 h-3 w-3" />
+            {descuentoValor > 0
+              ? descuentoModo === 'pct'
+                ? `Descuento ${descuentoValor}%`
+                : `Descuento ${formatCurrency(descuentoValor)}`
+              : 'Agregar descuento'}
+          </Button>
+        )}
+      </div>
+
+      {/* TOTAL gigante: ocupa TODO el espacio sobrante, centrado vertical.
+          Así se aprovecha el aside completo y el cliente lee el monto
+          desde el otro lado del mostrador. */}
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-3 py-4">
+        <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          Total a cobrar
+        </div>
+        <div
+          className="mt-1 w-full text-center font-bold leading-none tabular-nums"
+          style={{
+            fontSize: 'clamp(2.5rem, 6vw, 5rem)',
+          }}
+        >
+          {formatCurrency(baseVenta)}
+        </div>
+        <div className="mt-2 text-center text-[10px] leading-tight text-muted-foreground">
+          Recargos por forma de pago se aplican al elegir el método.
         </div>
       </div>
 

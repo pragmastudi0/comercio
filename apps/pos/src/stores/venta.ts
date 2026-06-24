@@ -104,13 +104,14 @@ export const useVenta = create<VentaState>()(
       // el cajero recupere lo que estaba armando. No persistimos la
       // sesión Supabase ni los productos completos: solo lo del carrito.
       name: 'turisteando-pos-carrito',
-      version: 1,
+      // v2: dejamos de persistir descuentoModo/descuentoValor/motivoDescuento.
+      // Antes quedaban pegados de una venta a la siguiente: si una cajera
+      // aplicaba 2% y vendía, el state cargaba 2% en la próxima venta.
+      // El descuento global es per-venta — no debe sobrevivir a recargas.
+      version: 2,
       partialize: (s) => ({
         items: s.items,
         clienteId: s.clienteId,
-        descuentoModo: s.descuentoModo,
-        descuentoValor: s.descuentoValor,
-        motivoDescuento: s.motivoDescuento,
       }),
     },
   ),
