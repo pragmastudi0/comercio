@@ -6,6 +6,7 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { LogIn, Sparkles } from 'lucide-react';
 import { BRAND } from '@comercio/business';
+import { PRESET_IDS, createSupabaseRaw } from '@comercio/db';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
@@ -36,6 +37,20 @@ export default function LoginPage() {
     mutationFn: async () => {
       const emp = await db.empleados.autenticar(email.trim(), password);
       if (!emp) throw new Error('Email o contraseña incorrectos');
+      // Detectar cajero ANTES de aceptar el login. Si pasamos al shell,
+      // el guard del admin-shell lo deslogueaba pero ya se había mostrado
+      // el toast "Bienvenido". Acá lo cortamos limpio: signOut + tirar
+      // error claro. Solo aparece UN toast.
+      if (emp.rol_id === PRESET_IDS.roles.cajero) {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        if (url && key) {
+          await createSupabaseRaw(url, key).auth.signOut();
+        }
+        throw new Error(
+          'Como cajero tenés que usar el sistema de caja (PoS), no el panel admin.',
+        );
+      }
       return emp;
     },
     onSuccess: (emp) => {

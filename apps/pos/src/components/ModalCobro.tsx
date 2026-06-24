@@ -539,16 +539,24 @@ export function ModalCobro({
                 onChange={(e) => setMontoInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && agregarPagoActual()}
               />
+              {/* Display destacado del total efectivamente a cobrar
+                  (con descuento aplicado si es efectivo, con recargo si
+                  es crédito). Antes era un tipo "tip" chico que se
+                  perdía — ahora es lo primero que ve el cajero. */}
+              {(metodo === 'efectivo' || metodo === 'credito') &&
+                proximoPagoMonto !== parseFloat(montoInput || '0') && (
+                <div className="mt-2 flex items-center justify-between rounded-md bg-primary/10 px-3 py-2">
+                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    {metodo === 'efectivo'
+                      ? `Total a cobrar (ya con -${configQ.data?.descuento_efectivo_pct ?? 0}% efectivo)`
+                      : 'Total a cobrar (con recargo de cuotas)'}
+                  </span>
+                  <span className="text-lg font-bold tabular-nums text-primary">
+                    {formatCurrency(proximoPagoMonto)}
+                  </span>
+                </div>
+              )}
               <p className="mt-1 text-xs text-muted-foreground">
-                {metodo === 'efectivo' &&
-                  `Aplica -${configQ.data?.descuento_efectivo_pct ?? 0}% descuento → ${formatCurrency(proximoPagoMonto)}`}
-                {metodo === 'credito' &&
-                cuotasOpciones.find((c) => c.cuotas === cuotas)?.recargo_pct ? (
-                  <>
-                    Aplica +{cuotasOpciones.find((c) => c.cuotas === cuotas)?.recargo_pct}%
-                    recargo → {formatCurrency(proximoPagoMonto)}
-                  </>
-                ) : null}
                 {metodo === 'cta_cte' && !clienteId && (
                   <span className="text-destructive">Identificar cliente antes (F3)</span>
                 )}

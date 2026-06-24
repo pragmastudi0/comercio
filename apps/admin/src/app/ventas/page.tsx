@@ -321,7 +321,6 @@ export default function VentasPage() {
                   <TableHead>Local</TableHead>
                   <TableHead>Items</TableHead>
                   <TableHead>Métodos</TableHead>
-                  <TableHead className="text-right">Descuento</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -369,25 +368,6 @@ export default function VentasPage() {
                           LABEL_METODO[ms[0]!]
                         );
                       })()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {(v.descuento_total ?? 0) > 0 ? (
-                        <div className="flex flex-col items-end leading-tight">
-                          <span className="font-medium tabular-nums text-green-700">
-                            -{formatCurrency(v.descuento_total)}
-                          </span>
-                          {descuentoPorVenta.get(v.id)?.motivo && (
-                            <span
-                              className="max-w-[140px] truncate text-[11px] text-muted-foreground"
-                              title={descuentoPorVenta.get(v.id)!.motivo!}
-                            >
-                              {descuentoPorVenta.get(v.id)!.motivo}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
                     </TableCell>
                     <TableCell
                       className={`text-right font-medium tabular-nums ${

@@ -35,8 +35,16 @@ export function Providers({ children }: { children: ReactNode }) {
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !key) return;
     const sb = createSupabaseRaw(url, key);
-    const { data: sub } = sb.auth.onAuthStateChange((event) => {
+    const { data: sub } = sb.auth.onAuthStateChange(async (event) => {
       if (event === 'SIGNED_OUT') {
+        // Doble check: supabase-js a veces dispara SIGNED_OUT por
+        // errores 401 transitorios (ej. al pegar contra una tabla con
+        // RLS restrictiva). Si la sesión sigue viva en el SDK,
+        // ignoramos el evento para no kickear al usuario por error.
+        // Pasó con encargado entrando a /configuracion: el RPC fallaba
+        // por policy y arrastraba al user al login.
+        const { data } = await sb.auth.getSession();
+        if (data.session) return;
         setEmpleado(null);
         toast.info('Tu sesión expiró. Iniciá sesión de nuevo.');
       }

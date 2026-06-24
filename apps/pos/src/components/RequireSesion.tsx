@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useSesion } from '@/stores/sesion';
+import { getDb } from '@/lib/db';
 import type { ReactNode } from 'react';
 
 // Defensa contra sesiones residuales del modo mock (IDs como '1', 'emp_admin').
@@ -60,6 +62,36 @@ export function RequireSesionAbierta({ children }: { children: ReactNode }) {
   const residuo = useLimpiarSesionMockResidual();
   const sesion = useSesion((s) => s.sesionCaja);
   const empleado = useSesion((s) => s.empleado);
+  const setSesionCaja = useSesion((s) => s.setSesionCaja);
+  const setCaja = useSesion((s) => s.setCaja);
+  const db = getDb();
+
+  // Polling cada 10s para detectar si la sesión fue cerrada desde otro
+  // lado (admin cerrándola desde /admin/caja, o el mismo cajero en otro
+  // dispositivo). Sin esto, el PoS local sigue creyendo que está abierta
+  // y deja vender — esas ventas pegarían contra el RPC que tampoco las
+  // aceptaría, pero el cajero pierde tiempo y la UX queda confusa.
+  const checkQ = useQuery({
+    queryKey: ['sesion-actual', sesion?.id],
+    queryFn: () => (sesion ? db.sesionesCaja.get(sesion.id) : Promise.resolve(null)),
+    enabled: !!sesion,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    if (!sesion || !checkQ.data) return;
+    if (checkQ.data.estado !== 'abierta') {
+      toast.warning(
+        'Tu caja fue cerrada por otro usuario. Volvé a abrirla para seguir vendiendo.',
+        { duration: 6000 },
+      );
+      setSesionCaja(null);
+      setCaja(null);
+    }
+  }, [sesion, checkQ.data, setSesionCaja, setCaja]);
+
   if (residuo || !empleado) return <Navigate to="/login" replace />;
   if (!sesion || sesion.estado !== 'abierta') return <Navigate to="/abrir-caja" replace />;
   return <>{children}</>;
