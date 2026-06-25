@@ -409,16 +409,19 @@ export function ModalCobro({
     onError: (e: Error) => toast.error(e.message),
   });
 
-  if (!open) return null;
-  const cuotasOpciones = configQ.data?.cuotas ?? [];
-
   // Refs para que el listener global de Enter (instalado una sola vez
   // al abrir el modal) lea siempre los valores actuales sin necesidad
   // de re-suscribirse en cada render.
+  // CRÍTICO: declarar ANTES del early return — si los useRef quedan
+  // después del `if (!open) return null`, React ve más hooks cuando el
+  // modal se abre y crashea (rules of hooks).
   const confirmarHabilitadoRef = useRef(false);
   const modoRef = useRef<'rapido' | 'mixto'>('rapido');
   const confirmarRapidoRef = useRef<() => void>(() => {});
   const cobrarMutRef = useRef<typeof cobrarMut>(cobrarMut);
+
+  if (!open) return null;
+  const cuotasOpciones = configQ.data?.cuotas ?? [];
 
   // --- Cálculos para el render ---
   const aPagar = proximoPagoMonto;
