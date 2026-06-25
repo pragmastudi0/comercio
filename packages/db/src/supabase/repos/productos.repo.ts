@@ -103,13 +103,25 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
     async buscarRapido(query, limit = 10) {
       if (!query.trim()) return [];
       const q = query.trim();
+      const esNumerico = /^\d+$/.test(q);
+
+      // Regla del cliente: si tipean números → match EXACTO por código.
+      // Antes era `codigo_interno.like.{q}%` (prefijo) lo que tenía dos
+      // problemas: (a) tipear "63" traía 63, 631, 632... y (b) el código
+      // exacto de 1 dígito ("5") quedaba enterrado debajo de 8 productos
+      // que empezaban con 5 por el LIMIT. Ahora:
+      //   - Si q es numérico → match exacto al código + parcial al nombre.
+      //   - Si q tiene letras → solo parcial al nombre.
       const p = `%${q}%`;
+      const filtro = esNumerico
+        ? `codigo_interno.eq.${q},nombre.ilike.${p}`
+        : `nombre.ilike.${p}`;
       return okList<Producto>(
         await sb
           .from('productos')
           .select('*')
           .eq('activo', true)
-          .or(`codigo_interno.like.${q}%,nombre.ilike.${p}`)
+          .or(filtro)
           .limit(limit),
         'productos.buscarRapido',
       );
