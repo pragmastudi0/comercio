@@ -185,7 +185,13 @@ export function Caja() {
         open={modalCobro.open}
         onOpenChange={(v) => setModalCobro((m) => ({ ...m, open: v }))}
         metodoInicial={modalCobro.metodo}
-        onCobrado={(ventaId) => navigate(`/ticket/${ventaId}`)}
+        onCobrado={() => {
+          // El dueño imprime el ticket por otro lado — no le sirve la
+          // pantalla del ticket. Cerramos el modal y volvemos al buscador
+          // para la próxima venta sin un click extra.
+          setModalCobro((m) => ({ ...m, open: false }));
+          toast.success('Venta registrada');
+        }}
       />
     </div>
   );

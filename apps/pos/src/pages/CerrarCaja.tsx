@@ -13,13 +13,15 @@ import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
 import type { MetodoPago } from '@comercio/db';
 
+// Métodos visibles en el cierre de caja. Cuenta corriente queda fuera
+// por decisión del cliente: las ventas en cta cte no afectan el arqueo
+// de caja (no entra plata) — verlas acá confundía.
 const METODOS: Array<{ key: MetodoPago; label: string }> = [
   { key: 'efectivo', label: 'Efectivo' },
   { key: 'transferencia', label: 'Transferencia' },
   { key: 'debito', label: 'Débito' },
   { key: 'credito', label: 'Crédito' },
   { key: 'qr', label: 'QR' },
-  { key: 'cta_cte', label: 'Cuenta corriente' },
 ];
 
 export function CerrarCaja() {

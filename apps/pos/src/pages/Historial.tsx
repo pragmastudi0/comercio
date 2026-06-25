@@ -67,9 +67,10 @@ export function Historial() {
   // Orden y filtro en memoria. La búsqueda mira número de ticket, cajero
   // y código/nombre de cualquier producto incluido en la venta — así el
   // cajero puede encontrar la venta de "tal producto" sin recordar el
-  // número.
+  // número. La lista llega de Supabase ya DESC (más reciente primero),
+  // no la invertimos.
   const ventas = useMemo(() => {
-    const lista = [...(ventasQ.data ?? [])].reverse();
+    const lista = ventasQ.data ?? [];
     const q = filtro.trim().toLowerCase();
     if (!q) return lista;
     return lista.filter((v) => {

@@ -81,34 +81,19 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
       <td className="px-3 py-3">
         <div className="font-medium">{item.producto.nombre}</div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
-          {/* Si no alcanza el stock local pero hay en otro depósito, NO mostramos
-              la alerta roja: el sistema va a auto-transferir al cobrar. Mostramos
-              un mensaje amigable con el depósito de origen. Solo cuando NO hay
-              en ningún lado mostramos la alerta de stock negativo. */}
-          {sinStockSuficiente && totalEnOtros > 0 ? (
+          {/* Política Turisteando: el cajero NO debe ver cantidades de
+              stock — sólo el aviso cualitativo de que hay en otro local
+              cuando no alcanza acá. La venta nunca se bloquea por stock. */}
+          {sinStockSuficiente && totalEnOtros > 0 && (
             <span className="flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">
               <AlertTriangle className="h-3 w-3" />
-              Se trae de{' '}
+              Hay en{' '}
               {stockEnOtros.map((s, i) => (
                 <span key={s.nombre}>
                   {i > 0 ? ' / ' : ''}
                   <b>{s.nombre}</b>
                 </span>
               ))}
-            </span>
-          ) : (
-            <span
-              className={`flex items-center gap-1 ${
-                sinStockSuficiente
-                  ? 'text-destructive'
-                  : stockTrasVenta <= 2
-                    ? 'text-orange-600'
-                    : 'text-muted-foreground'
-              }`}
-            >
-              {sinStockSuficiente && <AlertTriangle className="h-3 w-3" />}
-              Stock: {stockEnMiDep}
-              {item.cantidad > 0 && ` → ${stockTrasVenta} tras venta`}
             </span>
           )}
           {precioEditado && (
