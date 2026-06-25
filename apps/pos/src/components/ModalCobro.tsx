@@ -419,6 +419,22 @@ export function ModalCobro({
   const modoRef = useRef<'rapido' | 'mixto'>('rapido');
   const confirmarRapidoRef = useRef<() => void>(() => {});
   const cobrarMutRef = useRef<typeof cobrarMut>(cobrarMut);
+  // Ref al botón Confirmar venta para auto-foco al abrir el modal.
+  // Sin esto, Enter después de abrir va al input del buscador (que
+  // tiene el foco previo) y re-abre el modal en lugar de confirmar.
+  const confirmarBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Al abrir el modal: foco al botón Confirmar venta. La cajera puede:
+  // - Apretar Enter directo → confirma (caso "pago justo en efectivo").
+  // - Tocar un billete → focus se mantiene en Confirmar (los billetes
+  //   hacen blur() al clickearse) → Enter siguiente confirma.
+  // - Tabear al input "O escribí otro monto" → Enter ahí también confirma.
+  useEffect(() => {
+    if (!open) return;
+    // setTimeout 0 para esperar a que el botón se monte en el DOM.
+    const t = setTimeout(() => confirmarBtnRef.current?.focus(), 0);
+    return () => clearTimeout(t);
+  }, [open]);
 
   if (!open) return null;
   const cuotasOpciones = configQ.data?.cuotas ?? [];
@@ -703,6 +719,7 @@ export function ModalCobro({
             Cancelar
           </Button>
           <Button
+            ref={confirmarBtnRef}
             disabled={!confirmarHabilitado}
             onClick={() => {
               if (modo === 'rapido') confirmarRapido();
