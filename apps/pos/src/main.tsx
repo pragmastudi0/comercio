@@ -29,12 +29,40 @@ try {
   /* navegador con storage bloqueado */
 }
 
-// Forzar update de cualquier service worker viejo que esté sirviendo bundle
-// stale. skipWaiting + clientsClaim del nuevo SW se encarga del resto.
+// === Auto-update de la PWA ===
+// El SW está configurado con skipWaiting + clientsClaim para que la
+// versión nueva tome control sin esperar. Pero el JS ya cargado en la
+// tab sigue siendo el viejo hasta el próximo reload. Lo forzamos:
+//
+//  1. Al arrancar, llamamos update() en todos los SW registrados (gatilla
+//     descarga del manifest nuevo si hay).
+//  2. Suscribimos a `controllerchange` — se dispara cuando el SW que
+//     controla la pestaña cambia (o sea: nueva versión activada). Ahí
+//     hacemos location.reload() para que el bundle nuevo entre en uso.
+//  3. Polling cada 60s llamando registration.update() — así si la cajera
+//     deja el PoS abierto todo el día y pusheamos un fix, en ~1 minuto
+//     ya está corriendo el código nuevo sin pasos manuales.
+//
+// Usamos un flag para no entrar en loop infinito si el SW cambia varias
+// veces durante el lifecycle (ej. en dev).
 if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  let recargando = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (recargando) return;
+    recargando = true;
+    window.location.reload();
+  });
+
   navigator.serviceWorker
     .getRegistrations()
-    .then((regs) => Promise.all(regs.map((r) => r.update())))
+    .then((regs) => {
+      regs.forEach((r) => r.update().catch(() => {}));
+      // Polling: cada 60s pedirle al navegador que chequee si hay versión
+      // nueva del SW. Si la hay → controllerchange → reload automático.
+      setInterval(() => {
+        regs.forEach((r) => r.update().catch(() => {}));
+      }, 60_000);
+    })
     .catch(() => {});
 }
 
