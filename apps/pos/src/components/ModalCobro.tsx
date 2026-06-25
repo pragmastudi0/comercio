@@ -422,7 +422,7 @@ export function ModalCobro({
         )}
       </h2>
 
-      <div className="space-y-2">
+      <div className="space-y-2 pb-3">
         {/* Selector de método compacto: 5 botones en fila, ícono + label
             INLINE (h-10) para no comer altura. Pre-seleccionado el que
             vino en metodoInicial. */}
@@ -623,7 +623,7 @@ export function ModalCobro({
       {/* Footer sticky: el botón "Confirmar venta" siempre visible.
           Incluye el link para alternar entre rápido y mixto a la izquierda
           (antes flotaba en el contenido y el sticky lo tapaba). */}
-      <div className="sticky bottom-0 -mx-4 -mb-4 mt-4 flex flex-col gap-2 border-t bg-background px-4 py-3 sm:-mx-6 sm:-mb-6 sm:px-6">
+      <div className="sticky bottom-0 -mx-4 -mb-4 mt-6 flex flex-col gap-2 border-t bg-background px-4 py-3 sm:-mx-6 sm:-mb-6 sm:px-6">
         <button
           type="button"
           onClick={() => {
