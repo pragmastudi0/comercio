@@ -9,6 +9,7 @@ import { useVenta } from '@/stores/venta';
 import { useDepositoActivo } from '@/lib/deposito-activo';
 import { getDb } from '@/lib/db';
 import { BuscadorProducto } from '@/components/BuscadorProducto';
+import { TabsCarritos } from '@/components/TabsCarritos';
 import { Carrito } from '@/components/Carrito';
 import { ResumenVenta } from '@/components/ResumenVenta';
 import { ModalCobro } from '@/components/ModalCobro';
@@ -153,6 +154,7 @@ export function Caja() {
 
       <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_340px]">
         <div className="flex flex-col overflow-hidden">
+          <TabsCarritos />
           <div className="border-b p-4">
             <BuscadorProducto onCobrarRapido={() => abrirCobro('efectivo')} />
           </div>

@@ -16,6 +16,19 @@ export type ItemCarrito = {
 
 export type ModoDescuento = 'pct' | 'monto';
 
+/** Snapshot de un carrito "guardado" en paralelo (no activo).
+ *  El carrito activo vive en los campos top-level de VentaState. */
+type CarritoSnapshot = {
+  items: ItemCarrito[];
+  clienteId: string | null;
+  descuentoModo: ModoDescuento;
+  descuentoValor: number;
+  motivoDescuento?: string;
+};
+
+/** Máximo de carritos simultáneos (1 activo + N paralelos). */
+export const MAX_CARRITOS = 3;
+
 type VentaState = {
   items: ItemCarrito[];
   clienteId: string | null;
@@ -26,6 +39,14 @@ type VentaState = {
   descuentoModo: ModoDescuento;
   descuentoValor: number;
   motivoDescuento?: string;
+  /** Carritos en paralelo (los NO activos). Permite a la cajera atender
+   *  a dos clientes a la vez: arma uno, le falta algo, abre otro carrito,
+   *  atiende al segundo, vuelve y termina el primero. */
+  carritosParalelos: Record<string, CarritoSnapshot>;
+  /** Id del carrito actualmente activo (default 'c1'). */
+  carritoActivoId: string;
+  /** Próximo id correlativo (para nombrar c1, c2, c3...). */
+  _nextCarritoSeq: number;
   agregar: (producto: Producto, precio: number) => void;
   setCantidad: (productoId: string, cantidad: number) => void;
   setPrecio: (productoId: string, precio: number) => void;
@@ -37,17 +58,30 @@ type VentaState = {
   setDescuento: (modo: ModoDescuento, valor: number, motivo?: string) => void;
   limpiarDescuento: () => void;
   limpiar: () => void;
+  /** Crear un carrito nuevo vacío y activarlo. El actual queda guardado
+   *  en `carritosParalelos`. Devuelve el id del nuevo. Bloquea si ya
+   *  hay MAX_CARRITOS abiertos. */
+  nuevoCarrito: () => string | null;
+  /** Cambiar al carrito `id`: guarda el actual en paralelos y carga el
+   *  target en el top-level. No-op si `id` es el actual. */
+  cambiarCarrito: (id: string) => void;
+  /** Cerrar un carrito específico (lo borra de paralelos). Si era el
+   *  activo, salta a otro paralelo. Si no queda ninguno, queda vacío. */
+  cerrarCarrito: (id: string) => void;
 };
 
 export const useVenta = create<VentaState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       items: [],
       clienteId: null,
       seleccionadoId: null,
       descuentoModo: 'pct',
       descuentoValor: 0,
       motivoDescuento: undefined,
+      carritosParalelos: {},
+      carritoActivoId: 'c1',
+      _nextCarritoSeq: 2,
       agregar: (producto, precio) =>
         set((state) => {
           const existente = state.items.find((i) => i.producto.id === producto.id);
@@ -125,14 +159,133 @@ export const useVenta = create<VentaState>()(
         set({ descuentoModo: modo, descuentoValor: Math.max(0, valor), motivoDescuento: motivo }),
       limpiarDescuento: () => set({ descuentoValor: 0, motivoDescuento: undefined }),
       limpiar: () =>
+        set((state) => {
+          // Si hay otros carritos abiertos, al cobrar/cancelar el actual
+          // saltamos al siguiente. Si no, queda todo vacío en el slot
+          // actual (c1, c2, etc. — el id se conserva).
+          const ids = Object.keys(state.carritosParalelos);
+          if (ids.length > 0) {
+            const proximoId = ids[0]!;
+            const proximo = state.carritosParalelos[proximoId]!;
+            const restoParalelos = { ...state.carritosParalelos };
+            delete restoParalelos[proximoId];
+            return {
+              items: proximo.items,
+              clienteId: proximo.clienteId,
+              seleccionadoId: null,
+              descuentoModo: proximo.descuentoModo,
+              descuentoValor: proximo.descuentoValor,
+              motivoDescuento: proximo.motivoDescuento,
+              carritoActivoId: proximoId,
+              carritosParalelos: restoParalelos,
+            };
+          }
+          return {
+            items: [],
+            clienteId: null,
+            seleccionadoId: null,
+            descuentoModo: 'pct',
+            descuentoValor: 0,
+            motivoDescuento: undefined,
+          };
+        }),
+      nuevoCarrito: () => {
+        const state = get();
+        // Activos = 1 (el actual) + paralelos. MAX_CARRITOS total.
+        if (Object.keys(state.carritosParalelos).length + 1 >= MAX_CARRITOS) {
+          return null;
+        }
+        const nuevoId = `c${state._nextCarritoSeq}`;
+        // Snapshot del actual a paralelos, luego limpiar top-level.
+        const snapshotActual: CarritoSnapshot = {
+          items: state.items,
+          clienteId: state.clienteId,
+          descuentoModo: state.descuentoModo,
+          descuentoValor: state.descuentoValor,
+          motivoDescuento: state.motivoDescuento,
+        };
         set({
+          carritosParalelos: {
+            ...state.carritosParalelos,
+            [state.carritoActivoId]: snapshotActual,
+          },
+          carritoActivoId: nuevoId,
+          _nextCarritoSeq: state._nextCarritoSeq + 1,
           items: [],
           clienteId: null,
           seleccionadoId: null,
           descuentoModo: 'pct',
           descuentoValor: 0,
           motivoDescuento: undefined,
-        }),
+        });
+        return nuevoId;
+      },
+      cambiarCarrito: (id) => {
+        const state = get();
+        if (id === state.carritoActivoId) return;
+        const target = state.carritosParalelos[id];
+        if (!target) return;
+        // Snapshot del actual va a paralelos; sacamos el target.
+        const snapshotActual: CarritoSnapshot = {
+          items: state.items,
+          clienteId: state.clienteId,
+          descuentoModo: state.descuentoModo,
+          descuentoValor: state.descuentoValor,
+          motivoDescuento: state.motivoDescuento,
+        };
+        const nuevoParalelos = { ...state.carritosParalelos };
+        delete nuevoParalelos[id];
+        nuevoParalelos[state.carritoActivoId] = snapshotActual;
+        set({
+          carritosParalelos: nuevoParalelos,
+          carritoActivoId: id,
+          items: target.items,
+          clienteId: target.clienteId,
+          seleccionadoId: null,
+          descuentoModo: target.descuentoModo,
+          descuentoValor: target.descuentoValor,
+          motivoDescuento: target.motivoDescuento,
+        });
+      },
+      cerrarCarrito: (id) => {
+        const state = get();
+        if (id === state.carritoActivoId) {
+          // Cerrar el activo = limpiar (que ya sabe saltar al próximo).
+          // Pero limpiar solo limpia el actual; queremos descartarlo y
+          // saltar. Reutilizamos la misma lógica.
+          const ids = Object.keys(state.carritosParalelos);
+          if (ids.length > 0) {
+            const proximoId = ids[0]!;
+            const proximo = state.carritosParalelos[proximoId]!;
+            const restoParalelos = { ...state.carritosParalelos };
+            delete restoParalelos[proximoId];
+            set({
+              items: proximo.items,
+              clienteId: proximo.clienteId,
+              seleccionadoId: null,
+              descuentoModo: proximo.descuentoModo,
+              descuentoValor: proximo.descuentoValor,
+              motivoDescuento: proximo.motivoDescuento,
+              carritoActivoId: proximoId,
+              carritosParalelos: restoParalelos,
+            });
+          } else {
+            set({
+              items: [],
+              clienteId: null,
+              seleccionadoId: null,
+              descuentoModo: 'pct',
+              descuentoValor: 0,
+              motivoDescuento: undefined,
+            });
+          }
+          return;
+        }
+        // Cerrar un paralelo: solo lo sacamos del map.
+        const nuevoParalelos = { ...state.carritosParalelos };
+        delete nuevoParalelos[id];
+        set({ carritosParalelos: nuevoParalelos });
+      },
     }),
     {
       // Persistimos el carrito en localStorage para que si se cae el
@@ -140,14 +293,17 @@ export const useVenta = create<VentaState>()(
       // el cajero recupere lo que estaba armando. No persistimos la
       // sesión Supabase ni los productos completos: solo lo del carrito.
       name: 'turisteando-pos-carrito',
-      // v2: dejamos de persistir descuentoModo/descuentoValor/motivoDescuento.
-      // Antes quedaban pegados de una venta a la siguiente: si una cajera
-      // aplicaba 2% y vendía, el state cargaba 2% en la próxima venta.
-      // El descuento global es per-venta — no debe sobrevivir a recargas.
-      version: 2,
+      // v3: agregamos persistencia de carritos paralelos para soportar
+      // varias ventas a la vez (la cajera puede recargar el navegador
+      // sin perder los carritos abiertos). El descuento global sigue
+      // sin persistirse — es per-venta.
+      version: 3,
       partialize: (s) => ({
         items: s.items,
         clienteId: s.clienteId,
+        carritosParalelos: s.carritosParalelos,
+        carritoActivoId: s.carritoActivoId,
+        _nextCarritoSeq: s._nextCarritoSeq,
       }),
     },
   ),
