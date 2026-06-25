@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Banknote, CreditCard, Smartphone, ArrowLeftRight, X, Check } from 'lucide-react';
-import { Dialog, DialogFooter, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
+import { Dialog, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
@@ -611,7 +611,12 @@ export function ModalCobro({
         </div>
       </div>
 
-      <DialogFooter>
+      {/* Footer sticky: el contenido del modal puede ser alto y obligar
+          a scrollear; el botón "Confirmar venta" tiene que estar siempre
+          visible para que la cajera no tenga que buscar para cerrar la
+          venta. Usamos un div con sticky bottom (NO el DialogFooter
+          estándar que es estático). */}
+      <div className="sticky bottom-0 -mx-4 -mb-4 mt-4 flex flex-col-reverse gap-2 border-t bg-background px-4 py-3 sm:-mx-6 sm:-mb-6 sm:flex-row sm:justify-end sm:px-6">
         <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={cobrarMut.isPending}>
           Cancelar
         </Button>
@@ -623,7 +628,7 @@ export function ModalCobro({
             ? 'Procesando…'
             : `Confirmar venta · ${formatCurrency(totalCobrado)}`}
         </Button>
-      </DialogFooter>
+      </div>
     </Dialog>
   );
 }
