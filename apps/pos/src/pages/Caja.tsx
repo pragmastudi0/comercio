@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
-import { LogOut, History } from 'lucide-react';
+import { LogOut, History, Wallet } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { useVenta } from '@/stores/venta';
@@ -12,6 +12,7 @@ import { BuscadorProducto } from '@/components/BuscadorProducto';
 import { Carrito } from '@/components/Carrito';
 import { ResumenVenta } from '@/components/ResumenVenta';
 import { ModalCobro } from '@/components/ModalCobro';
+import { ModalAjustarCaja } from '@/components/ModalAjustarCaja';
 import { SHORTCUTS, SHORTCUT_LABELS } from '@/lib/shortcuts';
 import { Button } from '@comercio/ui/button';
 import type { MetodoPago } from '@comercio/db';
@@ -29,6 +30,7 @@ export function Caja() {
   const [modalCobro, setModalCobro] = useState<{ open: boolean; metodo?: MetodoPago }>({
     open: false,
   });
+  const [ajustarCajaOpen, setAjustarCajaOpen] = useState(false);
 
   function abrirCobro(metodo?: MetodoPago) {
     if (items.length === 0) {
@@ -118,6 +120,15 @@ export function Caja() {
               <History className="mr-1 h-3 w-3" />
               Historial
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAjustarCajaOpen(true)}
+              title="Cargar o sacar efectivo de caja, corregir saldo"
+            >
+              <Wallet className="mr-1 h-3 w-3" />
+              Ajustar caja
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate('/cerrar-caja')}>
               Cerrar caja
             </Button>
@@ -180,6 +191,8 @@ export function Caja() {
           />
         </aside>
       </div>
+
+      <ModalAjustarCaja open={ajustarCajaOpen} onOpenChange={setAjustarCajaOpen} />
 
       <ModalCobro
         open={modalCobro.open}
