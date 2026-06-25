@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Tag, Banknote, CreditCard, Smartphone } from 'lucide-react';
+import { Tag, Banknote, Layers } from 'lucide-react';
 import {
   calcularBaseVenta,
   calcularDescuentoGlobal,
@@ -161,44 +161,30 @@ export function ResumenVenta({ onCobrar, onCancelar }: Props) {
       <div className="min-h-0 flex-1" />
 
       <div className="border-t bg-background p-3">
-        <div className="mb-2 grid grid-cols-3 gap-2">
+        {/* Botón principal Cobrar (default efectivo, adentro podés cambiar)
+            + Pago mixto secundario para sumar varios métodos. Reemplaza
+            los tres botones viejos (Efectivo / Tarjeta / QR) que confundían
+            cuando había que mezclar pagos. */}
+        <div className="mb-2 grid grid-cols-[2fr_1fr] gap-2">
           <Button
             size="lg"
             disabled={!hayItems}
             onClick={() => onCobrar('efectivo')}
-            className="flex h-auto flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-xs"
+            className="flex h-auto items-center justify-center gap-2 px-3 py-3 text-base font-semibold"
           >
-            <span className="flex items-center gap-1.5 text-sm font-semibold">
-              <Banknote className="h-4 w-4" />
-              Efectivo
-            </span>
-            <span className="text-[10px] opacity-75">F5</span>
+            <Banknote className="h-5 w-5" />
+            Cobrar
           </Button>
           <Button
             size="lg"
             disabled={!hayItems}
-            onClick={() => onCobrar('credito')}
+            onClick={() => onCobrar()}
             variant="secondary"
-            className="flex h-auto flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-xs"
+            className="flex h-auto items-center justify-center gap-2 px-2 py-3 text-sm font-medium"
+            title="Sumar varios métodos de pago (efectivo + tarjeta, etc.)"
           >
-            <span className="flex items-center gap-1.5 text-sm font-semibold">
-              <CreditCard className="h-4 w-4" />
-              Tarjeta
-            </span>
-            <span className="text-[10px] opacity-75">F6</span>
-          </Button>
-          <Button
-            size="lg"
-            disabled={!hayItems}
-            onClick={() => onCobrar('qr')}
-            variant="secondary"
-            className="flex h-auto flex-col items-center justify-center gap-0.5 px-2 py-2.5 text-xs"
-          >
-            <span className="flex items-center gap-1.5 text-sm font-semibold">
-              <Smartphone className="h-4 w-4" />
-              QR / Transf.
-            </span>
-            <span className="text-[10px] opacity-75">F7</span>
+            <Layers className="h-4 w-4" />
+            Pago mixto
           </Button>
         </div>
         <Button

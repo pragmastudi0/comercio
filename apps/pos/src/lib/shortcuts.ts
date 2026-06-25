@@ -5,7 +5,7 @@ export const SHORTCUTS = {
   cobrarEfectivo: 'f5',
   cobrarTarjeta: 'f6',
   cobrarQR: 'f7',
-  cobrarCtaCte: 'f8',
+  pagoMixto: 'f8',
   ultimaVenta: 'f12',
   cancelar: 'escape',
 } as const;
@@ -16,7 +16,7 @@ export const SHORTCUT_LABELS: Record<keyof typeof SHORTCUTS, string> = {
   cobrarEfectivo: 'F5',
   cobrarTarjeta: 'F6',
   cobrarQR: 'F7',
-  cobrarCtaCte: 'F8',
+  pagoMixto: 'F8',
   ultimaVenta: 'F12',
   cancelar: 'Esc',
 };

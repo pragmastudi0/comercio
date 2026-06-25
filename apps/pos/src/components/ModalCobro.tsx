@@ -83,6 +83,11 @@ export function ModalCobro({
   const [cuotas, setCuotas] = useState(1);
   const [montoInput, setMontoInput] = useState<string>('');
   const [montoRecibido, setMontoRecibido] = useState<string>('');
+  // Modo del flujo: 'rapido' = un solo método, Confirmar agrega y cobra
+  // en un click. 'mixto' = la cajera arma varios pagos antes de confirmar.
+  // Se setea según `metodoInicial`; podés cambiar de rápido a mixto desde
+  // el botón "Pagar con varios métodos" adentro del modal.
+  const [modo, setModo] = useState<'rapido' | 'mixto'>('rapido');
 
   // Depósito desde donde se descuenta el stock al confirmar la venta.
   // Es el del LOCAL de la caja activa, no el del empleado en su perfil.
@@ -96,12 +101,17 @@ export function ModalCobro({
   useEffect(() => {
     if (open) {
       setPagos([]);
-      setMetodo(metodoInicial ?? null);
+      // Modo: si nos abren con un método sugerido (botón Cobrar), modo
+      // rápido con ese método + monto pre-llenado al base. Si nos abren
+      // sin método (botón Pago mixto), modo mixto, cajera arma a mano.
+      const m = metodoInicial ?? 'efectivo';
+      setMetodo(metodoInicial ? m : null);
+      setModo(metodoInicial ? 'rapido' : 'mixto');
       setCuotas(1);
-      setMontoInput('');
+      setMontoInput(metodoInicial ? String(baseACubrir.toFixed(2)) : '');
       setMontoRecibido('');
     }
-  }, [open, metodoInicial]);
+  }, [open, metodoInicial, baseACubrir]);
 
   // Para saber cuánto del "base a cubrir" queda por cubrir:
   const baseCubierta = pagos.reduce((acc, p) => {
@@ -194,10 +204,44 @@ export function ModalCobro({
     setMetodo(null);
   }
 
+  /**
+   * Modo rápido: arma el pago actual y dispara cobrarMut en un click.
+   * Si el carrito ya tiene pagos previos (cambió de rápido a mixto?),
+   * solo agrega este pago al final y luego cobra.
+   */
+  function confirmarRapido() {
+    if (!metodo) {
+      toast.error('Elegí un método de pago');
+      return;
+    }
+    const montoCubrir = montoSeguro(montoInput, baseACubrir);
+    if (montoCubrir <= 0) {
+      toast.error('Monto inválido');
+      return;
+    }
+    const dtoEfectivo = configQ.data?.descuento_efectivo_pct ?? 0;
+    const cuotaConf = configQ.data?.cuotas.find((c) => c.cuotas === cuotas);
+    const recargoPct = metodo === 'credito' ? cuotaConf?.recargo_pct ?? 0 : 0;
+    const pago: PagoVenta = {
+      metodo,
+      monto: calcularPagoFinal(montoCubrir, metodo, cuotas, dtoEfectivo, configQ.data?.cuotas ?? []),
+      ...(metodo === 'credito' ? { cuotas, recargo_pct: recargoPct } : {}),
+    };
+    // Pasamos los pagos directamente a la mutación (override) para no
+    // tener que esperar a que setState re-renderice. El setPagos es solo
+    // para que la UI refleje el estado si la mutación tarda.
+    setPagos([pago]);
+    cobrarMut.mutate([pago]);
+  }
+
   const cobrarMut = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (pagosOverride?: PagoVenta[]) => {
       if (!empleado || !caja || !sesion) throw new Error('Sesión inválida');
-      if (pagos.length === 0) throw new Error('No hay pagos');
+      // Override permite al modo rápido pasar los pagos directamente sin
+      // depender de que setState haya re-renderizado primero. Si no se
+      // pasa, usa los del state (modo mixto, donde la cajera arma a mano).
+      const pagosUsar = pagosOverride ?? pagos;
+      if (pagosUsar.length === 0) throw new Error('No hay pagos');
 
       // Defensa final: validar que todos los IDs que viajan al RPC sean UUID.
       // Si algo está roto en la sesión, falla con mensaje claro antes de pegarle
@@ -234,20 +278,20 @@ export function ModalCobro({
         subtotal:
           it.cantidad * it.precio_unitario * (1 - (it.descuento_pct ?? 0) / 100),
       }));
-      const total = pagos.reduce((acc, p) => acc + p.monto, 0);
+      const total = pagosUsar.reduce((acc, p) => acc + p.monto, 0);
       // El descuento total combina: descuentos por línea + descuento global + descuento efectivo por método
       const descuentoLineas = items.reduce((acc, it) => {
         if (!it.descuento_pct) return acc;
         return acc + it.cantidad * it.precio_unitario * (it.descuento_pct / 100);
       }, 0);
-      const descuentoMetodo = pagos
+      const descuentoMetodo = pagosUsar
         .filter((p) => p.metodo === 'efectivo')
         .reduce((acc, p) => {
           const dto = configQ.data?.descuento_efectivo_pct ?? 0;
           const base = p.monto / (1 - dto / 100);
           return acc + (base - p.monto);
         }, 0);
-      const recargo_total = pagos
+      const recargo_total = pagosUsar
         .filter((p) => p.metodo === 'credito')
         .reduce((acc, p) => {
           const rec = p.recargo_pct ?? 0;
@@ -309,7 +353,7 @@ export function ModalCobro({
         empleado_id: empleado.id,
         cliente_id: clienteId ?? undefined,
         items: items_payload,
-        pagos,
+        pagos: pagosUsar,
         subtotal,
         descuento_total,
         recargo_total,
@@ -348,164 +392,120 @@ export function ModalCobro({
   if (!open) return null;
   const cuotasOpciones = configQ.data?.cuotas ?? [];
 
+  // --- Cálculos para el render ---
+  const aPagar = proximoPagoMonto;
+  const recibidoLive = montoSeguro(montoRecibido, 0);
+  const vueltoLive = Math.max(0, recibidoLive - aPagar);
+  const faltaLive = Math.max(0, aPagar - recibidoLive);
+  // En modo rápido, "Confirmar venta" lleva el monto del efectivo a la
+  // venta (con su descuento). En modo mixto, lleva la suma de pagos.
+  const totalConfirmar = modo === 'rapido' ? aPagar : totalCobrado;
+  // Habilitamos confirmar en rápido apenas haya método elegido (monto
+  // pre-llenado al abrir). En mixto, cuando los pagos cubren todo.
+  const confirmarHabilitado =
+    modo === 'rapido'
+      ? !!metodo && aPagar > 0 && !cobrarMut.isPending
+      : restante < 0.01 && pagos.length > 0 && !cobrarMut.isPending;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} className="max-w-4xl">
+    <Dialog open={open} onOpenChange={onOpenChange} className="max-w-xl">
       <DialogHeader>
-        <DialogTitle>Cobrar · {formatCurrency(baseACubrir)}</DialogTitle>
+        <DialogTitle>
+          {modo === 'mixto' ? 'Pago mixto · ' : 'Cobrar · '}
+          {formatCurrency(baseACubrir)}
+          {descuentoValor > 0 && (
+            <span className="ml-2 text-xs font-normal text-green-700">
+              (incluye -{formatCurrency(descuentoGlobal)})
+            </span>
+          )}
+        </DialogTitle>
       </DialogHeader>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_3fr]">
-        <div className="space-y-2 rounded-md bg-muted/30 p-3">
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs uppercase text-muted-foreground">Subtotal</span>
-            <span className="text-sm tabular-nums">{formatCurrency(subtotal)}</span>
+      <div className="space-y-3">
+        {/* Selector de método compacto: 5 botones en fila, ícono + label
+            chico. Pre-seleccionado el que vino en metodoInicial. */}
+        <div>
+          <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
+            Método de pago
           </div>
-          {descuentoValor > 0 && (
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs uppercase text-green-700">
-                Dto.{' '}
-                {descuentoModo === 'pct'
-                  ? `${descuentoValor}%`
-                  : formatCurrency(descuentoValor)}
-              </span>
-              <span className="text-sm tabular-nums text-green-700">
-                -{formatCurrency(descuentoGlobal)}
-              </span>
-            </div>
-          )}
-          <div className="flex items-baseline justify-between border-t pt-2">
-            <span className="text-xs uppercase text-muted-foreground">Base a cobrar</span>
-            <span className="text-xl font-semibold tabular-nums">
-              {formatCurrency(baseACubrir)}
-            </span>
-          </div>
-
-          {/* Barra de progreso: solo cuando hay pago mixto (más de 1 pago)
-              para no ocupar espacio en el caso típico de un solo método. */}
-          {pagos.length > 1 && (
-            <div>
-              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                <span>Cubierto</span>
-                <span>{cubiertoPct.toFixed(0)}%</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-primary transition-all"
-                  style={{ width: `${cubiertoPct}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {pagos.length > 0 && (
-            <div className="space-y-1 border-t pt-2">
-              <div className="text-xs uppercase text-muted-foreground">Pagos agregados</div>
-              {pagos.map((p, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded bg-background px-2 py-1 text-sm"
-                >
-                  <span className="flex items-center gap-2">
-                    <Check className="h-3 w-3 text-green-600" />
-                    {labelMetodo(p.metodo)}
-                    {p.cuotas ? ` · ${p.cuotas} cuotas` : ''}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <span className="font-medium tabular-nums">
-                      {formatCurrency(p.monto)}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5"
-                      onClick={() => setPagos((arr) => arr.filter((_, idx) => idx !== i))}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Restante + Total cobrado en una sola fila para ahorrar altura */}
-          <div className="grid grid-cols-2 gap-2 border-t pt-2">
-            <div>
-              <div className="text-[10px] uppercase text-muted-foreground">Restante</div>
-              <div
-                className={`text-base font-semibold tabular-nums ${
-                  restante < 0.01 ? 'text-green-700' : ''
-                }`}
-              >
-                {formatCurrency(restante)}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-[10px] uppercase text-muted-foreground">Total cobrado</div>
-              <div className="text-2xl font-bold tabular-nums text-primary">
-                {formatCurrency(totalCobrado)}
-              </div>
-            </div>
-          </div>
-
-          {/* La calculadora de vuelto vive ahora del lado derecho (inline
-              al elegir Efectivo). El bloque que estaba acá era redundante. */}
-        </div>
-
-        <div className="space-y-2">
-          <Label>Método de pago</Label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-5 gap-1.5">
             {METODOS.map((m) => {
               const Icon = m.icon;
-              const disabled = (m.requiereCliente && !clienteId) || restante <= 0.01;
+              const activo = metodo === m.metodo;
               return (
                 <button
                   key={m.metodo}
                   onClick={() => {
                     setMetodo(m.metodo);
-                    setMontoInput(String(restante.toFixed(2)));
+                    // En modo rápido, al cambiar de método re-pre-llenamos
+                    // con el base completo. En mixto, con el restante.
+                    setMontoInput(
+                      String((modo === 'rapido' ? baseACubrir : restante).toFixed(2)),
+                    );
+                    setMontoRecibido('');
                   }}
-                  disabled={disabled}
-                  className={`flex items-center gap-3 rounded-md border p-3 text-left text-sm transition disabled:opacity-50 ${
-                    metodo === m.metodo
-                      ? 'border-primary bg-primary/5'
-                      : 'border-input hover:bg-accent'
+                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md border p-2 text-[11px] transition ${
+                    activo ? 'border-primary bg-primary/10 font-semibold' : 'border-input hover:bg-accent'
                   }`}
                 >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-medium">{m.label}</span>
+                  <Icon className="h-4 w-4" />
+                  {m.label.split(' ')[0]}
                 </button>
               );
             })}
           </div>
+        </div>
 
-          {metodo === 'credito' && (
-            <div>
-              <Label className="mb-1 block text-sm">Cuotas</Label>
-              <div className="flex flex-wrap gap-2">
-                {cuotasOpciones.map((c) => (
-                  <button
-                    key={c.cuotas}
-                    onClick={() => setCuotas(c.cuotas)}
-                    className={`rounded border px-3 py-2 text-sm transition ${
-                      cuotas === c.cuotas
-                        ? 'border-primary bg-primary/5'
-                        : 'border-input hover:bg-accent'
-                    }`}
-                  >
-                    {c.cuotas}x{' '}
-                    <span className="text-xs text-muted-foreground">
-                      ({c.recargo_pct > 0 ? `+${c.recargo_pct}%` : 'sin recargo'})
-                    </span>
-                  </button>
-                ))}
-              </div>
+        {/* Cuotas si es crédito */}
+        {metodo === 'credito' && (
+          <div>
+            <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
+              Cuotas
             </div>
-          )}
+            <div className="flex flex-wrap gap-1.5">
+              {cuotasOpciones.map((c) => (
+                <button
+                  key={c.cuotas}
+                  onClick={() => setCuotas(c.cuotas)}
+                  className={`rounded border px-2 py-1.5 text-xs transition ${
+                    cuotas === c.cuotas
+                      ? 'border-primary bg-primary/10 font-semibold'
+                      : 'border-input hover:bg-accent'
+                  }`}
+                >
+                  {c.cuotas}x
+                  {c.recargo_pct > 0 && (
+                    <span className="ml-1 text-[10px] text-muted-foreground">
+                      +{c.recargo_pct}%
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-          {metodo && (
-            <div>
-              <Label className="mb-1 block text-sm">Monto del subtotal a cubrir</Label>
+        {/* Total a cobrar destacado — el número grande que ve el cajero */}
+        {metodo && (
+          <div className="flex items-baseline justify-between rounded-md bg-primary/10 px-3 py-2">
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {metodo === 'efectivo' && (configQ.data?.descuento_efectivo_pct ?? 0) > 0
+                ? `Total (con -${configQ.data!.descuento_efectivo_pct}% efectivo)`
+                : metodo === 'credito' && (configQ.data?.cuotas.find((x) => x.cuotas === cuotas)?.recargo_pct ?? 0) > 0
+                  ? `Total (con +${configQ.data?.cuotas.find((x) => x.cuotas === cuotas)?.recargo_pct}% cuotas)`
+                  : 'Total a cobrar'}
+            </span>
+            <span className="text-2xl font-bold tabular-nums text-primary">
+              {formatCurrency(aPagar)}
+            </span>
+          </div>
+        )}
+
+        {/* Modo MIXTO: input de monto + lista de pagos ya agregados */}
+        {modo === 'mixto' && metodo && (
+          <div>
+            <Label className="mb-1 block text-xs uppercase">Monto del subtotal a cubrir</Label>
+            <div className="flex gap-2">
               <Input
                 type="number"
                 min="0"
@@ -513,120 +513,149 @@ export function ModalCobro({
                 value={montoInput}
                 onChange={(e) => setMontoInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && agregarPagoActual()}
+                className="text-right"
               />
-              {/* Display destacado del total efectivamente a cobrar
-                  (con descuento aplicado si es efectivo, con recargo si
-                  es crédito). Antes era un tipo "tip" chico que se
-                  perdía — ahora es lo primero que ve el cajero. */}
-              {(metodo === 'efectivo' || metodo === 'credito') &&
-                proximoPagoMonto !== parseFloat(montoInput || '0') && (
-                <div className="mt-2 flex items-center justify-between rounded-md bg-primary/10 px-3 py-2">
-                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    {metodo === 'efectivo'
-                      ? `Total a cobrar (ya con -${configQ.data?.descuento_efectivo_pct ?? 0}% efectivo)`
-                      : 'Total a cobrar (con recargo de cuotas)'}
-                  </span>
-                  <span className="text-lg font-bold tabular-nums text-primary">
-                    {formatCurrency(proximoPagoMonto)}
-                  </span>
-                </div>
-              )}
-              <p className="mt-1 text-xs text-muted-foreground">
-                {metodo === 'cta_cte' && !clienteId && (
-                  <span className="text-destructive">Identificar cliente antes (F3)</span>
-                )}
-              </p>
-
-              {/* Calculadora de vuelto INLINE — visible apenas el cajero
-                  elige Efectivo, antes de confirmar el pago. Así puede
-                  tipear el billete que recibe y ver el vuelto al toque,
-                  sin tener que primero "agregar pago" y después fijarse
-                  arriba. La calculadora se basa en `proximoPagoMonto`
-                  (ya tiene el descuento aplicado). */}
-              {metodo === 'efectivo' && (() => {
-                const aPagar = proximoPagoMonto;
-                const entrega = montoSeguro(montoRecibido, 0);
-                const vueltoLive = Math.max(0, entrega - aPagar);
-                const falta = Math.max(0, aPagar - entrega);
-                return (
-                  <div className="mt-3 rounded-md border bg-muted/30 p-2">
-                    <Label className="mb-1 block text-xs uppercase">
-                      Calculadora de vuelto · cliente entrega
-                    </Label>
-                    <Input
-                      type="number"
-                      step="100"
-                      value={montoRecibido}
-                      onChange={(e) => setMontoRecibido(e.target.value)}
-                      placeholder={`p.ej. ${Math.ceil(aPagar / 1000) * 1000}`}
-                      className="text-right text-base"
-                    />
-                    {entrega > 0 && (
-                      <div
-                        className={`mt-2 rounded p-2 text-sm font-medium ${
-                          vueltoLive > 0
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : falta > 0
-                              ? 'bg-destructive/10 text-destructive'
-                              : 'bg-green-100 text-green-700'
-                        }`}
-                      >
-                        {vueltoLive > 0
-                          ? `Vuelto a entregar: ${formatCurrency(vueltoLive)}`
-                          : falta > 0
-                            ? `Falta: ${formatCurrency(falta)}`
-                            : 'Pago justo'}
-                      </div>
-                    )}
-                    {/* Sugerencias rápidas: billetes redondos por encima
-                        del monto, para que el cajero no tipee. */}
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {sugerenciasVuelto(aPagar).map((b) => (
-                        <button
-                          key={b}
-                          type="button"
-                          onClick={() => setMontoRecibido(String(b))}
-                          className="rounded border border-input bg-card px-2 py-1 text-xs font-medium hover:bg-accent"
-                        >
-                          {formatCurrency(b)}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setMontoRecibido(String(aPagar))}
-                        className="rounded border border-input bg-card px-2 py-1 text-xs font-medium hover:bg-accent"
-                      >
-                        Justo
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <Button className="mt-2 w-full" onClick={agregarPagoActual}>
-                Agregar pago de {formatCurrency(proximoPagoMonto)}
+              <Button onClick={agregarPagoActual} className="shrink-0">
+                + Agregar
               </Button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {modo === 'mixto' && pagos.length > 0 && (
+          <div className="space-y-1 rounded-md border bg-muted/30 p-2">
+            <div className="mb-1 flex items-center justify-between text-xs uppercase text-muted-foreground">
+              <span>Pagos agregados</span>
+              <span>Restante: <b className={restante < 0.01 ? 'text-green-700' : ''}>{formatCurrency(restante)}</b></span>
+            </div>
+            {pagos.map((p, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between rounded bg-background px-2 py-1 text-sm"
+              >
+                <span className="flex items-center gap-2">
+                  <Check className="h-3 w-3 text-green-600" />
+                  {labelMetodo(p.metodo)}
+                  {p.cuotas ? ` · ${p.cuotas} cuotas` : ''}
+                </span>
+                <div className="flex items-center gap-1">
+                  <span className="font-medium tabular-nums">{formatCurrency(p.monto)}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5"
+                    onClick={() => setPagos((arr) => arr.filter((_, idx) => idx !== i))}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Modo RÁPIDO + EFECTIVO: calculadora de vuelto con botones
+            grandes de billetes. El cajero toca el billete que recibe y
+            ve el vuelto al instante. No hay que tipear nada. */}
+        {modo === 'rapido' && metodo === 'efectivo' && (
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 text-xs font-medium uppercase text-muted-foreground">
+              Cliente entrega
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {sugerenciasVuelto(aPagar).map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setMontoRecibido(String(b))}
+                  className={`rounded-md border px-3 py-2.5 text-sm font-semibold tabular-nums transition ${
+                    recibidoLive === b
+                      ? 'border-primary bg-primary/10'
+                      : 'border-input bg-card hover:bg-accent'
+                  }`}
+                >
+                  {formatCurrency(b)}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setMontoRecibido(String(aPagar))}
+                className={`rounded-md border px-3 py-2.5 text-sm font-semibold transition ${
+                  Math.abs(recibidoLive - aPagar) < 0.01
+                    ? 'border-primary bg-primary/10'
+                    : 'border-input bg-card hover:bg-accent'
+                }`}
+              >
+                Justo
+              </button>
+            </div>
+            <Input
+              type="number"
+              step="100"
+              value={montoRecibido}
+              onChange={(e) => setMontoRecibido(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
+              placeholder="O escribí otro monto"
+              className="mt-2 text-right"
+            />
+            {recibidoLive > 0 && (
+              <div
+                className={`mt-2 rounded p-2 text-center text-base font-semibold ${
+                  vueltoLive > 0
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : faltaLive > 0
+                      ? 'bg-destructive/10 text-destructive'
+                      : 'bg-green-100 text-green-700'
+                }`}
+              >
+                {vueltoLive > 0
+                  ? `Vuelto: ${formatCurrency(vueltoLive)}`
+                  : faltaLive > 0
+                    ? `Falta: ${formatCurrency(faltaLive)}`
+                    : 'Pago justo'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Botón para alternar entre rápido y mixto */}
+        <button
+          type="button"
+          onClick={() => {
+            if (modo === 'rapido') {
+              setModo('mixto');
+              setPagos([]);
+              setMetodo(null);
+              setMontoInput('');
+            } else {
+              setModo('rapido');
+              setPagos([]);
+              setMetodo('efectivo');
+              setMontoInput(String(baseACubrir.toFixed(2)));
+            }
+          }}
+          className="w-full text-xs text-muted-foreground underline-offset-2 hover:underline"
+        >
+          {modo === 'rapido' ? 'Necesito pagar con varios métodos →' : '← Volver a cobro rápido (un solo método)'}
+        </button>
       </div>
 
-      {/* Footer sticky: el contenido del modal puede ser alto y obligar
-          a scrollear; el botón "Confirmar venta" tiene que estar siempre
-          visible para que la cajera no tenga que buscar para cerrar la
-          venta. Usamos un div con sticky bottom (NO el DialogFooter
-          estándar que es estático). */}
+      {/* Footer sticky: el botón "Confirmar venta" siempre visible. */}
       <div className="sticky bottom-0 -mx-4 -mb-4 mt-4 flex flex-col-reverse gap-2 border-t bg-background px-4 py-3 sm:-mx-6 sm:-mb-6 sm:flex-row sm:justify-end sm:px-6">
         <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={cobrarMut.isPending}>
           Cancelar
         </Button>
         <Button
-          disabled={restante > 0.01 || pagos.length === 0 || cobrarMut.isPending}
-          onClick={() => cobrarMut.mutate()}
+          disabled={!confirmarHabilitado}
+          onClick={() => {
+            if (modo === 'rapido') confirmarRapido();
+            else cobrarMut.mutate(undefined);
+          }}
+          className="text-base"
         >
           {cobrarMut.isPending
             ? 'Procesando…'
-            : `Confirmar venta · ${formatCurrency(totalCobrado)}`}
+            : `Confirmar venta · ${formatCurrency(totalConfirmar)}`}
         </Button>
       </div>
     </Dialog>

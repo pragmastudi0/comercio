@@ -23,7 +23,14 @@ export type BuscadorProductoHandle = {
   focus: () => void;
 };
 
-export function BuscadorProducto() {
+export function BuscadorProducto({
+  onCobrarRapido,
+}: {
+  /** Callback que abre el modal Cobrar. Se dispara al apretar Enter en
+   *  el buscador cuando está vacío y hay items en el carrito. Si no se
+   *  pasa, Enter no hace nada en ese caso. */
+  onCobrarRapido?: () => void;
+} = {}) {
   const db = getDb();
   const { depositoId } = useDepositoActivo();
 
@@ -236,13 +243,20 @@ export function BuscadorProducto() {
         onKeyDown={(e) => {
           const lista = resultadosQ.data ?? [];
           if (e.key === 'Enter') {
-            // Si hay resultados, agregar el resaltado (default: primero).
-            // Si no, intentar código exacto.
+            // Caso 1: hay resultados → agregar el resaltado.
+            // Caso 2: hay query pero sin resultados → intentar código exacto.
+            // Caso 3: BUSCADOR VACÍO + carrito con items → atajo a Cobrar.
+            //   Es el "Enter rápido" del cliente: termina la carga,
+            //   un Enter abre el modal de Cobrar directo. Si NO hay items,
+            //   no hace nada (evita abrir modal por error).
             if (lista.length > 0) {
               const target = lista[Math.min(resaltadoIdx, lista.length - 1)];
               if (target) agregarProducto(target.id);
-            } else {
+            } else if (q.trim() !== '') {
               void agregarPorCodigoExacto();
+            } else if (itemsEnCarrito.length > 0 && onCobrarRapido) {
+              e.preventDefault();
+              onCobrarRapido();
             }
           } else if (e.key === 'ArrowDown') {
             e.preventDefault();

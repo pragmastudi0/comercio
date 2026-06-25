@@ -95,6 +95,8 @@ export function Caja() {
   useHotkeys(SHORTCUTS.cobrarEfectivo, (e) => { e.preventDefault(); abrirCobro('efectivo'); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cobrarTarjeta, (e) => { e.preventDefault(); abrirCobro('credito'); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cobrarQR, (e) => { e.preventDefault(); abrirCobro('qr'); }, { enableOnFormTags: true });
+  // F8: abrir Pago mixto (modal sin método pre-seleccionado).
+  useHotkeys(SHORTCUTS.pagoMixto, (e) => { e.preventDefault(); abrirCobro(); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cancelar, () => cancelarVenta(), { enableOnFormTags: true });
 
   if (!empleado || !caja) return null;
@@ -152,7 +154,7 @@ export function Caja() {
       <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_340px]">
         <div className="flex flex-col overflow-hidden">
           <div className="border-b p-4">
-            <BuscadorProducto />
+            <BuscadorProducto onCobrarRapido={() => abrirCobro('efectivo')} />
           </div>
           <div className="flex-1 overflow-y-auto">
             <Carrito />
@@ -172,10 +174,10 @@ export function Caja() {
                 Cancelar
               </span>
               <span className="text-muted-foreground/70">
-                Cobro: F5 Efectivo · F6 Tarjeta · F7 QR
+                Cobro: F5 Efectivo · F6 Tarjeta · F7 QR · F8 Pago mixto
               </span>
               <span className="text-muted-foreground/70">
-                Buscador: Enter agrega · ↑↓ navega (resultados o carrito) · Supr borra ítem seleccionado
+                Buscador: Enter agrega producto · Enter con buscador vacío + carrito = Cobrar · ↑↓ navega · Supr borra ítem
               </span>
             </div>
           </div>
