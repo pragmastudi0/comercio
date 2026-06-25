@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Banknote, CreditCard, Smartphone, ArrowLeftRight, X, Check } from 'lucide-react';
-import { Dialog, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
+import { Dialog } from '@comercio/ui/dialog';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
@@ -409,51 +409,46 @@ export function ModalCobro({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} className="max-w-xl">
-      <DialogHeader>
-        <DialogTitle>
-          {modo === 'mixto' ? 'Pago mixto · ' : 'Cobrar · '}
-          {formatCurrency(baseACubrir)}
-          {descuentoValor > 0 && (
-            <span className="ml-2 text-xs font-normal text-green-700">
-              (incluye -{formatCurrency(descuentoGlobal)})
-            </span>
-          )}
-        </DialogTitle>
-      </DialogHeader>
+      {/* Header inline (no DialogHeader que tiene mb-4) para máxima
+          compactación en pantallas chicas — el título es lo primero
+          que tiene que verse sin scroll. */}
+      <h2 className="mb-2 text-base font-semibold sm:text-lg">
+        {modo === 'mixto' ? 'Pago mixto · ' : 'Cobrar · '}
+        {formatCurrency(baseACubrir)}
+        {descuentoValor > 0 && (
+          <span className="ml-2 text-xs font-normal text-green-700">
+            (incluye -{formatCurrency(descuentoGlobal)})
+          </span>
+        )}
+      </h2>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {/* Selector de método compacto: 5 botones en fila, ícono + label
-            chico. Pre-seleccionado el que vino en metodoInicial. */}
-        <div>
-          <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
-            Método de pago
-          </div>
-          <div className="grid grid-cols-5 gap-1.5">
-            {METODOS.map((m) => {
-              const Icon = m.icon;
-              const activo = metodo === m.metodo;
-              return (
-                <button
-                  key={m.metodo}
-                  onClick={() => {
-                    setMetodo(m.metodo);
-                    // En modo rápido, al cambiar de método re-pre-llenamos
-                    // con el base completo. En mixto, con el restante.
-                    setMontoInput(
-                      String((modo === 'rapido' ? baseACubrir : restante).toFixed(2)),
-                    );
-                    setMontoRecibido('');
-                  }}
-                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md border p-2 text-[11px] transition ${
-                    activo ? 'border-primary bg-primary/10 font-semibold' : 'border-input hover:bg-accent'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {m.label.split(' ')[0]}
-                </button>
-              );
-            })}
-          </div>
+            INLINE (h-10) para no comer altura. Pre-seleccionado el que
+            vino en metodoInicial. */}
+        <div className="grid grid-cols-5 gap-1.5">
+          {METODOS.map((m) => {
+            const Icon = m.icon;
+            const activo = metodo === m.metodo;
+            return (
+              <button
+                key={m.metodo}
+                onClick={() => {
+                  setMetodo(m.metodo);
+                  setMontoInput(
+                    String((modo === 'rapido' ? baseACubrir : restante).toFixed(2)),
+                  );
+                  setMontoRecibido('');
+                }}
+                className={`flex h-10 items-center justify-center gap-1.5 rounded-md border px-1 text-[11px] transition ${
+                  activo ? 'border-primary bg-primary/10 font-semibold' : 'border-input hover:bg-accent'
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{m.label.split(' ')[0]}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Cuotas si es crédito */}
@@ -485,17 +480,20 @@ export function ModalCobro({
           </div>
         )}
 
-        {/* Total a cobrar destacado — el número grande que ve el cajero */}
+        {/* Banner "Total a cobrar" SOLO si tiene descuento/recargo (el
+            monto cambia respecto al de la cabecera). Si no, sería un
+            duplicado del título del modal — ahorramos altura ocultándolo. */}
         {metodo && (
-          <div className="flex items-baseline justify-between rounded-md bg-primary/10 px-3 py-2">
+          (metodo === 'efectivo' && (configQ.data?.descuento_efectivo_pct ?? 0) > 0) ||
+          (metodo === 'credito' && (configQ.data?.cuotas.find((x) => x.cuotas === cuotas)?.recargo_pct ?? 0) > 0)
+        ) && (
+          <div className="flex items-baseline justify-between rounded-md bg-primary/10 px-3 py-1.5">
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {metodo === 'efectivo' && (configQ.data?.descuento_efectivo_pct ?? 0) > 0
+              {metodo === 'efectivo'
                 ? `Total (con -${configQ.data!.descuento_efectivo_pct}% efectivo)`
-                : metodo === 'credito' && (configQ.data?.cuotas.find((x) => x.cuotas === cuotas)?.recargo_pct ?? 0) > 0
-                  ? `Total (con +${configQ.data?.cuotas.find((x) => x.cuotas === cuotas)?.recargo_pct}% cuotas)`
-                  : 'Total a cobrar'}
+                : `Total (con +${configQ.data?.cuotas.find((x) => x.cuotas === cuotas)?.recargo_pct}% cuotas)`}
             </span>
-            <span className="text-2xl font-bold tabular-nums text-primary">
+            <span className="text-xl font-bold tabular-nums text-primary">
               {formatCurrency(aPagar)}
             </span>
           </div>
@@ -558,17 +556,19 @@ export function ModalCobro({
             grandes de billetes. El cajero toca el billete que recibe y
             ve el vuelto al instante. No hay que tipear nada. */}
         {modo === 'rapido' && metodo === 'efectivo' && (
-          <div className="rounded-md border bg-muted/30 p-3">
-            <div className="mb-2 text-xs font-medium uppercase text-muted-foreground">
+          <div className="rounded-md border bg-muted/30 p-2">
+            <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
               Cliente entrega
             </div>
-            <div className="grid grid-cols-3 gap-1.5">
+            {/* Grid 4 cols: 3 sugerencias + "Justo" en una sola fila para
+                ahorrar altura (antes "Justo" iba debajo en una 2da fila). */}
+            <div className="grid grid-cols-4 gap-1.5">
               {sugerenciasVuelto(aPagar).map((b) => (
                 <button
                   key={b}
                   type="button"
                   onClick={() => setMontoRecibido(String(b))}
-                  className={`rounded-md border px-3 py-2.5 text-sm font-semibold tabular-nums transition ${
+                  className={`rounded-md border px-2 py-2 text-sm font-semibold tabular-nums transition ${
                     recibidoLive === b
                       ? 'border-primary bg-primary/10'
                       : 'border-input bg-card hover:bg-accent'
@@ -580,7 +580,7 @@ export function ModalCobro({
               <button
                 type="button"
                 onClick={() => setMontoRecibido(String(aPagar))}
-                className={`rounded-md border px-3 py-2.5 text-sm font-semibold transition ${
+                className={`rounded-md border px-2 py-2 text-sm font-semibold transition ${
                   Math.abs(recibidoLive - aPagar) < 0.01
                     ? 'border-primary bg-primary/10'
                     : 'border-input bg-card hover:bg-accent'
@@ -596,11 +596,11 @@ export function ModalCobro({
               onChange={(e) => setMontoRecibido(e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
               placeholder="O escribí otro monto"
-              className="mt-2 text-right"
+              className="mt-1.5 h-8 text-right"
             />
             {recibidoLive > 0 && (
               <div
-                className={`mt-2 rounded p-2 text-center text-base font-semibold ${
+                className={`mt-1.5 rounded px-2 py-1 text-center text-sm font-semibold ${
                   vueltoLive > 0
                     ? 'bg-yellow-100 text-yellow-800'
                     : faltaLive > 0
