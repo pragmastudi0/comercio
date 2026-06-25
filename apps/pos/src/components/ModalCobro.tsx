@@ -358,9 +358,15 @@ export function ModalCobro({
           if (restante <= 0) break;
         }
         if (restante > 0) {
-          throw new Error(
-            `Stock insuficiente para "${it.producto.nombre}". ` +
-              `Faltan ${restante} unidades en todos los locales.`,
+          // Política Turisteando: NO bloquear la venta por stock
+          // insuficiente. El cliente tiene productos con stock real > 0
+          // que todavía no cargaron en el sistema — vendemos igual y
+          // el stock del local del cajero queda negativo. El dueño
+          // corrige el inventario con el tiempo. La RPC rpc_crear_venta
+          // ya está preparada para aceptar stock negativo.
+          // eslint-disable-next-line no-console
+          console.warn(
+            `Stock negativo: "${it.producto.nombre}" faltan ${restante} unidades en el local. La venta procede igual.`,
           );
         }
       }
