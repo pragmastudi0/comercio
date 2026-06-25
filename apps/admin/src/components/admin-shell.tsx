@@ -78,7 +78,11 @@ const NAV_GROUPS: { titulo: string; items: NavItem[] }[] = [
     titulo: 'Stock',
     items: [
       { href: '/depositos', label: 'Stock por local', icon: Warehouse, requiere: req('stock', 'ver_todos_depositos') },
-      { href: '/transferencias', label: 'Transferencias', icon: ArrowLeftRight, requiere: req('stock', 'transferir') },
+      // Transferencias entre locales: ocultado del menú. El sistema
+      // hace auto-transfer al cobrar cuando falta stock en el local del
+      // cajero, así que el dueño no necesita esta página. La ruta sigue
+      // disponible por URL directa por si hace falta algún día.
+      // { href: '/transferencias', label: 'Transferencias', icon: ArrowLeftRight, requiere: req('stock', 'transferir') },
     ],
   },
   {

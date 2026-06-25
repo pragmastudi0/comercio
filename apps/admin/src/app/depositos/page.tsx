@@ -7,7 +7,6 @@ import { Plus, Pencil, Trash2, Search, ArrowDownUp, Minus, ChevronLeft, ChevronR
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@comercio/ui/tabs';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
@@ -32,18 +31,10 @@ export default function DepositosPage() {
           Vista del stock consolidado por producto y local + administración de locales.
         </p>
       </div>
-      <Tabs defaultValue="stock">
-        <TabsList>
-          <TabsTrigger value="stock">Stock consolidado</TabsTrigger>
-          <TabsTrigger value="depositos">Locales</TabsTrigger>
-        </TabsList>
-        <TabsContent value="stock">
-          <StockConsolidado />
-        </TabsContent>
-        <TabsContent value="depositos">
-          <AbmDepositos />
-        </TabsContent>
-      </Tabs>
+      {/* ABM de Locales (sub-tab) ocultado: el dueño no maneja el alta
+          de locales, ya están creados. Si hace falta crear/editar uno,
+          se hace por SQL o reactivando esta UI. */}
+      <StockConsolidado />
     </div>
   );
 }
