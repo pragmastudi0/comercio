@@ -105,7 +105,7 @@ export function ModalNotaCredito({
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Indicá qué productos se devuelven y por qué motivo. La NC vuelve el stock al
-          depósito y queda registrada.
+          local y queda registrada.
         </p>
 
         <div className="rounded-md border">

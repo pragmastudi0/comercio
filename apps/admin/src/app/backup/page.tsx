@@ -248,7 +248,7 @@ export default function BackupPage() {
         Fecha: fmtFecha(m.fecha),
         Código: productoCodigo(m.producto_id),
         Producto: productoNombre(m.producto_id),
-        Depósito: depositoNombre(m.deposito_id),
+        Local: depositoNombre(m.deposito_id),
         Tipo: LABEL_TIPO_MOV_STOCK[m.tipo] ?? m.tipo,
         Cantidad: m.cantidad,
         Empleado: empleadoNombre(m.empleado_id),

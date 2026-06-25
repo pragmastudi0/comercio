@@ -142,7 +142,7 @@ export default function NuevoEmpleadoPage() {
                 </select>
               </div>
               <div>
-                <Label className="mb-1 block">Depósito (opcional)</Label>
+                <Label className="mb-1 block">Local de stock (opcional)</Label>
                 <select
                   value={depositoId}
                   onChange={(e) => setDepositoId(e.target.value)}

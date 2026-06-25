@@ -77,7 +77,7 @@ const NAV_GROUPS: { titulo: string; items: NavItem[] }[] = [
   {
     titulo: 'Stock',
     items: [
-      { href: '/depositos', label: 'Depósitos', icon: Warehouse, requiere: req('stock', 'ver_todos_depositos') },
+      { href: '/depositos', label: 'Stock por local', icon: Warehouse, requiere: req('stock', 'ver_todos_depositos') },
       { href: '/transferencias', label: 'Transferencias', icon: ArrowLeftRight, requiere: req('stock', 'transferir') },
     ],
   },

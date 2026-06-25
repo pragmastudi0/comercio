@@ -61,8 +61,8 @@ const ACCION_LABELS: Record<string, string> = {
   modificar_limite: 'Modificar límite',
   condonar_deuda: 'Condonar deuda',
   // Stock
-  ver_propio_deposito: 'Ver mi depósito',
-  ver_todos_depositos: 'Ver todos los depósitos',
+  ver_propio_deposito: 'Ver mi local',
+  ver_todos_depositos: 'Ver todos los locales',
   ajustar: 'Ajustar stock',
   transferir: 'Transferir',
   aprobar_transferencia: 'Aprobar transferencia',
@@ -77,7 +77,7 @@ const ACCION_LABELS: Record<string, string> = {
   // Empleados
   cambiar_rol: 'Cambiar rol',
   cambiar_permisos: 'Cambiar permisos',
-  asignar_deposito: 'Asignar depósito',
+  asignar_deposito: 'Asignar stock por local (legacy)',
   asignar_local: 'Asignar local',
   // Config
   modificar_recargos: 'Modificar recargos',

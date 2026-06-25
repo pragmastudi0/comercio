@@ -287,7 +287,7 @@ export function ModalCobro({
             producto_id: it.producto.id,
             deposito_id: depLocal,
             cantidad: aMover,
-            motivo: `Auto-transfer desde otro depósito (cajero ${caja.nombre})`,
+            motivo: `Auto-transfer desde otro local (cajero ${caja.nombre})`,
             empleado_id: empleado.id,
           });
           restante -= aMover;
@@ -296,7 +296,7 @@ export function ModalCobro({
         if (restante > 0) {
           throw new Error(
             `Stock insuficiente para "${it.producto.nombre}". ` +
-              `Faltan ${restante} unidades en todos los depósitos.`,
+              `Faltan ${restante} unidades en todos los locales.`,
           );
         }
       }

@@ -88,7 +88,7 @@ export default function TransferenciasPage() {
         <div>
           <h1 className="text-xl font-semibold sm:text-2xl">Transferencias</h1>
           <p className="text-sm text-muted-foreground">
-            Movimiento de stock entre depósitos. Flujo: borrador → emitida (descuenta de origen) →
+            Movimiento de stock entre locales. Flujo: borrador → emitida (descuenta de origen) →
             recibida (suma en destino).
           </p>
         </div>

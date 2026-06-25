@@ -230,7 +230,7 @@ export default function EditarEmpleadoPage() {
                   </select>
                 </div>
                 <div>
-                  <Label className="mb-1 block">Depósito</Label>
+                  <Label className="mb-1 block">Local de stock</Label>
                   <select
                     value={depositoId}
                     onChange={(e) => setDepositoId(e.target.value)}

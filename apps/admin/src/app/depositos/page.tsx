@@ -27,15 +27,15 @@ export default function DepositosPage() {
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold sm:text-2xl">Depósitos y stock</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">Stock por local</h1>
         <p className="text-sm text-muted-foreground">
-          Vista del stock consolidado por producto y depósito + administración de depósitos.
+          Vista del stock consolidado por producto y local + administración de locales.
         </p>
       </div>
       <Tabs defaultValue="stock">
         <TabsList>
           <TabsTrigger value="stock">Stock consolidado</TabsTrigger>
-          <TabsTrigger value="depositos">Depósitos</TabsTrigger>
+          <TabsTrigger value="depositos">Locales</TabsTrigger>
         </TabsList>
         <TabsContent value="stock">
           <StockConsolidado />
@@ -483,7 +483,7 @@ function AbmDepositos() {
   const crearMut = useMutation({
     mutationFn: (v: Omit<Deposito, 'id'>) => db.depositos.create(v),
     onSuccess: () => {
-      toast.success('Depósito creado');
+      toast.success('Local creado');
       qc.invalidateQueries({ queryKey: ['depositos'] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -491,7 +491,7 @@ function AbmDepositos() {
   const editarMut = useMutation({
     mutationFn: ({ id, ...v }: { id: string } & Partial<Deposito>) => db.depositos.update(id, v),
     onSuccess: () => {
-      toast.success('Depósito editado');
+      toast.success('Local editado');
       qc.invalidateQueries({ queryKey: ['depositos'] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -499,7 +499,7 @@ function AbmDepositos() {
   const eliminarMut = useMutation({
     mutationFn: (id: string) => db.depositos.delete(id),
     onSuccess: () => {
-      toast.success('Depósito eliminado');
+      toast.success('Local eliminado');
       qc.invalidateQueries({ queryKey: ['depositos'] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -514,10 +514,10 @@ function AbmDepositos() {
   return (
     <div className="mt-4">
       <AbmSimple<Deposito>
-        titulo="Depósitos"
+        titulo="Locales"
         rows={depositosQ.data ?? []}
         loading={depositosQ.isLoading}
-        newButtonLabel="Nuevo depósito"
+        newButtonLabel="Nuevo local"
         columns={[
           { header: 'Nombre', cell: (r) => <span className="font-medium">{r.nombre}</span> },
           {

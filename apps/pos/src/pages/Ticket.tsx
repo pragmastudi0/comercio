@@ -55,7 +55,7 @@ export function Ticket() {
       return db.ventas.anular(id, empleado.id, m);
     },
     onSuccess: () => {
-      toast.success('Venta anulada. El stock vuelve al depósito.');
+      toast.success('Venta anulada. El stock vuelve al local.');
       setAnularOpen(false);
       setMotivoAnular('');
       qc.invalidateQueries({ queryKey: ['venta', id] });
@@ -180,7 +180,7 @@ export function Ticket() {
         <DialogHeader>
           <DialogTitle>¿Anular venta {venta.numero}?</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Se devuelve el stock al depósito y se registra un contramovimiento
+            Se devuelve el stock al local y se registra un contramovimiento
             por <b>{formatCurrency(venta.total)}</b> en la caja. Queda en el
             historial con tu nombre y el motivo. <b>No se puede deshacer.</b>
           </p>

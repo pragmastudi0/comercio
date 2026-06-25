@@ -126,7 +126,7 @@ function RolesInner() {
             <Input
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder="Ej: Encargado de depósito"
+              placeholder="Ej: Encargado de local"
               autoFocus
             />
           </div>
