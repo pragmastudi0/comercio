@@ -354,54 +354,56 @@ export function ModalCobro({
         <DialogTitle>Cobrar · {formatCurrency(baseACubrir)}</DialogTitle>
       </DialogHeader>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[2fr_3fr]">
-        <div className="space-y-3 rounded-md bg-muted/30 p-4">
-          <div>
-            <div className="text-xs uppercase text-muted-foreground">Subtotal</div>
-            <div className="text-lg tabular-nums">{formatCurrency(subtotal)}</div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_3fr]">
+        <div className="space-y-2 rounded-md bg-muted/30 p-3">
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs uppercase text-muted-foreground">Subtotal</span>
+            <span className="text-sm tabular-nums">{formatCurrency(subtotal)}</span>
           </div>
           {descuentoValor > 0 && (
-            <div>
-              <div className="text-xs uppercase text-green-700">
-                Descuento{' '}
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs uppercase text-green-700">
+                Dto.{' '}
                 {descuentoModo === 'pct'
                   ? `${descuentoValor}%`
                   : formatCurrency(descuentoValor)}
-                {motivoDescuento ? ` · ${motivoDescuento}` : ''}
-              </div>
-              <div className="text-lg tabular-nums text-green-700">
+              </span>
+              <span className="text-sm tabular-nums text-green-700">
                 -{formatCurrency(descuentoGlobal)}
+              </span>
+            </div>
+          )}
+          <div className="flex items-baseline justify-between border-t pt-2">
+            <span className="text-xs uppercase text-muted-foreground">Base a cobrar</span>
+            <span className="text-xl font-semibold tabular-nums">
+              {formatCurrency(baseACubrir)}
+            </span>
+          </div>
+
+          {/* Barra de progreso: solo cuando hay pago mixto (más de 1 pago)
+              para no ocupar espacio en el caso típico de un solo método. */}
+          {pagos.length > 1 && (
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Cubierto</span>
+                <span>{cubiertoPct.toFixed(0)}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${cubiertoPct}%` }}
+                />
               </div>
             </div>
           )}
-          <div className="border-t pt-3">
-            <div className="text-xs uppercase text-muted-foreground">Base a cobrar</div>
-            <div className="text-2xl font-semibold tabular-nums">
-              {formatCurrency(baseACubrir)}
-            </div>
-          </div>
-
-          {/* Barra de progreso del cobro */}
-          <div>
-            <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Cubierto</span>
-              <span>{cubiertoPct.toFixed(0)}%</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full bg-primary transition-all"
-                style={{ width: `${cubiertoPct}%` }}
-              />
-            </div>
-          </div>
 
           {pagos.length > 0 && (
-            <div className="space-y-1.5 border-t pt-3">
+            <div className="space-y-1 border-t pt-2">
               <div className="text-xs uppercase text-muted-foreground">Pagos agregados</div>
               {pagos.map((p, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between rounded bg-background px-2 py-1.5 text-sm"
+                  className="flex items-center justify-between rounded bg-background px-2 py-1 text-sm"
                 >
                   <span className="flex items-center gap-2">
                     <Check className="h-3 w-3 text-green-600" />
@@ -426,58 +428,31 @@ export function ModalCobro({
             </div>
           )}
 
-          <div className="border-t pt-3">
-            <div className="text-xs uppercase text-muted-foreground">Restante</div>
-            <div
-              className={`text-xl font-semibold tabular-nums ${
-                restante < 0.01 ? 'text-green-700' : ''
-              }`}
-            >
-              {formatCurrency(restante)}
+          {/* Restante + Total cobrado en una sola fila para ahorrar altura */}
+          <div className="grid grid-cols-2 gap-2 border-t pt-2">
+            <div>
+              <div className="text-[10px] uppercase text-muted-foreground">Restante</div>
+              <div
+                className={`text-base font-semibold tabular-nums ${
+                  restante < 0.01 ? 'text-green-700' : ''
+                }`}
+              >
+                {formatCurrency(restante)}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] uppercase text-muted-foreground">Total cobrado</div>
+              <div className="text-2xl font-bold tabular-nums text-primary">
+                {formatCurrency(totalCobrado)}
+              </div>
             </div>
           </div>
 
-          <div className="border-t pt-3">
-            <div className="text-xs uppercase text-muted-foreground">Total cobrado</div>
-            <div className="text-3xl font-bold tabular-nums text-primary">
-              {formatCurrency(totalCobrado)}
-            </div>
-          </div>
-
-          {/* Vuelto cuando es 100% efectivo */}
-          {esSoloEfectivo && (
-            <div className="border-t pt-3">
-              <Label className="mb-1 block text-xs uppercase">Efectivo recibido</Label>
-              <Input
-                type="number"
-                step="100"
-                value={montoRecibido}
-                onChange={(e) => setMontoRecibido(e.target.value)}
-                placeholder="0"
-                className="text-right text-lg"
-              />
-              {recibido > 0 && (
-                <div
-                  className={`mt-2 rounded p-2 text-sm ${
-                    vuelto > 0
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : recibido < totalAPagar
-                        ? 'bg-destructive/10 text-destructive'
-                        : 'bg-green-100 text-green-700'
-                  }`}
-                >
-                  {vuelto > 0
-                    ? `Vuelto: ${formatCurrency(vuelto)}`
-                    : recibido < totalAPagar
-                      ? `Falta: ${formatCurrency(totalAPagar - recibido)}`
-                      : 'Justo'}
-                </div>
-              )}
-            </div>
-          )}
+          {/* La calculadora de vuelto vive ahora del lado derecho (inline
+              al elegir Efectivo). El bloque que estaba acá era redundante. */}
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           <Label>Método de pago</Label>
           <div className="grid grid-cols-2 gap-2">
             {METODOS.map((m) => {
@@ -631,10 +606,6 @@ export function ModalCobro({
               <Button className="mt-2 w-full" onClick={agregarPagoActual}>
                 Agregar pago de {formatCurrency(proximoPagoMonto)}
               </Button>
-              <p className="mt-2 text-[10px] text-muted-foreground">
-                Tip: para pago mixto agregá un pago, después elegí otro método y volvé a
-                agregar.
-              </p>
             </div>
           )}
         </div>
