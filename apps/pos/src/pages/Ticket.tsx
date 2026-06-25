@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { BRAND } from '@comercio/business';
 import { PRESET_IDS } from '@comercio/db';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
@@ -214,102 +213,120 @@ export function Ticket() {
         </DialogFooter>
       </Dialog>
 
-      <main className="container mx-auto max-w-md p-6 print:p-2">
-        <div className="ticket rounded border border-dashed bg-white p-6 font-mono text-sm text-black print:border-0 print:p-0">
-          <div className="mb-3 text-center">
-            {configQ.data?.comercio?.logo_url && (
-              // eslint-disable-next-line jsx-a11y/alt-text
-              <img
-                src={configQ.data.comercio.logo_url}
-                alt=""
-                className="mx-auto mb-1 h-12 w-12 object-contain"
-              />
-            )}
-            <div className="font-bold uppercase">
-              {configQ.data?.comercio?.razon_social || BRAND.nombreCompleto}
-            </div>
-            {configQ.data?.comercio?.direccion && (
-              <div className="text-xs">{configQ.data.comercio.direccion}</div>
-            )}
-            {configQ.data?.comercio?.cuit && (
-              <div className="text-xs">CUIT {configQ.data.comercio.cuit}</div>
-            )}
-            {configQ.data?.comercio?.telefono && (
-              <div className="text-xs">Tel: {configQ.data.comercio.telefono}</div>
-            )}
-            <div className="mt-2 text-xs">
-              {venta.estado === 'presupuesto' ? 'PRESUPUESTO' : 'COMPROBANTE NO FISCAL'}
+      {/* Detalle de venta — pasamos del estilo "ticket de papel" a una
+          vista limpia con tabla, según pedido del cliente. El cajero rara
+          vez imprime: lo que necesita es ver los productos vendidos para
+          atender un cambio o decidir anular. El botón "Imprimir" sigue
+          arriba por si lo necesitan en algún caso. */}
+      <main className="container mx-auto max-w-3xl px-4 py-6 print:max-w-none print:p-2">
+        <div className="rounded-lg border bg-card p-4 sm:p-6">
+          {/* Header: venta # + fecha + cajero + estado */}
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b pb-3">
+            <div>
+              <div className="text-xs uppercase text-muted-foreground">Venta</div>
+              <div className="text-lg font-semibold tabular-nums">{venta.numero}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {formatDate(venta.fecha)}
+                {(() => {
+                  const emp = empleadosQ.data?.find((e) => e.id === venta.empleado_id);
+                  return emp ? ` · Cajero: ${emp.nombre} ${emp.apellido}` : '';
+                })()}
+              </div>
             </div>
             {venta.estado === 'anulada' && (
-              <div className="mt-1 inline-block rounded border-2 border-red-600 px-3 py-1 text-base font-bold uppercase tracking-wider text-red-600">
-                ANULADA
+              <div className="rounded border-2 border-destructive px-3 py-1 text-sm font-bold uppercase tracking-wider text-destructive">
+                Anulada
               </div>
             )}
-            <div className="text-xs">N° {venta.numero}</div>
-            <div className="text-xs">{formatDate(venta.fecha)}</div>
-            {(() => {
-              const emp = empleadosQ.data?.find((e) => e.id === venta.empleado_id);
-              return emp ? (
-                <div className="text-xs">
-                  Cajero: {emp.nombre} {emp.apellido}
-                </div>
-              ) : null;
-            })()}
+            {venta.estado === 'presupuesto' && (
+              <div className="rounded border-2 border-amber-500 px-3 py-1 text-sm font-bold uppercase tracking-wider text-amber-700">
+                Presupuesto
+              </div>
+            )}
           </div>
 
-          <div className="my-3 border-t border-dashed pt-2">
-            {venta.items.map((it, idx) => (
-              <div key={idx} className="mb-2">
-                <div className="flex justify-between text-xs">
-                  <span>{codigo(it.producto_id)}</span>
-                  <span>{nombre(it.producto_id)}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span>
-                    {it.cantidad} x {formatCurrency(it.precio_unitario)}
+          {/* Tabla de productos vendidos */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                <tr className="border-b">
+                  <th className="px-3 py-2 text-left">Código</th>
+                  <th className="px-3 py-2 text-left">Producto</th>
+                  <th className="px-3 py-2 text-right">Cant.</th>
+                  <th className="px-3 py-2 text-right">Precio</th>
+                  <th className="px-3 py-2 text-right">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {venta.items.map((it, idx) => (
+                  <tr key={idx} className="border-b last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {codigo(it.producto_id)}
+                    </td>
+                    <td className="px-3 py-2">{nombre(it.producto_id)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {it.cantidad}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {formatCurrency(it.precio_unitario)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium tabular-nums">
+                      {formatCurrency(it.subtotal)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Resumen + pagos en columnas paralelas en pantallas medianas+ */}
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1 text-sm">
+              <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
+                Resumen
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="tabular-nums">{formatCurrency(venta.subtotal)}</span>
+              </div>
+              {venta.descuento_total > 0 && (
+                <div className="flex justify-between text-green-700">
+                  <span>Descuento</span>
+                  <span className="tabular-nums">
+                    -{formatCurrency(venta.descuento_total)}
                   </span>
-                  <span>{formatCurrency(it.subtotal)}</span>
                 </div>
+              )}
+              {venta.recargo_total > 0 && (
+                <div className="flex justify-between text-orange-700">
+                  <span>Recargo</span>
+                  <span className="tabular-nums">
+                    +{formatCurrency(venta.recargo_total)}
+                  </span>
+                </div>
+              )}
+              <div className="mt-2 flex justify-between border-t pt-2 text-lg font-bold">
+                <span>Total</span>
+                <span className="tabular-nums">{formatCurrency(venta.total)}</span>
               </div>
-            ))}
-          </div>
-
-          <div className="border-t border-dashed pt-2 text-xs">
-            <div className="flex justify-between">
-              <span>Subtotal</span>
-              <span>{formatCurrency(venta.subtotal)}</span>
             </div>
-            {venta.descuento_total > 0 && (
-              <div className="flex justify-between">
-                <span>Descuento</span>
-                <span>-{formatCurrency(venta.descuento_total)}</span>
+            <div className="space-y-1 text-sm">
+              <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
+                Pagos
               </div>
-            )}
-            {venta.recargo_total > 0 && (
-              <div className="flex justify-between">
-                <span>Recargo</span>
-                <span>+{formatCurrency(venta.recargo_total)}</span>
-              </div>
-            )}
-            <div className="mt-2 flex justify-between text-base font-bold">
-              <span>TOTAL</span>
-              <span>{formatCurrency(venta.total)}</span>
+              {venta.pagos.map((p, i) => (
+                <div key={i} className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    {LABEL_METODO[p.metodo] ?? p.metodo}
+                    {p.cuotas ? ` (${p.cuotas} cuotas)` : ''}
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    {formatCurrency(p.monto)}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-
-          <div className="mt-3 border-t border-dashed pt-2 text-xs">
-            {venta.pagos.map((p, i) => (
-              <div key={i} className="flex justify-between">
-                <span>
-                  {LABEL_METODO[p.metodo] ?? p.metodo}
-                  {p.cuotas ? ` (${p.cuotas} cuotas)` : ''}
-                </span>
-                <span>{formatCurrency(p.monto)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 text-center text-xs">¡Gracias por su compra!</div>
         </div>
       </main>
 

@@ -618,7 +618,12 @@ export function ModalCobro({
           </div>
         )}
 
-        {/* Botón para alternar entre rápido y mixto */}
+      </div>
+
+      {/* Footer sticky: el botón "Confirmar venta" siempre visible.
+          Incluye el link para alternar entre rápido y mixto a la izquierda
+          (antes flotaba en el contenido y el sticky lo tapaba). */}
+      <div className="sticky bottom-0 -mx-4 -mb-4 mt-4 flex flex-col gap-2 border-t bg-background px-4 py-3 sm:-mx-6 sm:-mb-6 sm:px-6">
         <button
           type="button"
           onClick={() => {
@@ -634,29 +639,27 @@ export function ModalCobro({
               setMontoInput(String(baseACubrir.toFixed(2)));
             }
           }}
-          className="w-full text-xs text-muted-foreground underline-offset-2 hover:underline"
+          className="text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
         >
           {modo === 'rapido' ? 'Necesito pagar con varios métodos →' : '← Volver a cobro rápido (un solo método)'}
         </button>
-      </div>
-
-      {/* Footer sticky: el botón "Confirmar venta" siempre visible. */}
-      <div className="sticky bottom-0 -mx-4 -mb-4 mt-4 flex flex-col-reverse gap-2 border-t bg-background px-4 py-3 sm:-mx-6 sm:-mb-6 sm:flex-row sm:justify-end sm:px-6">
-        <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={cobrarMut.isPending}>
-          Cancelar
-        </Button>
-        <Button
-          disabled={!confirmarHabilitado}
-          onClick={() => {
-            if (modo === 'rapido') confirmarRapido();
-            else cobrarMut.mutate(undefined);
-          }}
-          className="text-base"
-        >
-          {cobrarMut.isPending
-            ? 'Procesando…'
-            : `Confirmar venta · ${formatCurrency(totalConfirmar)}`}
-        </Button>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={cobrarMut.isPending}>
+            Cancelar
+          </Button>
+          <Button
+            disabled={!confirmarHabilitado}
+            onClick={() => {
+              if (modo === 'rapido') confirmarRapido();
+              else cobrarMut.mutate(undefined);
+            }}
+            className="text-base"
+          >
+            {cobrarMut.isPending
+              ? 'Procesando…'
+              : `Confirmar venta · ${formatCurrency(totalConfirmar)}`}
+          </Button>
+        </div>
       </div>
     </Dialog>
   );

@@ -148,10 +148,8 @@ export function Historial() {
                 <th className="px-3 py-2 text-left">Producto</th>
                 <th className="px-3 py-2 text-right">Cant.</th>
                 <th className="px-3 py-2 text-right">Precio</th>
-                <th className="px-3 py-2 text-right">Subtotal</th>
                 <th className="px-3 py-2 text-left">Pago</th>
                 <th className="px-3 py-2 text-left">Hora</th>
-                <th className="px-3 py-2 text-left">Ticket</th>
                 <th className="px-3 py-2 text-left">Cajero</th>
               </tr>
             </thead>
@@ -187,7 +185,12 @@ export function Historial() {
                         {p?.codigo_interno ?? '—'}
                       </td>
                       <td className={`px-3 py-2 ${anulada ? 'line-through' : ''}`}>
-                        {p?.nombre ?? 'Producto borrado'}
+                        <span className="inline-flex items-center gap-1">
+                          {p?.nombre ?? 'Producto borrado'}
+                          {esPrimera && anulada && (
+                            <Badge variant="destructive">Anul.</Badge>
+                          )}
+                        </span>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {it.cantidad}
@@ -195,22 +198,11 @@ export function Historial() {
                       <td className="px-3 py-2 text-right tabular-nums">
                         {formatCurrency(it.precio_unitario)}
                       </td>
-                      <td className="px-3 py-2 text-right font-medium tabular-nums">
-                        {formatCurrency(it.precio_unitario * it.cantidad)}
-                      </td>
                       <td className="px-3 py-2 text-xs">
                         {esPrimera ? metodos : ''}
                       </td>
                       <td className="px-3 py-2 text-xs">
                         {esPrimera ? horaTxt : ''}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {esPrimera ? (
-                          <span className="flex items-center gap-1">
-                            {v.numero}
-                            {anulada && <Badge variant="destructive">Anul.</Badge>}
-                          </span>
-                        ) : ''}
                       </td>
                       <td className="px-3 py-2 text-xs">
                         {esPrimera ? empleadoNombre(v.empleado_id) : ''}
