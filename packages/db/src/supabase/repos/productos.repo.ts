@@ -105,23 +105,29 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
       const q = query.trim();
       const esNumerico = /^\d+$/.test(q);
 
-      // Regla del cliente: si tipean números → match EXACTO por código.
-      // Antes era `codigo_interno.like.{q}%` (prefijo) lo que tenía dos
-      // problemas: (a) tipear "63" traía 63, 631, 632... y (b) el código
-      // exacto de 1 dígito ("5") quedaba enterrado debajo de 8 productos
-      // que empezaban con 5 por el LIMIT. Ahora:
-      //   - Si q es numérico → match exacto al código + parcial al nombre.
-      //   - Si q tiene letras → solo parcial al nombre.
-      const p = `%${q}%`;
-      const filtro = esNumerico
-        ? `codigo_interno.eq.${q},nombre.ilike.${p}`
-        : `nombre.ilike.${p}`;
+      // Regla del cliente: si tipean números → match SOLO EXACTO por código.
+      // Antes el filtro incluía también `nombre.ilike.%q%` para los números
+      // — eso traía productos cuyo NOMBRE contiene el dígito (ej. tipear
+      // "7" devolvía "Vela 7 colores", "Marca 7"). La cajera busca por
+      // código numérico exacto; los matches por nombre solo aplican si
+      // tipean letras.
+      if (esNumerico) {
+        return okList<Producto>(
+          await sb
+            .from('productos')
+            .select('*')
+            .eq('activo', true)
+            .eq('codigo_interno', q)
+            .limit(limit),
+          'productos.buscarRapido',
+        );
+      }
       return okList<Producto>(
         await sb
           .from('productos')
           .select('*')
           .eq('activo', true)
-          .or(filtro)
+          .ilike('nombre', `%${q}%`)
           .limit(limit),
         'productos.buscarRapido',
       );
