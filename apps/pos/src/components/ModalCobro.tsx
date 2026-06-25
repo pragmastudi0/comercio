@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -112,6 +112,26 @@ export function ModalCobro({
       setMontoRecibido('');
     }
   }, [open, metodoInicial, baseACubrir]);
+
+  // Listener global de Enter dentro del modal. Permite confirmar la
+  // venta sin tocar el botón: cuando el foco NO está en un input de
+  // texto, Enter confirma directo. Si el foco está en un input, deja
+  // que el handler del input se encargue (algunos tienen Enter custom).
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter') return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (!confirmarHabilitadoRef.current) return;
+      e.preventDefault();
+      if (modoRef.current === 'rapido') confirmarRapidoRef.current();
+      else cobrarMutRef.current.mutate(undefined);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open]);
 
   // Para saber cuánto del "base a cubrir" queda por cubrir:
   const baseCubierta = pagos.reduce((acc, p) => {
@@ -392,6 +412,14 @@ export function ModalCobro({
   if (!open) return null;
   const cuotasOpciones = configQ.data?.cuotas ?? [];
 
+  // Refs para que el listener global de Enter (instalado una sola vez
+  // al abrir el modal) lea siempre los valores actuales sin necesidad
+  // de re-suscribirse en cada render.
+  const confirmarHabilitadoRef = useRef(false);
+  const modoRef = useRef<'rapido' | 'mixto'>('rapido');
+  const confirmarRapidoRef = useRef<() => void>(() => {});
+  const cobrarMutRef = useRef<typeof cobrarMut>(cobrarMut);
+
   // --- Cálculos para el render ---
   const aPagar = proximoPagoMonto;
   const recibidoLive = montoSeguro(montoRecibido, 0);
@@ -406,6 +434,13 @@ export function ModalCobro({
     modo === 'rapido'
       ? !!metodo && aPagar > 0 && !cobrarMut.isPending
       : restante < 0.01 && pagos.length > 0 && !cobrarMut.isPending;
+
+  // Mantener los refs actualizados con los valores del render actual
+  // (los lee el listener global de Enter).
+  confirmarHabilitadoRef.current = confirmarHabilitado;
+  modoRef.current = modo;
+  confirmarRapidoRef.current = confirmarRapido;
+  cobrarMutRef.current = cobrarMut;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} className="max-w-xl">
@@ -423,9 +458,10 @@ export function ModalCobro({
       </h2>
 
       <div className="space-y-2 pb-3">
-        {/* Selector de método compacto: 5 botones en fila, ícono + label
-            INLINE (h-10) para no comer altura. Pre-seleccionado el que
-            vino en metodoInicial. */}
+        {/* Selector de método: 5 botones en fila, ícono + label INLINE.
+            Tamaño más grande (h-14, text-sm) para que sea fácil de leer
+            desde lejos en la caja. Pre-seleccionado el que vino en
+            metodoInicial. */}
         <div className="grid grid-cols-5 gap-1.5">
           {METODOS.map((m) => {
             const Icon = m.icon;
@@ -433,18 +469,22 @@ export function ModalCobro({
             return (
               <button
                 key={m.metodo}
-                onClick={() => {
+                onClick={(e) => {
                   setMetodo(m.metodo);
                   setMontoInput(
                     String((modo === 'rapido' ? baseACubrir : restante).toFixed(2)),
                   );
                   setMontoRecibido('');
+                  // Sacar foco del botón para que un Enter posterior
+                  // no re-clickee este mismo botón (que el listener
+                  // global de Enter pueda disparar confirmar).
+                  e.currentTarget.blur();
                 }}
-                className={`flex h-10 items-center justify-center gap-1.5 rounded-md border px-1 text-[11px] transition ${
+                className={`flex h-14 items-center justify-center gap-2 rounded-md border px-2 text-sm transition ${
                   activo ? 'border-primary bg-primary/10 font-semibold' : 'border-input hover:bg-accent'
                 }`}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <Icon className="h-5 w-5 shrink-0" />
                 <span className="truncate">{m.label.split(' ')[0]}</span>
               </button>
             );
@@ -567,7 +607,10 @@ export function ModalCobro({
                 <button
                   key={b}
                   type="button"
-                  onClick={() => setMontoRecibido(String(b))}
+                  onClick={(e) => {
+                    setMontoRecibido(String(b));
+                    e.currentTarget.blur();
+                  }}
                   className={`rounded-md border px-2 py-2 text-sm font-semibold tabular-nums transition ${
                     recibidoLive === b
                       ? 'border-primary bg-primary/10'
@@ -579,7 +622,10 @@ export function ModalCobro({
               ))}
               <button
                 type="button"
-                onClick={() => setMontoRecibido(String(aPagar))}
+                onClick={(e) => {
+                  setMontoRecibido(String(aPagar));
+                  e.currentTarget.blur();
+                }}
                 className={`rounded-md border px-2 py-2 text-sm font-semibold transition ${
                   Math.abs(recibidoLive - aPagar) < 0.01
                     ? 'border-primary bg-primary/10'
@@ -595,6 +641,12 @@ export function ModalCobro({
               value={montoRecibido}
               onChange={(e) => setMontoRecibido(e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && confirmarHabilitado) {
+                  e.preventDefault();
+                  confirmarRapido();
+                }
+              }}
               placeholder="O escribí otro monto"
               className="mt-1.5 h-8 text-right"
             />

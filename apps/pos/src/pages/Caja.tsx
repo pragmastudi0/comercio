@@ -100,6 +100,23 @@ export function Caja() {
   useHotkeys(SHORTCUTS.pagoMixto, (e) => { e.preventDefault(); abrirCobro(); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cancelar, () => cancelarVenta(), { enableOnFormTags: true });
 
+  // Supr / Backspace fuera del buscador: borra el último ítem agregado.
+  // Si volvés a apretar, borra el penúltimo (que ahora es el último), etc.
+  // enableOnFormTags: false → NO dispara si el foco está en input/textarea
+  // (el buscador ya tiene su propio handler que cubre el caso "input vacío").
+  const borrarUltimo = useVenta((s) => s.quitar);
+  useHotkeys(
+    'delete, backspace',
+    (e) => {
+      if (items.length === 0) return;
+      e.preventDefault();
+      const ultimo = items[items.length - 1];
+      if (ultimo) borrarUltimo(ultimo.producto.id);
+    },
+    { enableOnFormTags: false },
+    [items],
+  );
+
   if (!empleado || !caja) return null;
 
   return (
