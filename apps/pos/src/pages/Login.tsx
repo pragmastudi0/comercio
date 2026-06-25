@@ -16,6 +16,12 @@ export function Login() {
   const db = getDb();
   const navigate = useNavigate();
   const setEmpleado = useSesion((s) => s.setEmpleado);
+  // Si el cajero hizo "Salir" sin cerrar caja, el store conserva la
+  // sesionCaja en localStorage. Al re-loguearse con el mismo email lo
+  // mandamos directo a /caja, no a /abrir-caja (no debe abrir una nueva).
+  // Si entra con otro email (cambio de turno) → /abrir-caja como siempre.
+  const sesionCaja = useSesion((s) => s.sesionCaja);
+  const empleadoPersistido = useSesion((s) => s.empleado);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -28,7 +34,8 @@ export function Login() {
     onSuccess: (emp) => {
       setEmpleado(emp);
       toast.success(`Hola ${emp.nombre}`);
-      navigate('/abrir-caja');
+      const cajaSigueAbierta = sesionCaja && empleadoPersistido?.id === emp.id;
+      navigate(cajaSigueAbierta ? '/caja' : '/abrir-caja');
     },
     onError: (e: Error) => toast.error(e.message),
   });
