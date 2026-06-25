@@ -94,7 +94,7 @@ export function Historial() {
   }
 
   return (
-    <main className="container mx-auto max-w-3xl px-4 py-6">
+    <main className="container mx-auto max-w-6xl px-4 py-6">
       <header className="mb-5 flex items-center justify-between gap-2">
         <Button variant="ghost" size="sm" onClick={() => navigate('/caja')}>
           <ArrowLeft className="mr-1 h-4 w-4" />
@@ -136,51 +136,91 @@ export function Historial() {
           <p>Sin ventas en el rango.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {ventas.map((v) => {
-            const fecha = new Date(v.fecha);
-            const horaTxt = fecha.toLocaleString('es-AR', {
-              day: '2-digit',
-              month: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit',
-            });
-            const metodos = Array.from(new Set(v.pagos.map((p) => p.metodo)))
-              .map((m) => LABEL_METODO[m] ?? m)
-              .join(' + ');
-            const anulada = v.estado === 'anulada';
-            return (
-              <button
-                key={v.id}
-                onClick={() => navigate(`/ticket/${v.id}`)}
-                className={`flex w-full items-center justify-between rounded-md border bg-card p-3 text-left transition hover:border-foreground/30 ${
-                  anulada ? 'opacity-60' : ''
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-medium">{v.numero}</span>
-                    {anulada && <Badge variant="destructive">Anulada</Badge>}
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {horaTxt} · {empleadoNombre(v.empleado_id)} · {metodos}
-                  </div>
-                </div>
-                <div className="ml-3 text-right">
-                  <div
-                    className={`text-base font-semibold tabular-nums ${
-                      anulada ? 'line-through' : ''
-                    }`}
-                  >
-                    {formatCurrency(v.total)}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {v.items.reduce((a, i) => a + i.cantidad, 0)} ítem(s)
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+        // Vista producto × producto: una fila por ítem, agrupada
+        // visualmente por venta. Filas alternan banda gris/blanca por
+        // venta para que se vea que pertenecen al mismo ticket. Click
+        // en cualquier fila lleva al detalle del ticket (cambios/anular).
+        <div className="overflow-x-auto rounded-md border bg-card">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+              <tr className="border-b">
+                <th className="px-3 py-2 text-left">Código</th>
+                <th className="px-3 py-2 text-left">Producto</th>
+                <th className="px-3 py-2 text-right">Cant.</th>
+                <th className="px-3 py-2 text-right">Precio</th>
+                <th className="px-3 py-2 text-right">Subtotal</th>
+                <th className="px-3 py-2 text-left">Pago</th>
+                <th className="px-3 py-2 text-left">Hora</th>
+                <th className="px-3 py-2 text-left">Ticket</th>
+                <th className="px-3 py-2 text-left">Cajero</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ventas.map((v, vIdx) => {
+                const fecha = new Date(v.fecha);
+                const horaTxt = fecha.toLocaleString('es-AR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+                const metodos = Array.from(new Set(v.pagos.map((p) => p.metodo)))
+                  .map((m) => LABEL_METODO[m] ?? m)
+                  .join(' + ');
+                const anulada = v.estado === 'anulada';
+                // Bandeo alternado por venta: ventas pares un color,
+                // impares otro, así el cajero ve qué filas son la misma.
+                const bandColor = vIdx % 2 === 0 ? 'bg-card' : 'bg-muted/30';
+                return v.items.map((it, idx) => {
+                  const p = productoPorId(it.producto_id);
+                  const esPrimera = idx === 0;
+                  return (
+                    <tr
+                      key={`${v.id}-${idx}`}
+                      onClick={() => navigate(`/ticket/${v.id}`)}
+                      className={`cursor-pointer border-b border-border/50 hover:bg-accent/40 ${bandColor} ${
+                        anulada ? 'opacity-50' : ''
+                      } ${esPrimera ? 'border-t-2 border-t-foreground/20' : ''}`}
+                      title="Click: ver ticket completo / cambios / anular"
+                    >
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {p?.codigo_interno ?? '—'}
+                      </td>
+                      <td className={`px-3 py-2 ${anulada ? 'line-through' : ''}`}>
+                        {p?.nombre ?? 'Producto borrado'}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {it.cantidad}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {formatCurrency(it.precio_unitario)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium tabular-nums">
+                        {formatCurrency(it.precio_unitario * it.cantidad)}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        {esPrimera ? metodos : ''}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        {esPrimera ? horaTxt : ''}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {esPrimera ? (
+                          <span className="flex items-center gap-1">
+                            {v.numero}
+                            {anulada && <Badge variant="destructive">Anul.</Badge>}
+                          </span>
+                        ) : ''}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        {esPrimera ? empleadoNombre(v.empleado_id) : ''}
+                      </td>
+                    </tr>
+                  );
+                });
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </main>

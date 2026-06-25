@@ -54,6 +54,13 @@ export function CerrarCaja() {
   const diferencia = parseFloat(saldoFinal || '0') - totalEfectivoEsperado;
 
   // Ventas y anulaciones del turno (para detalle)
+  // Catálogo en memoria para resolver código/nombre de cada ítem
+  // vendido en la tabla "Detalle de ventas del turno".
+  const productosQ = useQuery({
+    queryKey: ['productos-all-cierre'],
+    queryFn: () => db.productos.list(),
+  });
+
   const ventasQ = useQuery({
     queryKey: ['ventas-cierre', sesion?.id],
     queryFn: () =>
@@ -215,6 +222,77 @@ export function CerrarCaja() {
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Detalle producto × producto del turno. Como en el sistema
+              viejo del cliente: una fila por ítem vendido con código,
+              nombre, cantidad, precio, hora, ticket y medio de pago.
+              Items de la misma venta se bandean visualmente para que
+              quede claro que pertenecen al mismo ticket. */}
+          {ventasCompletadas.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
+                Detalle de ventas del turno (producto por producto)
+              </div>
+              <div className="max-h-[420px] overflow-auto rounded-md border">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-muted/50 uppercase text-muted-foreground">
+                    <tr className="border-b">
+                      <th className="px-2 py-1.5 text-left">Código</th>
+                      <th className="px-2 py-1.5 text-left">Producto</th>
+                      <th className="px-2 py-1.5 text-right">Cant.</th>
+                      <th className="px-2 py-1.5 text-right">Precio</th>
+                      <th className="px-2 py-1.5 text-right">Subtotal</th>
+                      <th className="px-2 py-1.5 text-left">Pago</th>
+                      <th className="px-2 py-1.5 text-left">Hora</th>
+                      <th className="px-2 py-1.5 text-left">Ticket</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ventasCompletadas.map((v, vIdx) => {
+                      const fecha = new Date(v.fecha);
+                      const horaTxt = fecha.toLocaleTimeString('es-AR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      });
+                      const metodos = Array.from(new Set(v.pagos.map((p) => p.metodo)))
+                        .map((m) => m === 'cta_cte' ? 'Cta cte' : m.charAt(0).toUpperCase() + m.slice(1))
+                        .join(' + ');
+                      const banda = vIdx % 2 === 0 ? '' : 'bg-muted/30';
+                      return v.items.map((it, idx) => {
+                        const p = (productosQ.data ?? []).find((x) => x.id === it.producto_id);
+                        const esPrimera = idx === 0;
+                        return (
+                          <tr
+                            key={`${v.id}-${idx}`}
+                            className={`border-b border-border/50 ${banda} ${
+                              esPrimera ? 'border-t-2 border-t-foreground/20' : ''
+                            }`}
+                          >
+                            <td className="px-2 py-1 font-mono text-[11px]">
+                              {p?.codigo_interno ?? '—'}
+                            </td>
+                            <td className="px-2 py-1">{p?.nombre ?? 'Producto borrado'}</td>
+                            <td className="px-2 py-1 text-right tabular-nums">{it.cantidad}</td>
+                            <td className="px-2 py-1 text-right tabular-nums">
+                              {formatCurrency(it.precio_unitario)}
+                            </td>
+                            <td className="px-2 py-1 text-right font-medium tabular-nums">
+                              {formatCurrency(it.precio_unitario * it.cantidad)}
+                            </td>
+                            <td className="px-2 py-1">{esPrimera ? metodos : ''}</td>
+                            <td className="px-2 py-1">{esPrimera ? horaTxt : ''}</td>
+                            <td className="px-2 py-1 font-mono text-[11px]">
+                              {esPrimera ? v.numero : ''}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
