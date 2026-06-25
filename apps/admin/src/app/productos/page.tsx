@@ -2,9 +2,9 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
 import { PRESET_IDS } from '@comercio/db';
@@ -27,6 +27,7 @@ function ProductosPageInner() {
   const db = getDb();
   const qc = useQueryClient();
   const params = useSearchParams();
+  const router = useRouter();
   const [texto, setTexto] = useState('');
   // Lee filtros iniciales de la URL para que los deep-links funcionen:
   //   /productos?stock=sin            ← KPI del dashboard
@@ -238,7 +239,14 @@ function ProductosPageInner() {
                   const stock = stockQ.data?.get(p.id) ?? 0;
                   const sinStockProd = stock <= 0;
                   return (
-                    <TableRow key={p.id}>
+                    // Click en cualquier celda abre el detalle del producto.
+                    // Antes había botón "Editar" (lápiz) en la última columna
+                    // que obligaba a scrollear horizontal en pantallas chicas.
+                    <TableRow
+                      key={p.id}
+                      onClick={() => puedeEditar && router.push(`/productos/${p.id}`)}
+                      className={puedeEditar ? 'cursor-pointer hover:bg-muted/50' : ''}
+                    >
                       <TableCell className="font-mono text-xs">{p.codigo_interno}</TableCell>
                       <TableCell className="font-medium">{p.nombre}</TableCell>
                       <TableCell>{categoriaNombre(p.categoria_id)}</TableCell>
@@ -271,27 +279,20 @@ function ProductosPageInner() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          {puedeEditar && (
-                            <Button asChild variant="ghost" size="icon">
-                              <Link href={`/productos/${p.id}`}>
-                                <Pencil className="h-4 w-4" />
-                              </Link>
-                            </Button>
-                          )}
-                          {puedeEliminar && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive"
-                              onClick={() => {
-                                if (confirm(`¿Eliminar "${p.nombre}"?`)) eliminarMut.mutate(p.id);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
+                        {puedeEliminar && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`¿Eliminar "${p.nombre}"?`)) eliminarMut.mutate(p.id);
+                            }}
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

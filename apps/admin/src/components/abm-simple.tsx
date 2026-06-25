@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import {
   Table,
@@ -94,40 +94,43 @@ export function AbmSimple<T extends { id: string }>({
                       {c.header}
                     </TableHead>
                   ))}
-                  <TableHead className="w-24 text-right">Acciones</TableHead>
+                  {onDelete && <TableHead className="w-12 text-right" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((row) => (
-                  <TableRow key={row.id}>
+                  // Toda la fila es clickeable → abre el dialog de editar.
+                  // Antes había una columna "Acciones" con dos iconos
+                  // (Editar / Eliminar) que en tablas anchas forzaba a
+                  // scrollear horizontal para llegar a ellos. Ahora click
+                  // en cualquier celda abre la edición; el eliminar queda
+                  // como icono chico al final con stopPropagation.
+                  <TableRow
+                    key={row.id}
+                    onClick={() => setEditing(row)}
+                    className="cursor-pointer hover:bg-muted/50"
+                  >
                     {columns.map((c, i) => (
                       <TableCell key={i} className={c.className}>
                         {c.cell(row)}
                       </TableCell>
                     ))}
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
+                    {onDelete && (
+                      <TableCell className="text-right">
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setEditing(row)}
-                          title="Editar"
+                          className="h-8 w-8 text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            eliminar(row);
+                          }}
+                          title="Eliminar"
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                        {onDelete && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive"
-                            onClick={() => eliminar(row)}
-                            title="Eliminar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
