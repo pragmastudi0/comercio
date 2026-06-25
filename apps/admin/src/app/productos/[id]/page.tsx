@@ -168,6 +168,7 @@ export default function EditarProductoPage() {
           precios={precios}
           onChange={setPrecios}
           listas={listasQ.data ?? []}
+          costo={values.costo}
           ultimaActualizacionPorLista={Object.fromEntries(
             (preciosActQ.data ?? []).map((p) => [
               p.lista_precio_id,
@@ -308,9 +309,9 @@ function EstadisticasProducto({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Stock por depósito</CardTitle>
+          <CardTitle>Stock por local</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Para ajustar stock manualmente, ir a la sección Depósitos.
+            Para ajustar stock manualmente, ir a la sección Stock por local.
           </p>
         </CardHeader>
         <CardContent>

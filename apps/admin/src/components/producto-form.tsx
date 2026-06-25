@@ -354,6 +354,10 @@ export function PreciosFields({
    *  Si está, mostramos "actualizado hace X días" al lado del nombre.
    *  Opcional para no romper otros callers (creación de producto nuevo). */
   ultimaActualizacionPorLista,
+  /** Costo del producto. Si está y es > 0, al lado de cada precio
+   *  mostramos el margen calculado y un input para editarlo
+   *  (cambiar margen → recalcula precio). */
+  costo,
 }: {
   precios: { listaId: string; escalas: { desde: number; precio: number }[] }[];
   onChange: (
@@ -361,6 +365,7 @@ export function PreciosFields({
   ) => void;
   listas: { id: string; nombre: string }[];
   ultimaActualizacionPorLista?: Record<string, string | undefined>;
+  costo?: number;
 }) {
   function setEscala(listaId: string, idx: number, patch: Partial<{ desde: number; precio: number }>) {
     onChange(
@@ -430,8 +435,18 @@ export function PreciosFields({
                   )
                 )}
               </div>
-              {p.escalas.map((esc, idx) => (
-                <div key={idx} className="mb-2 grid grid-cols-[1fr_1fr_auto] gap-2">
+              {p.escalas.map((esc, idx) => {
+                // Margen calculado: si hay costo > 0, mostramos el % de
+                // ganancia sobre el costo y permitimos editarlo (tipear
+                // margen recalcula precio = costo * (1 + margen/100)).
+                const margenPct =
+                  costo && costo > 0 ? ((esc.precio - costo) / costo) * 100 : null;
+                const tieneCosto = costo !== undefined && costo > 0;
+                return (
+                <div
+                  key={idx}
+                  className={`mb-2 grid gap-2 ${tieneCosto ? 'grid-cols-[1fr_1fr_1fr_auto]' : 'grid-cols-[1fr_1fr_auto]'}`}
+                >
                   <div>
                     <Label className="mb-1 block text-xs">Desde cantidad</Label>
                     <Input
@@ -455,6 +470,30 @@ export function PreciosFields({
                       }
                     />
                   </div>
+                  {tieneCosto && (
+                    <div>
+                      <Label className="mb-1 block text-xs">
+                        Margen %{' '}
+                        <span className="text-muted-foreground/70">
+                          (s/costo ${costo})
+                        </span>
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={margenPct !== null ? Number(margenPct.toFixed(2)) : ''}
+                        onChange={(e) => {
+                          const m = parseFloat(e.target.value);
+                          if (Number.isFinite(m) && costo) {
+                            const nuevoPrecio = costo * (1 + m / 100);
+                            setEscala(lista.id, idx, {
+                              precio: Number(nuevoPrecio.toFixed(2)),
+                            });
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
                   <div className="flex items-end">
                     {idx > 0 ? (
                       <button
@@ -469,7 +508,8 @@ export function PreciosFields({
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
               <button
                 type="button"
                 onClick={() => agregarEscala(lista.id)}

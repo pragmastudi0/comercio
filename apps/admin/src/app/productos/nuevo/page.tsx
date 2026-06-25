@@ -109,6 +109,7 @@ export default function NuevoProductoPage() {
           precios={precios}
           onChange={setPrecios}
           listas={listasQ.data ?? []}
+          costo={values.costo}
         />
         <div className="flex justify-end gap-2">
           <Button asChild variant="outline" type="button">
