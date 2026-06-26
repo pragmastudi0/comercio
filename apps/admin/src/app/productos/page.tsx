@@ -697,15 +697,23 @@ function StockPorLocal({
         empleado_id: empleado.id,
       });
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: async (_data, vars) => {
       const signo = vars.delta > 0 ? '+' : '';
       toast.success(`Stock ajustado ${signo}${vars.delta}`);
       setDeltas((prev) => ({ ...prev, [vars.depositoId]: '' }));
-      qc.invalidateQueries({ queryKey: ['producto-stock-detalle', productoId] });
-      qc.invalidateQueries({ queryKey: ['stock-totales-page'] });
-      qc.invalidateQueries({ queryKey: ['stock-consolidado'] });
+      // refetch (no solo invalidate) para que el panel muestre el nuevo
+      // valor sin esperar a que React vuelva a observar la query.
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ['producto-stock-detalle', productoId] }),
+        qc.refetchQueries({ queryKey: ['stock-totales-page'] }),
+        qc.refetchQueries({ queryKey: ['stock-consolidado'] }),
+      ]);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      // eslint-disable-next-line no-console
+      console.error('Ajuste de stock falló:', e);
+      toast.error(`No se pudo guardar: ${e.message}`);
+    },
   });
 
   return (
