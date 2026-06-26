@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Search, Printer, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Printer, ChevronDown, ChevronUp } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@comercio/ui/table';
@@ -303,6 +303,7 @@ export default function VentasPage() {
                   <TableHead className="text-right">Precio</TableHead>
                   <TableHead className="text-right">Subtotal</TableHead>
                   <TableHead>Pago</TableHead>
+                  <TableHead>Local</TableHead>
                   <TableHead>
                     <button
                       type="button"
@@ -322,9 +323,7 @@ export default function VentasPage() {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead>N°</TableHead>
                   <TableHead>Cajero</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -399,41 +398,13 @@ export default function VentasPage() {
                             {esPrimera ? (cancelada ? '—' : metodoTxt) : ''}
                           </TableCell>
                           <TableCell className="text-xs">
-                            {esPrimera ? formatDate(v.fecha) : ''}
+                            {esPrimera ? localNombre(v.local_id) : ''}
                           </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {esPrimera ? v.numero : ''}
+                          <TableCell className="text-xs">
+                            {esPrimera ? formatDate(v.fecha) : ''}
                           </TableCell>
                           <TableCell className="text-xs">
                             {esPrimera ? empleadoNombre(v.empleado_id) : ''}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {esPrimera && (
-                              <div className="flex justify-end gap-0.5">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Ver detalle"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setVentaDetalle(v);
-                                  }}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  asChild
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Ver / imprimir ticket"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Link href={`/ventas/${v.id}/ticket`}>
-                                    <Printer className="h-4 w-4" />
-                                  </Link>
-                                </Button>
-                              </div>
-                            )}
                           </TableCell>
                         </TableRow>
                       );

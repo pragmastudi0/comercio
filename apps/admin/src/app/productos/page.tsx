@@ -54,6 +54,9 @@ function ProductosPageInner() {
 
   // Producto seleccionado (de la tabla izquierda) que se muestra en el panel.
   const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null);
+  // Modo "crear nuevo" — el panel derecho se transforma en un form vacío
+  // para crear inline. Tiene prioridad sobre seleccionadoId.
+  const [modoCrear, setModoCrear] = useState(false);
 
   useEffect(() => {
     setPage(0);
@@ -124,6 +127,23 @@ function ProductosPageInner() {
     <div className="flex h-[calc(100vh-180px)] flex-col gap-2 px-3 py-2 lg:flex-row">
       {/* IZQUIERDA: tabla + filtros */}
       <div className="flex min-h-0 flex-1 flex-col rounded border border-slate-300 bg-white shadow-sm lg:max-w-[60%]">
+        {/* Botón "+ Nuevo producto" arriba */}
+        <RequierePermiso modulo="productos" accion="crear">
+          <div className="border-b border-slate-200 bg-white px-2 py-1.5">
+            <Button
+              size="sm"
+              onClick={() => {
+                setModoCrear(true);
+                setSeleccionadoId(null);
+              }}
+              className="h-7 text-xs"
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Agregar producto nuevo
+            </Button>
+          </div>
+        </RequierePermiso>
+
         {/* Filtros compactos arriba */}
         <div className="grid grid-cols-2 gap-2 border-b border-slate-200 bg-slate-50 p-2 lg:grid-cols-4">
           <div className="col-span-2 lg:col-span-2">
@@ -214,9 +234,12 @@ function ProductosPageInner() {
                   return (
                     <tr
                       key={p.id}
-                      onClick={() => setSeleccionadoId(p.id)}
+                      onClick={() => {
+                        setSeleccionadoId(p.id);
+                        setModoCrear(false);
+                      }}
                       className={`cursor-pointer border-b border-slate-200 ${
-                        seleccionado
+                        seleccionado && !modoCrear
                           ? 'bg-blue-100 font-medium'
                           : 'hover:bg-blue-50/50'
                       }`}
@@ -292,7 +315,15 @@ function ProductosPageInner() {
 
       {/* DERECHA: panel detalle del producto seleccionado */}
       <div className="flex min-h-0 flex-1 flex-col rounded border border-slate-300 bg-white shadow-sm lg:max-w-[40%]">
-        {seleccionadoId ? (
+        {modoCrear ? (
+          <PanelNuevoProducto
+            onCreated={(nuevoId) => {
+              setModoCrear(false);
+              setSeleccionadoId(nuevoId);
+            }}
+            onCancel={() => setModoCrear(false)}
+          />
+        ) : seleccionadoId ? (
           <PanelProducto
             key={seleccionadoId}
             productoId={seleccionadoId}
@@ -306,11 +337,9 @@ function ProductosPageInner() {
               Seleccioná un producto a la izquierda para ver/editar su detalle.
               <div className="mt-3">
                 <RequierePermiso modulo="productos" accion="crear">
-                  <Button asChild size="sm">
-                    <Link href="/productos/nuevo">
-                      <Plus className="mr-1 h-3.5 w-3.5" />
-                      Nuevo producto
-                    </Link>
+                  <Button size="sm" onClick={() => setModoCrear(true)}>
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    Agregar producto nuevo
                   </Button>
                 </RequierePermiso>
               </div>
@@ -452,9 +481,9 @@ function PanelProducto({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3">
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-2">
       {/* Encabezado del panel: visible en ventas + nombre */}
-      <div className="mb-2 flex items-center justify-between border-b border-slate-200 pb-2">
+      <div className="mb-1.5 flex items-center justify-between border-b border-slate-200 pb-1.5">
         <label className="flex items-center gap-1.5 text-xs">
           <input
             type="checkbox"
@@ -469,33 +498,33 @@ function PanelProducto({
       </div>
 
       {/* Campos editables */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <div>
-          <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">Nombre</Label>
+          <Label className="mb-0 block text-[10px] uppercase text-slate-600">Nombre</Label>
           <Input
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
             disabled={!puedeEditar}
-            className="h-8 text-sm"
+            className="h-7 text-sm"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">
-              Código interno
+            <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+              Código
             </Label>
             <Input
               value={codigo}
               onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ''))}
               disabled={!puedeEditar}
               maxLength={5}
-              className="h-8 text-sm tabular-nums"
+              className="h-7 text-sm tabular-nums"
             />
           </div>
           <div>
-            <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">
-              Costo unitario
+            <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+              Costo
             </Label>
             <Input
               type="number"
@@ -504,16 +533,16 @@ function PanelProducto({
               onChange={(e) => setCostoTxt(e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
               disabled={!puedeEditar}
-              className="h-8 text-sm tabular-nums"
+              className="h-7 text-sm tabular-nums"
             />
           </div>
         </div>
 
         {/* Precio CF + Margen lado a lado, sincronizados */}
-        <div className="rounded border border-blue-200 bg-blue-50/50 p-2">
+        <div className="rounded border border-blue-200 bg-blue-50/50 p-1.5">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="mb-0.5 block text-[10px] uppercase text-slate-700">
+              <Label className="mb-0 block text-[10px] uppercase text-slate-700">
                 Precio público
               </Label>
               <Input
@@ -523,12 +552,12 @@ function PanelProducto({
                 onChange={(e) => setPrecioCfTxt(e.target.value)}
                 onFocus={(e) => e.currentTarget.select()}
                 disabled={!puedeEditar}
-                className="h-8 text-sm font-semibold tabular-nums"
+                className="h-7 text-sm font-semibold tabular-nums"
               />
             </div>
             <div>
-              <Label className="mb-0.5 block text-[10px] uppercase text-slate-700">
-                Margen / Ganancia
+              <Label className="mb-0 block text-[10px] uppercase text-slate-700">
+                Margen %
               </Label>
               <div className="relative">
                 <Input
@@ -539,7 +568,7 @@ function PanelProducto({
                   onFocus={(e) => e.currentTarget.select()}
                   disabled={!puedeEditar || costo <= 0}
                   placeholder={costo <= 0 ? 'sin costo' : ''}
-                  className="h-8 pr-7 text-sm font-semibold tabular-nums"
+                  className="h-7 pr-6 text-sm font-semibold tabular-nums"
                 />
                 <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">
                   %
@@ -547,22 +576,21 @@ function PanelProducto({
               </div>
             </div>
           </div>
-          {costo > 0 && (
-            <div className="mt-1 text-[10px] text-slate-600">
-              Ganás <b>{formatCurrency(precioCf - costo)}</b> por unidad sobre el costo de{' '}
-              {formatCurrency(costo)}.
+          {costo > 0 && precioCf > 0 && (
+            <div className="mt-0.5 text-[10px] text-slate-600">
+              Ganás <b>{formatCurrency(precioCf - costo)}</b> por unidad.
             </div>
           )}
         </div>
 
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">Categoría</Label>
+            <Label className="mb-0 block text-[10px] uppercase text-slate-600">Categoría</Label>
             <select
               value={categoriaId}
               onChange={(e) => setCategoriaId(e.target.value)}
               disabled={!puedeEditar}
-              className="h-8 w-full rounded-sm border border-slate-300 bg-white px-2 text-sm"
+              className="h-7 w-full rounded-sm border border-slate-300 bg-white px-2 text-sm"
             >
               <option value="">— Ninguna —</option>
               {(categoriasQ.data ?? []).map((c) => (
@@ -573,12 +601,12 @@ function PanelProducto({
             </select>
           </div>
           <div>
-            <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">Proveedor</Label>
+            <Label className="mb-0 block text-[10px] uppercase text-slate-600">Proveedor</Label>
             <select
               value={proveedorId}
               onChange={(e) => setProveedorId(e.target.value)}
               disabled={!puedeEditar}
-              className="h-8 w-full rounded-sm border border-slate-300 bg-white px-2 text-sm"
+              className="h-7 w-full rounded-sm border border-slate-300 bg-white px-2 text-sm"
             >
               <option value="">— Ninguno —</option>
               {(proveedoresQ.data ?? []).map((p) => (
@@ -601,7 +629,7 @@ function PanelProducto({
       </div>
 
       {/* Footer: botones de acción */}
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-200 pt-2">
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200 pt-2">
         {puedeEditar && (
           <Button
             variant="outline"
@@ -681,16 +709,14 @@ function StockPorLocal({
   });
 
   return (
-    <div className="rounded border border-slate-200 bg-slate-50 p-2">
+    <div className="rounded border border-slate-200 bg-slate-50 p-1.5">
       <div className="mb-1 flex items-center justify-between">
         <Label className="block text-[10px] uppercase text-slate-600">
           Stock por local
         </Label>
-        <span className="text-[10px] text-slate-500">
-          + suma · - resta
-        </span>
+        <span className="text-[10px] text-slate-500">+ suma · - resta</span>
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         {depositos.map((d) => {
           const cant = Number(
             stocks.find((s) => s.deposito_id === d.id)?.cantidad ?? 0,
@@ -701,7 +727,7 @@ function StockPorLocal({
           return (
             <div
               key={d.id}
-              className="grid grid-cols-[1fr_auto_auto] items-center gap-1.5 rounded-sm border border-slate-300 bg-white px-2 py-1 text-xs"
+              className="grid grid-cols-[1fr_auto_auto] items-center gap-1.5 rounded-sm border border-slate-300 bg-white px-2 py-0.5 text-xs"
             >
               <div className="flex items-center gap-2">
                 <span className="text-slate-600">{d.nombre}</span>
@@ -729,8 +755,7 @@ function StockPorLocal({
                         ajustarMut.mutate({ depositoId: d.id, delta: deltaN });
                       }
                     }}
-                    placeholder="0"
-                    className="h-6 w-16 text-right text-xs tabular-nums"
+                    className="h-6 w-14 text-right text-xs tabular-nums"
                     disabled={ajustarMut.isPending}
                   />
                   <button
@@ -758,14 +783,275 @@ function StockPorLocal({
             </div>
           );
         })}
-        <div className="flex items-center justify-between rounded-sm border border-blue-300 bg-blue-50 px-2 py-1 text-xs">
+        <div className="flex items-center justify-between rounded-sm border border-blue-300 bg-blue-50 px-2 py-0.5 text-xs">
           <span className="font-semibold text-blue-800">Total</span>
           <span className="font-bold tabular-nums text-blue-800">{totalStock}</span>
         </div>
       </div>
-      <p className="mt-1 text-[10px] text-slate-500">
-        Cargás stock directo acá. Cada ajuste queda registrado con tu nombre y motivo "Ajuste rápido".
-      </p>
+    </div>
+  );
+}
+
+/**
+ * Form de "crear producto nuevo" embebido en el panel derecho.
+ * Versión simplificada: solo campos básicos + stock inicial. Si hace
+ * falta lo del e-commerce (publicación web, descripción larga, etc.)
+ * el botón "Más opciones" lleva a la página completa /productos/nuevo.
+ */
+function PanelNuevoProducto({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (nuevoId: string) => void;
+  onCancel: () => void;
+}) {
+  const db = getDb();
+  const qc = useQueryClient();
+  const empleado = useSesion((s) => s.empleado);
+
+  const [nombre, setNombre] = useState('');
+  const [codigo, setCodigo] = useState('');
+  const [costoTxt, setCostoTxt] = useState('');
+  const [precioCfTxt, setPrecioCfTxt] = useState('');
+  const [categoriaId, setCategoriaId] = useState('');
+  const [proveedorId, setProveedorId] = useState('');
+  const [activo, setActivo] = useState(true);
+  const [stockInicial, setStockInicial] = useState<Record<string, string>>({});
+
+  const categoriasQ = useQuery({ queryKey: ['categorias'], queryFn: () => db.categorias.list() });
+  const proveedoresQ = useQuery({
+    queryKey: ['proveedores'],
+    queryFn: () => db.proveedores.list({ activo: true }),
+  });
+  const depositosQ = useQuery({
+    queryKey: ['depositos'],
+    queryFn: () => db.depositos.list(),
+  });
+
+  const costo = parseFloat(costoTxt) || 0;
+  const precioCf = parseFloat(precioCfTxt) || 0;
+  const margen = costo > 0 ? ((precioCf - costo) / costo) * 100 : 0;
+  function setMargenAmano(nuevoMargen: number) {
+    if (costo <= 0) return;
+    setPrecioCfTxt(String(Number((costo * (1 + nuevoMargen / 100)).toFixed(2))));
+  }
+
+  const LISTA_CF_ID = PRESET_IDS.listas.consumidorFinal;
+
+  const crearMut = useMutation({
+    mutationFn: async () => {
+      if (!codigo.trim() || !nombre.trim() || !categoriaId) {
+        throw new Error('Código, nombre y categoría son obligatorios');
+      }
+      if (!empleado) throw new Error('Sin sesión');
+      const existente = await db.productos.buscarPorCodigo(codigo.trim());
+      if (existente) throw new Error(`El código ${codigo.trim()} ya existe`);
+      const p = await db.productos.create({
+        codigo_interno: codigo.trim(),
+        nombre: nombre.trim(),
+        categoria_id: categoriaId,
+        proveedor_id: proveedorId || undefined,
+        costo,
+        publicado_web: false,
+        activo,
+      });
+      if (precioCf > 0) {
+        await db.productos.setPrecio(p.id, LISTA_CF_ID, [{ desde: 1, precio: precioCf }]);
+      }
+      for (const d of depositosQ.data ?? []) {
+        const cant = parseFloat(stockInicial[d.id] ?? '0');
+        if (Number.isFinite(cant) && cant > 0) {
+          await db.stock.ajustar({
+            producto_id: p.id,
+            deposito_id: d.id,
+            cantidad: cant,
+            motivo: 'Stock inicial al crear producto',
+            empleado_id: empleado.id,
+          });
+        }
+      }
+      return p.id;
+    },
+    onSuccess: (id) => {
+      toast.success('Producto creado');
+      qc.invalidateQueries({ queryKey: ['productos-admin'] });
+      onCreated(id);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-2">
+      <div className="mb-1.5 flex items-center justify-between border-b border-slate-200 pb-1.5">
+        <label className="flex items-center gap-1.5 text-xs">
+          <input
+            type="checkbox"
+            checked={activo}
+            onChange={(e) => setActivo(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-slate-300"
+          />
+          <span className="font-medium text-slate-700">Mostrar en ventas</span>
+        </label>
+        <span className="text-xs font-semibold text-emerald-700">NUEVO</span>
+      </div>
+
+      <div className="space-y-1.5">
+        <div>
+          <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+            Nombre <span className="text-red-600">*</span>
+          </Label>
+          <Input
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            autoFocus
+            placeholder="Nombre del producto"
+            className="h-7 text-sm"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+              Código <span className="text-red-600">*</span>
+            </Label>
+            <Input
+              value={codigo}
+              onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ''))}
+              maxLength={5}
+              placeholder="1234"
+              className="h-7 text-sm tabular-nums"
+            />
+          </div>
+          <div>
+            <Label className="mb-0 block text-[10px] uppercase text-slate-600">Costo</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={costoTxt}
+              onChange={(e) => setCostoTxt(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
+              className="h-7 text-sm tabular-nums"
+            />
+          </div>
+        </div>
+
+        <div className="rounded border border-blue-200 bg-blue-50/50 p-1.5">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="mb-0 block text-[10px] uppercase text-slate-700">
+                Precio público
+              </Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={precioCfTxt}
+                onChange={(e) => setPrecioCfTxt(e.target.value)}
+                onFocus={(e) => e.currentTarget.select()}
+                className="h-7 text-sm font-semibold tabular-nums"
+              />
+            </div>
+            <div>
+              <Label className="mb-0 block text-[10px] uppercase text-slate-700">Margen %</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={costo > 0 ? Number(margen.toFixed(2)) : ''}
+                  onChange={(e) => setMargenAmano(parseFloat(e.target.value) || 0)}
+                  onFocus={(e) => e.currentTarget.select()}
+                  disabled={costo <= 0}
+                  placeholder={costo <= 0 ? 'sin costo' : ''}
+                  className="h-7 pr-6 text-sm font-semibold tabular-nums"
+                />
+                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">
+                  %
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+              Categoría <span className="text-red-600">*</span>
+            </Label>
+            <select
+              value={categoriaId}
+              onChange={(e) => setCategoriaId(e.target.value)}
+              className="h-7 w-full rounded-sm border border-slate-300 bg-white px-2 text-sm"
+            >
+              <option value="">— Elegir —</option>
+              {(categoriasQ.data ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label className="mb-0 block text-[10px] uppercase text-slate-600">Proveedor</Label>
+            <select
+              value={proveedorId}
+              onChange={(e) => setProveedorId(e.target.value)}
+              className="h-7 w-full rounded-sm border border-slate-300 bg-white px-2 text-sm"
+            >
+              <option value="">— Ninguno —</option>
+              {(proveedoresQ.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Stock inicial por local */}
+        <div className="rounded border border-slate-200 bg-slate-50 p-1.5">
+          <Label className="mb-1 block text-[10px] uppercase text-slate-600">
+            Stock inicial por local (opcional)
+          </Label>
+          <div className="space-y-1">
+            {(depositosQ.data ?? []).map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center justify-between gap-2 rounded-sm border border-slate-300 bg-white px-2 py-0.5 text-xs"
+              >
+                <span className="text-slate-600">{d.nombre}</span>
+                <Input
+                  type="number"
+                  step="1"
+                  value={stockInicial[d.id] ?? ''}
+                  onChange={(e) =>
+                    setStockInicial((prev) => ({ ...prev, [d.id]: e.target.value }))
+                  }
+                  placeholder="0"
+                  className="h-6 w-14 text-right text-xs tabular-nums"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200 pt-2">
+        <Button asChild variant="ghost" size="sm" className="text-xs">
+          <Link href="/productos/nuevo">+ Más opciones (web, etc.)</Link>
+        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={crearMut.isPending}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => crearMut.mutate()}
+            disabled={crearMut.isPending}
+          >
+            <Save className="mr-1 h-3.5 w-3.5" />
+            {crearMut.isPending ? 'Creando…' : 'Crear producto'}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
