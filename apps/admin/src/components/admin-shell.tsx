@@ -1,33 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSesion } from '@/stores/sesion';
 import {
-  LayoutDashboard,
-  Package,
-  Users,
-  Shield,
+  Home,
   ShoppingCart,
-  Warehouse,
-  TagsIcon,
-  ArrowLeftRight,
-  ListTree,
-  Truck,
   Wallet,
+  Package,
   BarChart3,
   Settings,
-  Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Globe,
-  Receipt,
-  Database,
+  ChevronDown,
   LogOut,
+  Menu,
+  X,
+  TrendingUp,
+  PackagePlus,
+  PlusCircle,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { BRAND } from '@comercio/business';
 import { PRESET_IDS } from '@comercio/db';
 import { cn } from '@comercio/ui/utils';
 import { Button } from '@comercio/ui/button';
@@ -35,70 +29,89 @@ import { Button } from '@comercio/ui/button';
 import type { AccionPermiso, ModuloPermiso } from '@comercio/business';
 import { usePermisos } from '@/lib/permisos';
 
-type NavItem = {
+import { ModalSaldosCajas } from './modal-saldos-cajas';
+import { ModalGananciasHoy } from './modal-ganancias-hoy';
+import { ModalCargarStock } from './modal-cargar-stock';
+
+type SubItem = {
   href: string;
   label: string;
-  icon: typeof Package;
-  // Si está, el item solo se muestra al empleado con ese permiso.
-  // Si no, siempre se muestra.
   requiere?: { modulo: ModuloPermiso; accion: string };
 };
 
-// Helpers para tipar el `requiere`. Como TypeScript pide AccionPermiso<M>
-// específico por módulo, lo casteamos acá para no propagar genéricos a NavItem.
-function req<M extends ModuloPermiso>(modulo: M, accion: AccionPermiso<M>): { modulo: ModuloPermiso; accion: string } {
+type MenuItem = {
+  label: string;
+  // Si tiene href, es un link directo. Si tiene subs, es un dropdown.
+  href?: string;
+  icon: typeof Home;
+  subs?: SubItem[];
+  requiere?: { modulo: ModuloPermiso; accion: string };
+};
+
+function req<M extends ModuloPermiso>(
+  modulo: M,
+  accion: AccionPermiso<M>,
+): { modulo: ModuloPermiso; accion: string } {
   return { modulo, accion: accion as string };
 }
 
-const NAV_GROUPS: { titulo: string; items: NavItem[] }[] = [
+// Estructura del menubar — reorganizado al estilo ERP de escritorio.
+// Las acciones más usadas (saldos, ganancias, cargar stock, faltantes)
+// viven en la toolbar de íconos grandes debajo, no acá.
+const MENU: MenuItem[] = [
+  { label: 'Inicio', href: '/', icon: Home },
   {
-    titulo: 'General',
-    items: [
-      { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/ventas', label: 'Ventas', icon: ShoppingCart, requiere: req('ventas', 'crear') },
-      { href: '/notas-credito', label: 'Notas de crédito', icon: Receipt },
-      { href: '/caja', label: 'Cajas', icon: Wallet, requiere: req('caja', 'ver_propia') },
-      { href: '/reportes', label: 'Reportes', icon: BarChart3, requiere: req('reportes', 'ver_local_propio') },
+    label: 'Ventas',
+    icon: ShoppingCart,
+    subs: [
+      { href: '/ventas', label: 'Historial de ventas', requiere: req('ventas', 'crear') },
+      { href: '/notas-credito', label: 'Notas de crédito' },
+    ],
+  },
+  { label: 'Caja', href: '/caja', icon: Wallet, requiere: req('caja', 'ver_propia') },
+  {
+    label: 'Productos',
+    icon: Package,
+    subs: [
+      { href: '/productos', label: 'Catálogo', requiere: req('productos', 'ver') },
+      { href: '/categorias', label: 'Categorías', requiere: req('categorias', 'ver') },
+      { href: '/listas-precio', label: 'Listas de precio', requiere: req('listas_precio', 'ver') },
+      { href: '/proveedores', label: 'Proveedores', requiere: req('proveedores', 'ver') },
     ],
   },
   {
-    titulo: 'Catálogo',
-    items: [
-      { href: '/productos', label: 'Productos', icon: Package, requiere: req('productos', 'ver') },
-      { href: '/categorias', label: 'Categorías', icon: ListTree, requiere: req('categorias', 'ver') },
-      { href: '/listas-precio', label: 'Listas de precio', icon: TagsIcon, requiere: req('listas_precio', 'ver') },
-      { href: '/proveedores', label: 'Proveedores', icon: Truck, requiere: req('proveedores', 'ver') },
-    ],
+    label: 'Reportes',
+    href: '/reportes',
+    icon: BarChart3,
+    requiere: req('reportes', 'ver_local_propio'),
   },
   {
-    titulo: 'Online',
-    items: [{ href: '/web', label: 'E-commerce', icon: Globe, requiere: req('productos', 'publicar_ecommerce') }],
-  },
-  {
-    titulo: 'Stock',
-    items: [
-      { href: '/depositos', label: 'Stock por local', icon: Warehouse, requiere: req('stock', 'ver_todos_depositos') },
-      // Transferencias entre locales: ocultado del menú. El sistema
-      // hace auto-transfer al cobrar cuando falta stock en el local del
-      // cajero, así que el dueño no necesita esta página. La ruta sigue
-      // disponible por URL directa por si hace falta algún día.
-      // { href: '/transferencias', label: 'Transferencias', icon: ArrowLeftRight, requiere: req('stock', 'transferir') },
+    label: 'Sistema',
+    icon: Settings,
+    subs: [
+      { href: '/empleados', label: 'Empleados', requiere: req('empleados', 'ver') },
+      { href: '/roles', label: 'Roles y permisos', requiere: req('roles', 'ver') },
+      { href: '/configuracion', label: 'Configuración general', requiere: req('configuracion', 'ver') },
+      { href: '/backup', label: 'Backup', requiere: req('configuracion', 'backup_restore') },
+      { href: '/web', label: 'E-commerce', requiere: req('productos', 'publicar_ecommerce') },
     ],
   },
-  {
-    titulo: 'Personas',
-    items: [
-      { href: '/empleados', label: 'Empleados', icon: Users, requiere: req('empleados', 'ver') },
-      { href: '/roles', label: 'Roles y permisos', icon: Shield, requiere: req('roles', 'ver') },
-    ],
-  },
-  {
-    titulo: 'Sistema',
-    items: [
-      { href: '/configuracion', label: 'Configuración', icon: Settings, requiere: req('configuracion', 'ver') },
-      { href: '/backup', label: 'Backup', icon: Database, requiere: req('configuracion', 'backup_restore') },
-    ],
-  },
+];
+
+// Acciones de la toolbar de íconos grandes (lo que Agus toca todo el tiempo).
+// Cada una abre un modal o navega a una ruta.
+type ToolbarAction =
+  | { type: 'modal'; key: 'saldos' | 'ganancias' | 'cargar-stock'; label: string; icon: typeof Home; color: string }
+  | { type: 'link'; href: string; label: string; icon: typeof Home; color: string; external?: boolean };
+
+const TOOLBAR: ToolbarAction[] = [
+  { type: 'modal', key: 'saldos', label: 'Saldos de cajas', icon: Wallet, color: 'bg-emerald-100 text-emerald-700' },
+  { type: 'modal', key: 'ganancias', label: 'Ganancias hoy', icon: TrendingUp, color: 'bg-blue-100 text-blue-700' },
+  { type: 'modal', key: 'cargar-stock', label: 'Cargar stock', icon: PackagePlus, color: 'bg-amber-100 text-amber-700' },
+  { type: 'link', href: '/productos/nuevo', label: 'Nuevo producto', icon: PlusCircle, color: 'bg-purple-100 text-purple-700' },
+  { type: 'link', href: '/productos?stock=bajo', label: 'Faltantes', icon: AlertTriangle, color: 'bg-red-100 text-red-700' },
+  // Detectamos la URL del PoS por env var; fallback al subdomain habitual.
+  { type: 'link', href: process.env.NEXT_PUBLIC_POS_URL ?? '/', label: 'Ver PoS', icon: ExternalLink, color: 'bg-slate-100 text-slate-700', external: true },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -109,53 +122,62 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const { puede, cargando: permisosCargando } = usePermisos();
   const isLoginRoute = pathname === '/login';
 
-  // Filtrar grupos del nav según permisos del empleado logueado.
-  // Si el grupo entero queda vacío, no se muestra.
-  // Mientras los permisos están cargando, mostramos solo items sin `requiere`
-  // para evitar el flash de "no hay nada" → todo aparece.
-  const navGroups = NAV_GROUPS.map((grupo) => ({
-    ...grupo,
-    items: grupo.items.filter((it) => {
-      if (!it.requiere) return true;
-      if (permisosCargando) return false;
-      return puede(it.requiere.modulo as ModuloPermiso, it.requiere.accion as AccionPermiso<ModuloPermiso>);
-    }),
-  })).filter((grupo) => grupo.items.length > 0);
+  // Filtrar items del menú según permisos. Si todos los subs de un dropdown
+  // quedan filtrados, ocultamos el dropdown entero.
+  const menuVisible = MENU.map((item) => {
+    if (item.subs) {
+      const subs = item.subs.filter((s) => {
+        if (!s.requiere) return true;
+        if (permisosCargando) return false;
+        return puede(s.requiere.modulo, s.requiere.accion as AccionPermiso<ModuloPermiso>);
+      });
+      return { ...item, subs };
+    }
+    return item;
+  }).filter((item) => {
+    if (item.subs) return item.subs.length > 0;
+    if (!item.requiere) return true;
+    if (permisosCargando) return false;
+    return puede(item.requiere.modulo, item.requiere.accion as AccionPermiso<ModuloPermiso>);
+  });
 
-  // Desktop: expandido vs rail colapsado con iconos. Mobile: overlay drawer.
-  const [expanded, setExpanded] = useState(true);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  // Estado del dropdown abierto en el menubar (solo 1 a la vez).
+  const [dropdownAbierto, setDropdownAbierto] = useState<string | null>(null);
+  const menubarRef = useRef<HTMLDivElement>(null);
 
-  // Persistencia simple del estado expandido en localStorage.
+  // Click fuera del menubar → cerrar dropdown.
   useEffect(() => {
-    const v = localStorage.getItem('turisteando-admin-sidebar');
-    if (v === 'collapsed') setExpanded(false);
-  }, []);
-  useEffect(() => {
-    localStorage.setItem('turisteando-admin-sidebar', expanded ? 'expanded' : 'collapsed');
-  }, [expanded]);
+    if (!dropdownAbierto) return;
+    const handler = (e: MouseEvent) => {
+      if (!menubarRef.current?.contains(e.target as Node)) {
+        setDropdownAbierto(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [dropdownAbierto]);
 
-  // Cerrar drawer móvil al navegar.
+  // Cerrar dropdown al navegar a una ruta.
   useEffect(() => {
-    setMobileOpen(false);
+    setDropdownAbierto(null);
   }, [pathname]);
 
-  // Guard de auth: si no hay sesión y la ruta no es /login, redirigir.
+  // Mobile menu (hamburger)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  // Modal activo (de la toolbar)
+  const [modalActivo, setModalActivo] = useState<'saldos' | 'ganancias' | 'cargar-stock' | null>(null);
+
+  // Guards de auth/rol (idénticos al shell anterior).
   useEffect(() => {
     if (!empleado && !isLoginRoute) {
       router.replace('/login');
     }
   }, [empleado, isLoginRoute, router]);
 
-  // Guard por rol: el admin NO es para cajeros. Si un usuario con rol
-  // cajero preset entra acá (por URL directa, link compartido, etc.) lo
-  // desloguemos y mandamos a /login con un mensaje claro. El panel admin
-  // es solo para admin/encargado o roles custom creados a propósito.
-  //
-  // Nota: solo bloqueamos el rol cajero EXACTO preset. Si más adelante el
-  // dueño crea un rol custom "mostrador" y le quiere dar acceso al admin,
-  // simplemente no le asigna el rol cajero — el sidebar va a filtrar por
-  // permisos como ya lo hace.
   const esCajeroPreset = empleado?.rol_id === PRESET_IDS.roles.cajero;
   useEffect(() => {
     if (esCajeroPreset && !isLoginRoute) {
@@ -168,235 +190,202 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     }
   }, [esCajeroPreset, isLoginRoute, router, logout]);
 
-  // En la ruta /login, no renderizamos el shell (login fullscreen).
   if (isLoginRoute) return <>{children}</>;
-  // Mientras carga el redirect, no renderizamos nada (evita flash).
   if (!empleado) return null;
-  // Mismo principio para cajeros: que NO se vea ni siquiera un parpadeo
-  // del admin mientras el useEffect de arriba dispara el logout.
   if (esCajeroPreset) return null;
 
+  function cerrarSesion() {
+    if (!confirm('¿Cerrar sesión?')) return;
+    logout();
+    router.push('/login');
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (url && key) {
+      import('@comercio/db').then(({ createSupabaseRaw }) => {
+        createSupabaseRaw(url, key).auth.signOut().catch(() => {});
+      });
+    }
+  }
+
   return (
-    <div className="flex min-h-screen bg-muted/20">
-      {/* Backdrop sólo cuando el drawer está abierto en móvil */}
-      {mobileOpen && (
-        <button
-          aria-hidden
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          'fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-background',
-          'transition-[width,transform] duration-300 ease-out',
-          // Desktop: ancho variable según expanded. Cuando está colapsado
-          // dejamos overflow visible para que el tooltip al hover pueda
-          // salir por la derecha sin que lo recorte el ancho del sidebar.
-          expanded ? 'lg:w-60' : 'lg:w-16 lg:overflow-visible',
-          'lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
-          // Mobile: drawer
-          mobileOpen ? 'w-60 translate-x-0' : 'w-60 -translate-x-full',
-        )}
-      >
-        {/* Header del sidebar */}
-        <div
-          className={cn(
-            'flex h-14 items-center border-b',
-            expanded ? 'justify-between px-4' : 'justify-center px-2',
-          )}
-        >
-          {expanded ? (
-            <Link href="/" className="block min-w-0 flex-1 truncate">
-              <div className="truncate text-lg font-bold tracking-tight">
-                {BRAND.nombreCorto}
-              </div>
-              <div className="truncate text-[10px] text-muted-foreground">Admin</div>
-            </Link>
-          ) : (
-            <Link
-              href="/"
-              className="text-base font-bold tracking-tight"
-              title={BRAND.nombreCorto}
-            >
-              #t
-            </Link>
-          )}
-          {/* Toggle: en desktop pliega/despliega; en mobile cierra */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-8 w-8 lg:inline-flex"
-            onClick={() => setExpanded((v) => !v)}
-            aria-label={expanded ? 'Colapsar menú' : 'Expandir menú'}
-            title={expanded ? 'Colapsar' : 'Expandir'}
-          >
-            {expanded ? (
-              <PanelLeftClose className="h-4 w-4" />
-            ) : (
-              <PanelLeftOpen className="h-4 w-4" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 lg:hidden"
-            onClick={() => setMobileOpen(false)}
-            aria-label="Cerrar menú"
-          >
-            <PanelLeftClose className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Nav. Cuando está colapsado dejamos overflow visible para que el
-            tooltip que sale por la derecha no quede recortado. Cuando está
-            expandido, overflow-y-auto normal por si la lista crece. */}
-        <nav
-          className={cn(
-            'flex-1 py-3',
-            expanded ? 'overflow-y-auto px-2' : 'overflow-visible px-1.5',
-          )}
-        >
-          {navGroups.map((grupo) => (
-            <div key={grupo.titulo} className="mb-4">
-              {expanded ? (
-                <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {grupo.titulo}
-                </div>
-              ) : (
-                <div className="mx-2 mb-1 h-px bg-border first:hidden" />
-              )}
-              <div className="space-y-0.5">
-                {grupo.items.map((item) => {
-                  const Icon = item.icon;
-                  const active =
-                    item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      title={!expanded ? item.label : undefined}
-                      className={cn(
-                        'group relative flex items-center rounded-md text-sm transition-colors',
-                        expanded ? 'gap-2 px-2 py-1.5' : 'h-10 w-10 justify-center',
-                        active
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-foreground hover:bg-accent',
-                      )}
-                    >
-                      <Icon className="h-4 w-4 flex-shrink-0" />
-                      {expanded && <span className="truncate">{item.label}</span>}
-                      {/* Tooltip deslizante cuando está colapsado */}
-                      {!expanded && (
-                        <span
-                          className={cn(
-                            'pointer-events-none absolute left-full top-1/2 z-50 ml-1 flex h-9 -translate-y-1/2 items-center overflow-hidden whitespace-nowrap rounded-md text-sm font-medium shadow-md',
-                            // Estado base (oculto, escalado hacia la izquierda)
-                            'max-w-0 origin-left scale-x-0 px-0 opacity-0',
-                            // Hover: se despliega horizontalmente desde el icono
-                            'group-hover:max-w-[220px] group-hover:scale-x-100 group-hover:px-3 group-hover:opacity-100',
-                            'transition-all duration-300 ease-out group-hover:delay-75',
-                            active
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-foreground text-background',
-                          )}
-                        >
-                          {item.label}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </nav>
-
-        {/* Footer del sidebar con el usuario logueado + logout */}
-        <div className={cn('border-t', expanded ? 'px-3 py-3' : 'px-2 py-3')}>
-          {expanded ? (
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                {empleado.nombre.charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-medium">
-                  {empleado.nombre} {empleado.apellido}
-                </div>
-                <div className="truncate text-[10px] text-muted-foreground">
-                  {empleado.email}
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 flex-shrink-0"
-                onClick={() => {
-                  if (!confirm('¿Cerrar sesión?')) return;
-                  // Matamos el state local PRIMERO + navegamos. No
-                  // esperamos al signOut de Supabase para no quedar
-                  // bloqueados si la red está lenta o si el listener
-                  // de auth ignora el evento por el doble-check.
-                  logout();
-                  router.push('/login');
-                  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-                  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-                  if (url && key) {
-                    import('@comercio/db').then(({ createSupabaseRaw }) => {
-                      createSupabaseRaw(url, key).auth.signOut().catch(() => {});
-                    });
-                  }
-                }}
-                title="Cerrar sesión"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10"
-              onClick={() => {
-                if (!confirm('¿Cerrar sesión?')) return;
-                // Mismo patrón que el botón expandido: state local primero,
-                // signOut después en background.
-                logout();
-                router.push('/login');
-                const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-                const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-                if (url && key) {
-                  import('@comercio/db').then(({ createSupabaseRaw }) => {
-                    createSupabaseRaw(url, key).auth.signOut().catch(() => {});
-                  });
-                }
-              }}
+    <div className="flex min-h-screen flex-col bg-muted/20">
+      {/* Top bar con título + menubar + user. Estilo ERP de escritorio. */}
+      <header className="sticky top-0 z-40 border-b bg-background shadow-sm">
+        {/* Banda 1: branding + user (h-10) */}
+        <div className="flex h-10 items-center justify-between border-b bg-foreground/95 px-3 text-background">
+          <Link href="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+            <span className="hidden sm:inline">Turisteando</span>
+            <span className="opacity-60">·</span>
+            <span>Admin</span>
+          </Link>
+          <div className="flex items-center gap-3 text-xs">
+            <span className="hidden text-background/80 sm:inline">
+              {empleado.nombre} {empleado.apellido}
+            </span>
+            <button
+              type="button"
+              onClick={cerrarSesion}
+              className="flex items-center gap-1 rounded px-2 py-1 hover:bg-background/10"
               title="Cerrar sesión"
             >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          )}
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Salir</span>
+            </button>
+          </div>
         </div>
-      </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Header principal: sólo botón hamburguesa en mobile (en desktop el toggle vive en el sidebar) */}
-        <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur lg:hidden">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setMobileOpen(true)}
-            className="h-8 w-8"
-            aria-label="Abrir menú"
+        {/* Banda 2: menubar (h-10) */}
+        <div ref={menubarRef} className="hidden h-10 items-center gap-0.5 px-2 lg:flex">
+          {menuVisible.map((item) => {
+            const Icon = item.icon;
+            const activo =
+              item.href === '/'
+                ? pathname === '/'
+                : item.href
+                  ? pathname.startsWith(item.href)
+                  : item.subs?.some((s) => pathname.startsWith(s.href));
+            const tieneDropdown = !!item.subs;
+            const dropdownOpen = dropdownAbierto === item.label;
+
+            if (!tieneDropdown && item.href) {
+              return (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                    activo ? 'bg-primary text-primary-foreground' : 'hover:bg-accent',
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              );
+            }
+
+            return (
+              <div key={item.label} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setDropdownAbierto(dropdownOpen ? null : item.label)}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                    activo || dropdownOpen ? 'bg-primary text-primary-foreground' : 'hover:bg-accent',
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                  <ChevronDown className="h-3 w-3 opacity-70" />
+                </button>
+                {dropdownOpen && item.subs && (
+                  <div className="absolute left-0 top-full z-50 mt-0.5 min-w-[200px] rounded-md border bg-background py-1 shadow-lg">
+                    {item.subs.map((sub) => {
+                      const subActivo = pathname.startsWith(sub.href);
+                      return (
+                        <Link
+                          key={sub.href}
+                          href={sub.href}
+                          className={cn(
+                            'block px-3 py-1.5 text-sm transition-colors',
+                            subActivo
+                              ? 'bg-primary/10 font-semibold text-primary'
+                              : 'hover:bg-accent',
+                          )}
+                        >
+                          {sub.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Mobile: hamburger */}
+        <div className="flex h-10 items-center justify-between px-3 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded px-2 py-1 text-sm hover:bg-accent"
           >
-            <Menu className="h-4 w-4" />
-          </Button>
-          <span className="text-sm font-semibold tracking-tight">{BRAND.nombreCorto}</span>
-        </header>
-        <main className="min-w-0 flex-1 overflow-x-hidden">{children}</main>
-      </div>
+            {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            <span>Menú</span>
+          </button>
+        </div>
+        {mobileMenuOpen && (
+          <div className="border-t bg-background px-2 py-2 lg:hidden">
+            {menuVisible.map((item) => (
+              <div key={item.label} className="mb-1">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase text-muted-foreground">
+                  {item.label}
+                </div>
+                {item.subs ? (
+                  item.subs.map((sub) => (
+                    <Link
+                      key={sub.href}
+                      href={sub.href}
+                      className="block rounded px-3 py-1.5 text-sm hover:bg-accent"
+                    >
+                      {sub.label}
+                    </Link>
+                  ))
+                ) : item.href ? (
+                  <Link
+                    href={item.href}
+                    className="block rounded px-3 py-1.5 text-sm hover:bg-accent"
+                  >
+                    Ir
+                  </Link>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Banda 3: toolbar de íconos grandes coloridos (las acciones más usadas).
+            En mobile se muestra horizontal con scroll. */}
+        <div className="flex h-[88px] items-center gap-2 overflow-x-auto border-t bg-muted/30 px-3 py-2">
+          {TOOLBAR.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={action.label}
+                type="button"
+                onClick={() => {
+                  if (action.type === 'modal') {
+                    setModalActivo(action.key);
+                  } else if (action.external) {
+                    window.open(action.href, '_blank', 'noopener');
+                  } else {
+                    router.push(action.href);
+                  }
+                }}
+                className={cn(
+                  'group flex h-[72px] w-[88px] shrink-0 flex-col items-center justify-center gap-1 rounded-md border bg-background px-2 transition-all hover:border-primary/40 hover:shadow-sm',
+                )}
+                title={action.label}
+              >
+                <div className={cn('flex h-9 w-9 items-center justify-center rounded-md', action.color)}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <span className="text-center text-[11px] font-medium leading-tight">
+                  {action.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </header>
+
+      {/* Contenido principal */}
+      <main className="min-w-0 flex-1">{children}</main>
+
+      {/* Modales globales de la toolbar */}
+      <ModalSaldosCajas open={modalActivo === 'saldos'} onOpenChange={(v) => !v && setModalActivo(null)} />
+      <ModalGananciasHoy open={modalActivo === 'ganancias'} onOpenChange={(v) => !v && setModalActivo(null)} />
+      <ModalCargarStock open={modalActivo === 'cargar-stock'} onOpenChange={(v) => !v && setModalActivo(null)} />
     </div>
   );
 }
