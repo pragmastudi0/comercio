@@ -15,7 +15,6 @@ import {
   Warehouse,
   Tag,
 } from 'lucide-react';
-import { BRAND } from '@comercio/business';
 import { PRESET_IDS } from '@comercio/db';
 import { getDb } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
@@ -245,14 +244,11 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto px-4 py-6 sm:py-8">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold sm:text-2xl">Hola, {BRAND.nombreCorto}</h1>
-          <p className="text-sm text-muted-foreground">
-            Resumen · {subRango.toLowerCase()}
-          </p>
-        </div>
-        <Button asChild variant="outline" size="sm" className="self-start sm:self-auto">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-slate-700">
+          Resumen · {subRango.toLowerCase()}
+        </p>
+        <Button asChild variant="outline" size="sm">
           <Link href="/ventas">
             Ver ventas <ArrowRight className="ml-1 h-3 w-3" />
           </Link>

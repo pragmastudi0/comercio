@@ -19,7 +19,6 @@ import {
   PackagePlus,
   PlusCircle,
   AlertTriangle,
-  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PRESET_IDS } from '@comercio/db';
@@ -60,14 +59,10 @@ function req<M extends ModuloPermiso>(
 // viven en la toolbar de íconos grandes debajo, no acá.
 const MENU: MenuItem[] = [
   { label: 'Inicio', href: '/', icon: Home },
-  {
-    label: 'Ventas',
-    icon: ShoppingCart,
-    subs: [
-      { href: '/ventas', label: 'Historial de ventas', requiere: req('ventas', 'crear') },
-      { href: '/notas-credito', label: 'Notas de crédito' },
-    ],
-  },
+  // Ventas como link directo (no dropdown) — el dueño lo abre constantemente
+  // y no quiere un menú extra. Notas de crédito sale del menú principal:
+  // los "cambios" ya se ven dentro del detalle de cada venta.
+  { label: 'Ventas', href: '/ventas', icon: ShoppingCart, requiere: req('ventas', 'crear') },
   { label: 'Caja', href: '/caja', icon: Wallet, requiere: req('caja', 'ver_propia') },
   {
     label: 'Productos',
@@ -107,11 +102,10 @@ type ToolbarAction =
 const TOOLBAR: ToolbarAction[] = [
   { type: 'modal', key: 'saldos', label: 'Saldos de cajas', icon: Wallet, color: 'bg-emerald-100 text-emerald-700' },
   { type: 'modal', key: 'ganancias', label: 'Ganancias hoy', icon: TrendingUp, color: 'bg-blue-100 text-blue-700' },
+  { type: 'link', href: '/ventas', label: 'Ventas', icon: ShoppingCart, color: 'bg-indigo-100 text-indigo-700' },
   { type: 'modal', key: 'cargar-stock', label: 'Cargar stock', icon: PackagePlus, color: 'bg-amber-100 text-amber-700' },
   { type: 'link', href: '/productos/nuevo', label: 'Nuevo producto', icon: PlusCircle, color: 'bg-purple-100 text-purple-700' },
   { type: 'link', href: '/productos?stock=bajo', label: 'Faltantes', icon: AlertTriangle, color: 'bg-red-100 text-red-700' },
-  // Detectamos la URL del PoS por env var; fallback al subdomain habitual.
-  { type: 'link', href: process.env.NEXT_PUBLIC_POS_URL ?? '/', label: 'Ver PoS', icon: ExternalLink, color: 'bg-slate-100 text-slate-700', external: true },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {

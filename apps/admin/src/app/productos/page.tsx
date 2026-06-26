@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
+  Minus,
   Search,
   Save,
   Trash2,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
+import { useSesion } from '@/stores/sesion';
 import { PRESET_IDS, type Producto } from '@comercio/db';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -588,41 +590,14 @@ function PanelProducto({
           </div>
         </div>
 
-        {/* Stock por local */}
-        <div className="rounded border border-slate-200 bg-slate-50 p-2">
-          <Label className="mb-1 block text-[10px] uppercase text-slate-600">
-            Unidades disponibles
-          </Label>
-          <div className="grid grid-cols-2 gap-1.5">
-            {(depositosQ.data ?? []).map((d) => {
-              const cant =
-                stockQ.data?.find((s) => s.deposito_id === d.id)?.cantidad ?? 0;
-              const cantN = Number(cant);
-              return (
-                <div
-                  key={d.id}
-                  className="flex items-center justify-between rounded-sm border border-slate-300 bg-white px-2 py-1 text-xs"
-                >
-                  <span className="text-slate-600">{d.nombre}</span>
-                  <span
-                    className={`font-semibold tabular-nums ${
-                      cantN <= 0 ? 'text-red-600' : ''
-                    }`}
-                  >
-                    {cantN}
-                  </span>
-                </div>
-              );
-            })}
-            <div className="flex items-center justify-between rounded-sm border border-blue-300 bg-blue-50 px-2 py-1 text-xs">
-              <span className="font-semibold text-blue-800">Total</span>
-              <span className="font-bold tabular-nums text-blue-800">{totalStock}</span>
-            </div>
-          </div>
-          <p className="mt-1 text-[10px] text-slate-500">
-            Para cargar más unidades, usá el ícono "Cargar stock" de arriba.
-          </p>
-        </div>
+        {/* Stock por local con cargar inline (+/-)  */}
+        <StockPorLocal
+          productoId={productoId}
+          depositos={depositosQ.data ?? []}
+          stocks={stockQ.data ?? []}
+          totalStock={totalStock}
+          puedeEditar={puedeEditar}
+        />
       </div>
 
       {/* Footer: botones de acción */}
@@ -653,6 +628,144 @@ function PanelProducto({
           {guardarMut.isPending ? 'Guardando…' : 'Guardar cambios'}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Stock por local con la posibilidad de cargar/descontar unidades inline.
+ * Cada local tiene su input de delta y un botón "+" para sumar (o "-" si
+ * el delta es negativo). Es la forma rápida que pidió Agus para ajustar
+ * stock sin abrir un modal aparte.
+ */
+function StockPorLocal({
+  productoId,
+  depositos,
+  stocks,
+  totalStock,
+  puedeEditar,
+}: {
+  productoId: string;
+  depositos: { id: string; nombre: string }[];
+  stocks: { deposito_id: string; cantidad: number | string }[];
+  totalStock: number;
+  puedeEditar: boolean;
+}) {
+  const db = getDb();
+  const qc = useQueryClient();
+  const empleado = useSesion((s) => s.empleado);
+  // Delta por local (string para que se pueda dejar vacío sin convertir a 0).
+  const [deltas, setDeltas] = useState<Record<string, string>>({});
+
+  const ajustarMut = useMutation({
+    mutationFn: async ({ depositoId, delta }: { depositoId: string; delta: number }) => {
+      if (!empleado) throw new Error('Sin sesión');
+      if (!Number.isFinite(delta) || delta === 0) throw new Error('Cantidad inválida');
+      await db.stock.ajustar({
+        producto_id: productoId,
+        deposito_id: depositoId,
+        cantidad: delta,
+        motivo: 'Ajuste rápido desde detalle de producto',
+        empleado_id: empleado.id,
+      });
+    },
+    onSuccess: (_data, vars) => {
+      const signo = vars.delta > 0 ? '+' : '';
+      toast.success(`Stock ajustado ${signo}${vars.delta}`);
+      setDeltas((prev) => ({ ...prev, [vars.depositoId]: '' }));
+      qc.invalidateQueries({ queryKey: ['producto-stock-detalle', productoId] });
+      qc.invalidateQueries({ queryKey: ['stock-totales-page'] });
+      qc.invalidateQueries({ queryKey: ['stock-consolidado'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <div className="rounded border border-slate-200 bg-slate-50 p-2">
+      <div className="mb-1 flex items-center justify-between">
+        <Label className="block text-[10px] uppercase text-slate-600">
+          Stock por local
+        </Label>
+        <span className="text-[10px] text-slate-500">
+          + suma · - resta
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        {depositos.map((d) => {
+          const cant = Number(
+            stocks.find((s) => s.deposito_id === d.id)?.cantidad ?? 0,
+          );
+          const delta = deltas[d.id] ?? '';
+          const deltaN = parseFloat(delta);
+          const tieneDelta = !isNaN(deltaN) && deltaN !== 0;
+          return (
+            <div
+              key={d.id}
+              className="grid grid-cols-[1fr_auto_auto] items-center gap-1.5 rounded-sm border border-slate-300 bg-white px-2 py-1 text-xs"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600">{d.nombre}</span>
+                <span
+                  className={`font-semibold tabular-nums ${
+                    cant <= 0 ? 'text-red-600' : 'text-slate-900'
+                  }`}
+                >
+                  {cant}
+                </span>
+              </div>
+              {puedeEditar && (
+                <>
+                  <Input
+                    type="number"
+                    step="1"
+                    value={delta}
+                    onChange={(e) =>
+                      setDeltas((prev) => ({ ...prev, [d.id]: e.target.value }))
+                    }
+                    onFocus={(e) => e.currentTarget.select()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && tieneDelta) {
+                        e.preventDefault();
+                        ajustarMut.mutate({ depositoId: d.id, delta: deltaN });
+                      }
+                    }}
+                    placeholder="0"
+                    className="h-6 w-16 text-right text-xs tabular-nums"
+                    disabled={ajustarMut.isPending}
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      tieneDelta &&
+                      ajustarMut.mutate({ depositoId: d.id, delta: deltaN })
+                    }
+                    disabled={!tieneDelta || ajustarMut.isPending}
+                    className="flex h-6 w-6 items-center justify-center rounded-sm border border-slate-300 bg-white hover:bg-emerald-50 disabled:opacity-40"
+                    title={
+                      tieneDelta
+                        ? `${deltaN > 0 ? 'Sumar' : 'Restar'} ${Math.abs(deltaN)}`
+                        : 'Tipear cantidad'
+                    }
+                  >
+                    {deltaN < 0 ? (
+                      <Minus className="h-3 w-3 text-red-600" />
+                    ) : (
+                      <Plus className="h-3 w-3 text-emerald-700" />
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
+        <div className="flex items-center justify-between rounded-sm border border-blue-300 bg-blue-50 px-2 py-1 text-xs">
+          <span className="font-semibold text-blue-800">Total</span>
+          <span className="font-bold tabular-nums text-blue-800">{totalStock}</span>
+        </div>
+      </div>
+      <p className="mt-1 text-[10px] text-slate-500">
+        Cargás stock directo acá. Cada ajuste queda registrado con tu nombre y motivo "Ajuste rápido".
+      </p>
     </div>
   );
 }

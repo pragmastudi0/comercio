@@ -297,7 +297,12 @@ export default function VentasPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>N°</TableHead>
+                  <TableHead>Código</TableHead>
+                  <TableHead>Producto</TableHead>
+                  <TableHead className="text-right">Cant.</TableHead>
+                  <TableHead className="text-right">Precio</TableHead>
+                  <TableHead className="text-right">Subtotal</TableHead>
+                  <TableHead>Pago</TableHead>
                   <TableHead>
                     <button
                       type="button"
@@ -317,132 +322,123 @@ export default function VentasPage() {
                       )}
                     </button>
                   </TableHead>
+                  <TableHead>N°</TableHead>
                   <TableHead>Cajero</TableHead>
-                  <TableHead>Local</TableHead>
-                  <TableHead>Items</TableHead>
-                  <TableHead>Métodos</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {/* Vista PRODUCTO × PRODUCTO: una fila por ítem vendido.
+                    Items de la misma venta se ven con bandeo alternado
+                    (color de fondo) + borde superior más grueso en la
+                    primera fila para que se distinga claramente. Pedido
+                    del cliente, igual que el patrón de la historia del PoS. */}
                 {[...ventas]
                   .sort((a, b) => {
-                    // Ordenar por fecha según el toggle. localeCompare
-                    // sobre ISO strings es seguro (lexicográfico = cronológico).
                     const cmp = a.fecha.localeCompare(b.fecha);
                     return ordenDesc ? -cmp : cmp;
                   })
-                  .flatMap((v) => {
-                  const anulada = v.estado === 'anulada';
-                  const cancelada = v.estado === 'cancelada';
-                  const rows = [
-                  <TableRow
-                    key={v.id}
-                    onClick={() => setVentaDetalle(v)}
-                    className={`cursor-pointer ${
-                      anulada
-                        ? 'bg-red-50/60 hover:bg-red-50 dark:bg-red-950/20'
-                        : cancelada
-                          ? 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
-                          : 'hover:bg-muted/40'
-                    }`}
-                  >
-                    <TableCell className="font-mono text-xs">{v.numero}</TableCell>
-                    <TableCell className="text-xs">{formatDate(v.fecha)}</TableCell>
-                    <TableCell>{empleadoNombre(v.empleado_id)}</TableCell>
-                    <TableCell>{localNombre(v.local_id)}</TableCell>
-                    <TableCell>{v.items.reduce((a, i) => a + i.cantidad, 0)}</TableCell>
-                    <TableCell className="text-xs">
-                      {cancelada ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (() => {
-                        const ms = Array.from(new Set(v.pagos.map((p) => p.metodo)));
-                        // Compacto: si es un solo método, mostramos el nombre;
-                        // si es mixto, solo "Mixto" sin el desglose (el detalle
-                        // se ve al hacer click en la venta).
-                        return ms.length > 1 ? (
-                          <span className="font-medium">Mixto</span>
-                        ) : (
-                          LABEL_METODO[ms[0]!]
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell
-                      className={`text-right font-medium tabular-nums ${
-                        anulada
-                          ? 'text-red-700 line-through'
-                          : cancelada
-                            ? 'text-muted-foreground line-through'
-                            : ''
-                      }`}
-                    >
-                      {cancelada ? (
-                        <span className="text-xs">—</span>
-                      ) : (
-                        formatCurrency(v.total)
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col items-start gap-0.5">
-                        {anulada ? (
-                          <Badge variant="destructive">Anulada</Badge>
-                        ) : cancelada ? (
-                          <Badge variant="outline">Cancelada</Badge>
-                        ) : v.estado === 'completada' ? (
-                          <Badge variant="secondary">Completada</Badge>
-                        ) : (
-                          <Badge>Presupuesto</Badge>
-                        )}
-                        {/* Tag opcional: la venta está atada a un cambio.
-                            La distinción "original con cambio" vs "venta
-                            nueva del cambio" se ve en el popup; acá sólo
-                            marcamos que existe el contexto. */}
-                        {(cambioComoOriginal.has(v.id) ||
-                          cambioComoNueva.has(v.id)) && (
-                          <Badge
-                            variant="outline"
-                            className="border-amber-300 text-amber-700"
+                  .flatMap((v, vIdx) => {
+                    const anulada = v.estado === 'anulada';
+                    const cancelada = v.estado === 'cancelada';
+                    const banda = vIdx % 2 === 0 ? '' : 'bg-slate-50/70';
+                    const tieneCambio =
+                      cambioComoOriginal.has(v.id) || cambioComoNueva.has(v.id);
+                    const metodos = Array.from(new Set(v.pagos.map((p) => p.metodo)));
+                    const metodoTxt =
+                      metodos.length > 1 ? 'Mixto' : LABEL_METODO[metodos[0]!] ?? '—';
+                    return v.items.map((it, idx) => {
+                      const p = productosQ.data?.find((x) => x.id === it.producto_id);
+                      const esPrimera = idx === 0;
+                      const subtotal =
+                        it.subtotal ?? it.precio_unitario * it.cantidad;
+                      return (
+                        <TableRow
+                          key={`${v.id}-${idx}`}
+                          onClick={() => setVentaDetalle(v)}
+                          className={`cursor-pointer ${banda} ${
+                            esPrimera ? 'border-t-2 border-t-slate-300' : ''
+                          } ${anulada ? 'opacity-60' : ''} ${
+                            cancelada ? 'opacity-50' : ''
+                          } hover:bg-blue-50/50`}
+                        >
+                          <TableCell className="font-mono text-xs">
+                            {p?.codigo_interno ?? '—'}
+                          </TableCell>
+                          <TableCell
+                            className={anulada || cancelada ? 'line-through' : ''}
                           >
-                            Cambio
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-0.5">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title="Ver detalle"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setVentaDetalle(v);
-                          }}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          asChild
-                          variant="ghost"
-                          size="icon"
-                          title="Ver / imprimir ticket"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Link href={`/ventas/${v.id}/ticket`}>
-                            <Printer className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>,
-                  ];
-                  // El motivo de anulación (y autor/fecha) se muestra ahora
-                  // SOLO en el popup de detalle. La tabla queda compacta
-                  // y prolija sin filas secundarias.
-                  return rows;
-                })}
+                            <span className="inline-flex items-center gap-1.5">
+                              {p?.nombre ?? 'Producto borrado'}
+                              {esPrimera && anulada && (
+                                <Badge variant="destructive">Anulada</Badge>
+                              )}
+                              {esPrimera && cancelada && (
+                                <Badge variant="outline">Cancelada</Badge>
+                              )}
+                              {esPrimera && tieneCambio && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-amber-300 text-amber-700"
+                                >
+                                  Cambio
+                                </Badge>
+                              )}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {it.cantidad}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatCurrency(it.precio_unitario)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium tabular-nums">
+                            {cancelada ? '—' : formatCurrency(subtotal)}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {esPrimera ? (cancelada ? '—' : metodoTxt) : ''}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {esPrimera ? formatDate(v.fecha) : ''}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {esPrimera ? v.numero : ''}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {esPrimera ? empleadoNombre(v.empleado_id) : ''}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {esPrimera && (
+                              <div className="flex justify-end gap-0.5">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Ver detalle"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setVentaDetalle(v);
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  asChild
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Ver / imprimir ticket"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Link href={`/ventas/${v.id}/ticket`}>
+                                    <Printer className="h-4 w-4" />
+                                  </Link>
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    });
+                  })}
               </TableBody>
             </Table>
           )}

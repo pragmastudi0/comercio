@@ -67,12 +67,14 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
         }
         const umbral = filtro.umbral_bajo_stock ?? 5;
         if (filtro.sin_stock) {
+          // "Sin stock" = strictly 0 o negativo.
           rows = rows.filter((p) => (total.get(p.id) ?? 0) <= 0);
         } else {
-          rows = rows.filter((p) => {
-            const t = total.get(p.id) ?? 0;
-            return t > 0 && t <= umbral;
-          });
+          // "Bajo stock" = todo lo que está bajo el umbral, INCLUYENDO
+          // negativos y 0. Antes excluía los ≤ 0; ahora los suma porque
+          // el dueño usa "Faltantes" para ver TODO lo que necesita reponer
+          // (sin distinguir entre stock real bajo y desfasaje negativo).
+          rows = rows.filter((p) => (total.get(p.id) ?? 0) <= umbral);
         }
       }
       return rows;
