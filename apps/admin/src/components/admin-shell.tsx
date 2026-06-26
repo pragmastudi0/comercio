@@ -211,21 +211,22 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col bg-muted/20">
       {/* Top bar con título + menubar + user. Estilo ERP de escritorio. */}
       <header className="sticky top-0 z-40 border-b bg-background shadow-sm">
-        {/* Banda 1: branding + user (h-10) */}
-        <div className="flex h-10 items-center justify-between border-b bg-foreground/95 px-3 text-background">
-          <Link href="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+        {/* Banda 1: branding + user (h-9). Look "Office 2003 / Windows XP":
+            gradiente azul oscuro institucional, borde inferior marcado. */}
+        <div className="flex h-9 items-center justify-between border-b border-slate-900 bg-gradient-to-b from-slate-700 to-slate-800 px-3 text-slate-50 shadow-sm">
+          <Link href="/" className="flex items-center gap-1.5 text-sm font-semibold tracking-tight">
             <span className="hidden sm:inline">Turisteando</span>
-            <span className="opacity-60">·</span>
-            <span>Admin</span>
+            <span className="text-slate-400">·</span>
+            <span>Administración</span>
           </Link>
           <div className="flex items-center gap-3 text-xs">
-            <span className="hidden text-background/80 sm:inline">
+            <span className="hidden text-slate-200 sm:inline">
               {empleado.nombre} {empleado.apellido}
             </span>
             <button
               type="button"
               onClick={cerrarSesion}
-              className="flex items-center gap-1 rounded px-2 py-1 hover:bg-background/10"
+              className="flex items-center gap-1 rounded border border-transparent px-2 py-0.5 hover:border-slate-500 hover:bg-slate-600"
               title="Cerrar sesión"
             >
               <LogOut className="h-3.5 w-3.5" />
@@ -234,8 +235,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Banda 2: menubar (h-10) */}
-        <div ref={menubarRef} className="hidden h-10 items-center gap-0.5 px-2 lg:flex">
+        {/* Banda 2: menubar (h-9) — estilo barra de menú de Windows clásica:
+            hover azul claro, item activo con borde inferior. */}
+        <div ref={menubarRef} className="hidden h-9 items-center gap-0.5 border-b border-slate-200 bg-white px-2 lg:flex">
           {menuVisible.map((item) => {
             const Icon = item.icon;
             const activo =
@@ -253,8 +255,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   key={item.label}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                    activo ? 'bg-primary text-primary-foreground' : 'hover:bg-accent',
+                    'flex items-center gap-1.5 border-b-2 px-3 py-1 text-sm font-medium transition-colors',
+                    activo
+                      ? 'border-blue-600 bg-blue-50 text-blue-800'
+                      : 'border-transparent text-slate-700 hover:border-blue-300 hover:bg-blue-50/60',
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -269,16 +273,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   type="button"
                   onClick={() => setDropdownAbierto(dropdownOpen ? null : item.label)}
                   className={cn(
-                    'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                    activo || dropdownOpen ? 'bg-primary text-primary-foreground' : 'hover:bg-accent',
+                    'flex items-center gap-1.5 border-b-2 px-3 py-1 text-sm font-medium transition-colors',
+                    activo || dropdownOpen
+                      ? 'border-blue-600 bg-blue-50 text-blue-800'
+                      : 'border-transparent text-slate-700 hover:border-blue-300 hover:bg-blue-50/60',
                   )}
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}
-                  <ChevronDown className="h-3 w-3 opacity-70" />
+                  <ChevronDown className="h-3 w-3 opacity-60" />
                 </button>
                 {dropdownOpen && item.subs && (
-                  <div className="absolute left-0 top-full z-50 mt-0.5 min-w-[200px] rounded-md border bg-background py-1 shadow-lg">
+                  <div className="absolute left-0 top-full z-50 mt-0 min-w-[220px] rounded-sm border border-slate-300 bg-white py-1 shadow-md">
                     {item.subs.map((sub) => {
                       const subActivo = pathname.startsWith(sub.href);
                       return (
@@ -288,8 +294,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                           className={cn(
                             'block px-3 py-1.5 text-sm transition-colors',
                             subActivo
-                              ? 'bg-primary/10 font-semibold text-primary'
-                              : 'hover:bg-accent',
+                              ? 'bg-blue-50 font-semibold text-blue-800'
+                              : 'text-slate-700 hover:bg-blue-50/60',
                           )}
                         >
                           {sub.label}
@@ -344,11 +350,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Banda 3: toolbar de íconos grandes coloridos (las acciones más usadas).
-            En mobile se muestra horizontal con scroll. */}
-        <div className="flex h-[88px] items-center gap-2 overflow-x-auto border-t bg-muted/30 px-3 py-2">
-          {TOOLBAR.map((action) => {
+        {/* Banda 3: toolbar de íconos grandes — estilo "ribbon" Office
+            clásico. Íconos planos coloridos sin fondo de color en el
+            cuadrado; el ícono mismo lleva el color. Border separador
+            entre grupos como en Word/Excel viejos. */}
+        <div className="flex h-[78px] items-center gap-0.5 overflow-x-auto border-t border-slate-300 bg-gradient-to-b from-slate-50 to-slate-100 px-2 py-1.5">
+          {TOOLBAR.map((action, idx) => {
             const Icon = action.icon;
+            // Extraemos solo el "text-color" del color combinado para
+            // pintar el ícono sin fondo (estilo más plano y clásico).
+            const colorClass = action.color.split(' ').find((c) => c.startsWith('text-')) ?? '';
             return (
               <button
                 key={action.label}
@@ -363,14 +374,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   }
                 }}
                 className={cn(
-                  'group flex h-[72px] w-[88px] shrink-0 flex-col items-center justify-center gap-1 rounded-md border bg-background px-2 transition-all hover:border-primary/40 hover:shadow-sm',
+                  'group flex h-[64px] w-[80px] shrink-0 flex-col items-center justify-center gap-0.5 rounded border border-transparent px-1 transition-all',
+                  'hover:border-blue-400 hover:bg-blue-50/60 active:bg-blue-100',
                 )}
                 title={action.label}
               >
-                <div className={cn('flex h-9 w-9 items-center justify-center rounded-md', action.color)}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <span className="text-center text-[11px] font-medium leading-tight">
+                <Icon className={cn('h-7 w-7', colorClass)} strokeWidth={1.5} />
+                <span className="text-center text-[11px] font-medium leading-tight text-slate-700">
                   {action.label}
                 </span>
               </button>
