@@ -13,7 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Package,
+  LineChart,
 } from 'lucide-react';
+import { ModalEstadisticasProducto } from '@/components/modal-estadisticas-producto';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
@@ -415,6 +417,8 @@ function PanelProducto({
   // State local del form. Se inicializa cuando carga el producto.
   const [nombre, setNombre] = useState('');
   const [codigo, setCodigo] = useState('');
+  // Modal de estadísticas (última venta, rotación, totales).
+  const [estadOpen, setEstadOpen] = useState(false);
   const [costoTxt, setCostoTxt] = useState('');
   const [precioCfTxt, setPrecioCfTxt] = useState('');
   const [categoriaId, setCategoriaId] = useState('');
@@ -499,9 +503,12 @@ function PanelProducto({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto p-2">
-      {/* Encabezado del panel: visible en ventas + nombre */}
-      <div className="mb-1.5 flex items-center justify-between border-b border-slate-200 pb-1.5">
-        <label className="flex items-center gap-1.5 text-xs">
+      {/* Encabezado del panel: disponible para vender + estadísticas + código */}
+      <div className="mb-1.5 flex items-center justify-between gap-2 border-b border-slate-200 pb-1.5">
+        <label
+          className="flex items-center gap-1.5 text-xs"
+          title="Si está desmarcado, el cajero NO encuentra el producto en el PoS. Sirve para retirar de la venta un producto sin borrarlo (ej. discontinuado pero quedó stock)."
+        >
           <input
             type="checkbox"
             checked={activo}
@@ -509,9 +516,20 @@ function PanelProducto({
             disabled={!puedeEditar}
             className="h-3.5 w-3.5 rounded border-slate-300"
           />
-          <span className="font-medium text-slate-700">Mostrar en ventas</span>
+          <span className="font-medium text-slate-700">Disponible para vender</span>
         </label>
-        <span className="font-mono text-xs text-slate-500">#{productoQ.data.codigo_interno}</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setEstadOpen(true)}
+            className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+            title="Ver última venta, rotación y totales del producto"
+          >
+            <LineChart className="h-3 w-3" />
+            Estadísticas
+          </button>
+          <span className="font-mono text-xs text-slate-500">#{productoQ.data.codigo_interno}</span>
+        </div>
       </div>
 
       {/* Campos editables */}
@@ -673,6 +691,14 @@ function PanelProducto({
           {guardarMut.isPending ? 'Guardando…' : 'Guardar cambios'}
         </Button>
       </div>
+
+      <ModalEstadisticasProducto
+        open={estadOpen}
+        onOpenChange={setEstadOpen}
+        productoId={productoId}
+        productoNombre={productoQ.data.nombre}
+        productoCodigo={productoQ.data.codigo_interno}
+      />
     </div>
   );
 }
@@ -908,14 +934,17 @@ function PanelNuevoProducto({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto p-2">
       <div className="mb-1.5 flex items-center justify-between border-b border-slate-200 pb-1.5">
-        <label className="flex items-center gap-1.5 text-xs">
+        <label
+          className="flex items-center gap-1.5 text-xs"
+          title="Si está desmarcado, el cajero NO encuentra el producto en el PoS."
+        >
           <input
             type="checkbox"
             checked={activo}
             onChange={(e) => setActivo(e.target.checked)}
             className="h-3.5 w-3.5 rounded border-slate-300"
           />
-          <span className="font-medium text-slate-700">Mostrar en ventas</span>
+          <span className="font-medium text-slate-700">Disponible para vender</span>
         </label>
         <span className="text-xs font-semibold text-emerald-700">NUEVO</span>
       </div>

@@ -41,6 +41,10 @@ export default function VentasPage() {
   const [localId, setLocalId] = useState<string>('');
   const [metodo, setMetodo] = useState<string>('');
   const [estado, setEstado] = useState<string>('');
+  // Filtro por código o nombre de producto. Filtra las ventas que tienen
+  // al menos un ítem con un producto cuyo código/nombre matchee.
+  // Aplicado en memoria sobre las ventas ya traídas (no hace round-trip).
+  const [textoProducto, setTextoProducto] = useState('');
   // Venta seleccionada para ver el detalle en el popup.
   const [ventaDetalle, setVentaDetalle] = useState<Venta | null>(null);
   // Orden por fecha. Default desc (más nueva arriba) — lo más útil para
@@ -59,11 +63,12 @@ export default function VentasPage() {
   });
   const empleadosQ = useQuery({ queryKey: ['empleados'], queryFn: () => db.empleados.list() });
   const localesQ = useQuery({ queryKey: ['locales'], queryFn: () => db.locales.list() });
-  // Cargado al hacer click en una venta (lazy) para mostrar productos por nombre.
+  // Catálogo de productos — necesario para mostrar nombre + código en cada
+  // fila (vista producto×producto) y para el filtro por texto. Se carga
+  // siempre, no lazy: el render principal ya lo usa.
   const productosQ = useQuery({
     queryKey: ['productos-all'],
     queryFn: () => db.productos.list(),
-    enabled: !!ventaDetalle,
   });
 
   // Logs de descuento manual del rango. El motivo del descuento global se
@@ -146,6 +151,23 @@ export default function VentasPage() {
   let ventas = ventasQ.data ?? [];
   if (metodo) ventas = ventas.filter((v) => v.pagos.some((p) => p.metodo === metodo));
   if (estado) ventas = ventas.filter((v) => v.estado === estado);
+  // Filtro por código/nombre de producto. Si la query es solo dígitos, match
+  // EXACTO al código; con letras, match parcial al nombre (case-insensitive).
+  if (textoProducto.trim()) {
+    const q = textoProducto.trim().toLowerCase();
+    const esNumerico = /^\d+$/.test(q);
+    const productosLookup = productosQ.data ?? [];
+    const idsMatch = new Set(
+      productosLookup
+        .filter((p) =>
+          esNumerico
+            ? p.codigo_interno === q
+            : p.nombre.toLowerCase().includes(q),
+        )
+        .map((p) => p.id),
+    );
+    ventas = ventas.filter((v) => v.items.some((it) => idsMatch.has(it.producto_id)));
+  }
 
   const total = ventas
     .filter((v) => v.estado === 'completada')
@@ -258,6 +280,16 @@ export default function VentasPage() {
                 <option value="cancelada">Canceladas</option>
                 <option value="presupuesto">Presupuestos</option>
               </select>
+            </div>
+            {/* Filtro por producto: código exacto si es numérico, parcial
+                por nombre si tiene letras. Mismo patrón que /productos. */}
+            <div className="md:col-span-3 lg:col-span-6">
+              <Label className="mb-1 block text-xs">Producto (código o nombre)</Label>
+              <Input
+                value={textoProducto}
+                onChange={(e) => setTextoProducto(e.target.value)}
+                placeholder="Ej: 1234 (código exacto) o 'lapicera' (parcial por nombre)"
+              />
             </div>
           </div>
         </div>
