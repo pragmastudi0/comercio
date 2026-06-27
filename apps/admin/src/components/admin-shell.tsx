@@ -104,7 +104,10 @@ const TOOLBAR: ToolbarAction[] = [
   { type: 'modal', key: 'ganancias', label: 'Ganancias hoy', icon: TrendingUp, color: 'bg-blue-100 text-blue-700' },
   { type: 'link', href: '/ventas', label: 'Ventas', icon: ShoppingCart, color: 'bg-indigo-100 text-indigo-700' },
   { type: 'modal', key: 'cargar-stock', label: 'Cargar stock', icon: PackagePlus, color: 'bg-amber-100 text-amber-700' },
-  { type: 'link', href: '/productos/nuevo', label: 'Nuevo producto', icon: PlusCircle, color: 'bg-purple-100 text-purple-700' },
+  // "Productos" abre /productos con el panel de creación inline ya
+  // activado (?nuevo=1). Es la misma vista que "Faltantes" pero con
+  // foco en agregar/editar en lugar de listar lo que falta.
+  { type: 'link', href: '/productos?nuevo=1', label: 'Productos', icon: PlusCircle, color: 'bg-purple-100 text-purple-700' },
   { type: 'link', href: '/productos?stock=bajo', label: 'Faltantes', icon: AlertTriangle, color: 'bg-red-100 text-red-700' },
 ];
 

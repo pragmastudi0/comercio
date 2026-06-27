@@ -55,8 +55,10 @@ function ProductosPageInner() {
   // Producto seleccionado (de la tabla izquierda) que se muestra en el panel.
   const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null);
   // Modo "crear nuevo" — el panel derecho se transforma en un form vacío
-  // para crear inline. Tiene prioridad sobre seleccionadoId.
-  const [modoCrear, setModoCrear] = useState(false);
+  // para crear inline. Tiene prioridad sobre seleccionadoId. Se puede
+  // pre-activar entrando con ?nuevo=1 (lo usa el botón "Productos" de
+  // la toolbar del shell).
+  const [modoCrear, setModoCrear] = useState(params.get('nuevo') === '1');
 
   useEffect(() => {
     setPage(0);
