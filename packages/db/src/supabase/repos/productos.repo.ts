@@ -18,8 +18,18 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
     if (f.proveedor_id) qq = qq.eq('proveedor_id', f.proveedor_id);
     if (f.publicado_web !== undefined) qq = qq.eq('publicado_web', f.publicado_web);
     if (f.texto) {
-      const p = `%${f.texto}%`;
-      qq = qq.or(`nombre.ilike.${p},codigo_interno.ilike.${p}`);
+      const q = f.texto.trim();
+      const esNumerico = /^\d+$/.test(q);
+      // Misma regla que en buscarRapido del PoS: si la query es 100%
+      // numérica, asumimos que es código y matcheamos EXACTO. Antes con
+      // `codigo_interno.ilike.%7%` tipear "7" traía 1776, 1697, etc.
+      // (cualquier código con un 7 dentro). Ahora "7" trae solo el
+      // código 7 exacto. Para buscar por nombre, tipear letras.
+      if (esNumerico) {
+        qq = qq.eq('codigo_interno', q);
+      } else {
+        qq = qq.ilike('nombre', `%${q}%`);
+      }
     }
     return qq;
   }
