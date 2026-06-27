@@ -27,7 +27,7 @@ import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
 import { RequierePermiso, usePermiso } from '@/lib/permisos';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 const UMBRAL_BAJO_STOCK = 5;
 
 type FiltroStock = '' | 'sin' | 'bajo';
