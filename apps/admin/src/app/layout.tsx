@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Providers } from './providers';
 import { AdminShell } from '@/components/admin-shell';
 import '@comercio/ui/styles';
+import './office-style.css';
 
 export const metadata: Metadata = {
   title: '#turisteando · Admin',

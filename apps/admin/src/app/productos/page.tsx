@@ -64,6 +64,21 @@ function ProductosPageInner() {
     setPage(0);
   }, [texto, categoriaId, proveedorId, filtroStock]);
 
+  // Sincronizar state local con los query params. Necesario porque Next.js
+  // mantiene el componente montado al navegar entre /productos?nuevo=1 y
+  // /productos?stock=bajo — los useState con valor inicial leído de params
+  // solo corren una vez al mount. Sin esto, click en "Faltantes" desde la
+  // vista de "Productos" no actualizaba el filtro.
+  useEffect(() => {
+    const stockParam = params.get('stock') ?? '';
+    setFiltroStock(
+      stockParam === 'sin' || stockParam === 'bajo' ? stockParam : '',
+    );
+    setModoCrear(params.get('nuevo') === '1');
+    setCategoriaId(params.get('categoria') ?? '');
+    setProveedorId(params.get('proveedor') ?? '');
+  }, [params]);
+
   const productosQ = useQuery({
     queryKey: ['productos-admin', texto, categoriaId, proveedorId, filtroStock, page],
     queryFn: () =>

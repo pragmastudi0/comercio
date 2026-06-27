@@ -101,7 +101,7 @@ type ToolbarAction =
 
 const TOOLBAR: ToolbarAction[] = [
   { type: 'modal', key: 'saldos', label: 'Saldos de cajas', icon: Wallet, color: 'bg-emerald-100 text-emerald-700' },
-  { type: 'modal', key: 'ganancias', label: 'Ganancias hoy', icon: TrendingUp, color: 'bg-blue-100 text-blue-700' },
+  { type: 'modal', key: 'ganancias', label: 'Ganancias', icon: TrendingUp, color: 'bg-blue-100 text-blue-700' },
   { type: 'link', href: '/ventas', label: 'Ventas', icon: ShoppingCart, color: 'bg-indigo-100 text-indigo-700' },
   { type: 'modal', key: 'cargar-stock', label: 'Cargar stock', icon: PackagePlus, color: 'bg-amber-100 text-amber-700' },
   // "Productos" abre /productos con el panel de creación inline ya

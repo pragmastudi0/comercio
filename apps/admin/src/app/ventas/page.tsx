@@ -6,7 +6,6 @@ import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { Search, Printer, ChevronDown, ChevronUp } from 'lucide-react';
 import { getDb } from '@/lib/db';
-import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@comercio/ui/table';
 import { Badge } from '@comercio/ui/badge';
 import { Button } from '@comercio/ui/button';
@@ -184,11 +183,14 @@ export default function VentasPage() {
         <p className="text-sm text-muted-foreground">Historial de ventas con filtros.</p>
       </div>
 
-      <Card className="mb-4">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* Estilo Office: divs con border-slate-300 + headers bg-slate-50.
+          Reemplaza los Card del UI para tener la misma estética que
+          /productos (más "sistema viejo / ERP de escritorio"). */}
+      <div className="mb-4 rounded border border-slate-300 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold uppercase text-slate-700">
+          Filtros
+        </div>
+        <div className="p-3">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <div>
               <Label className="mb-1 block text-xs">Desde</Label>
@@ -258,14 +260,14 @@ export default function VentasPage() {
               </select>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader className="flex flex-col items-start justify-between gap-2 pb-3 sm:flex-row sm:items-center">
-          <CardTitle className="text-sm">
+      <div className="rounded border border-slate-300 bg-white shadow-sm">
+        <div className="flex flex-col items-start justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 sm:flex-row sm:items-center">
+          <div className="text-xs font-semibold uppercase text-slate-700">
             {ventas.length} ventas · Total: {formatCurrency(total)}
-          </CardTitle>
+          </div>
           <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:items-end">
             {ventasConDescuento.length > 0 && (
               <span>
@@ -284,8 +286,8 @@ export default function VentasPage() {
               </span>
             )}
           </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div className="p-3">
           {ventasQ.isLoading ? (
             <Skeleton className="h-40" />
           ) : ventas.length === 0 ? (
@@ -413,8 +415,8 @@ export default function VentasPage() {
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Detalle de venta en popup. */}
       <Dialog
