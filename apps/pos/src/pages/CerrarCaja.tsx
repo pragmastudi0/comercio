@@ -247,7 +247,6 @@ export function CerrarCaja() {
                       <th className="px-2 py-1.5 text-right">Subtotal</th>
                       <th className="px-2 py-1.5 text-left">Pago</th>
                       <th className="px-2 py-1.5 text-left">Hora</th>
-                      <th className="px-2 py-1.5 text-left">Ticket</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -284,9 +283,6 @@ export function CerrarCaja() {
                             </td>
                             <td className="px-2 py-1">{esPrimera ? metodos : ''}</td>
                             <td className="px-2 py-1">{esPrimera ? horaTxt : ''}</td>
-                            <td className="px-2 py-1 font-mono text-[11px]">
-                              {esPrimera ? v.numero : ''}
-                            </td>
                           </tr>
                         );
                       });

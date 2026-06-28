@@ -50,6 +50,31 @@ export function Historial() {
   });
 
   const empleadosQ = useQuery({ queryKey: ['empleados'], queryFn: () => db.empleados.list() });
+
+  // Logs de auditoría para detectar ventas con cambio en el rango. Misma
+  // lógica que en /admin/ventas: cualquier venta que aparezca como original
+  // o como nueva en un log `cambio_venta` queda marcada con badge "Cambio"
+  // para que la cajera sepa que esa venta ya tuvo movimiento.
+  const auditoriaQ = useQuery({
+    queryKey: ['pos-historial-auditoria-cambios', desde],
+    queryFn: () =>
+      db.auditoria.list({
+        entidad: 'venta',
+        desde,
+      }),
+    enabled: !!caja,
+  });
+  const ventasConCambio = useMemo(() => {
+    const set = new Set<string>();
+    for (const log of auditoriaQ.data ?? []) {
+      if (log.accion !== 'cambio_venta') continue;
+      // entidad_id = venta original; detalle.venta_nueva_id = venta de la diferencia.
+      if (log.entidad_id) set.add(log.entidad_id);
+      const nueva = (log.detalle as { venta_nueva_id?: string } | null)?.venta_nueva_id;
+      if (nueva) set.add(nueva);
+    }
+    return set;
+  }, [auditoriaQ.data]);
   const empleadoNombre = (id: string) => {
     const e = empleadosQ.data?.find((x) => x.id === id);
     return e ? `${e.nombre} ${e.apellido}` : '—';
@@ -166,9 +191,15 @@ export function Historial() {
                   .map((m) => LABEL_METODO[m] ?? m)
                   .join(' + ');
                 const anulada = v.estado === 'anulada';
+                const tuvoCambio = ventasConCambio.has(v.id);
                 // Bandeo alternado por venta: ventas pares un color,
                 // impares otro, así el cajero ve qué filas son la misma.
-                const bandColor = vIdx % 2 === 0 ? 'bg-card' : 'bg-muted/30';
+                // Si tuvo cambio, banda ámbar para distinguirla a la vista.
+                const bandColor = tuvoCambio
+                  ? 'bg-amber-50'
+                  : vIdx % 2 === 0
+                    ? 'bg-card'
+                    : 'bg-muted/30';
                 return v.items.map((it, idx) => {
                   const p = productoPorId(it.producto_id);
                   const esPrimera = idx === 0;
@@ -179,7 +210,11 @@ export function Historial() {
                       className={`cursor-pointer border-b border-border/50 hover:bg-accent/40 ${bandColor} ${
                         anulada ? 'opacity-50' : ''
                       } ${esPrimera ? 'border-t-2 border-t-foreground/20' : ''}`}
-                      title="Click: ver ticket completo / cambios / anular"
+                      title={
+                        tuvoCambio
+                          ? 'Esta venta tuvo un cambio. Click: ver detalle.'
+                          : 'Click: ver ticket completo / cambios / anular'
+                      }
                     >
                       <td className="px-3 py-2 font-mono text-xs">
                         {p?.codigo_interno ?? '—'}
@@ -189,6 +224,14 @@ export function Historial() {
                           {p?.nombre ?? 'Producto borrado'}
                           {esPrimera && anulada && (
                             <Badge variant="destructive">Anul.</Badge>
+                          )}
+                          {esPrimera && tuvoCambio && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-400 bg-amber-100 text-amber-800"
+                            >
+                              Cambio
+                            </Badge>
                           )}
                         </span>
                       </td>
