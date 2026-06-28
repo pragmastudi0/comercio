@@ -209,12 +209,108 @@ export default function VentasPage() {
   };
 
   return (
-    // Layout split idéntico a /productos: TABLA a la izquierda (~70%) +
-    // FILTROS compactos a la derecha (~30%), uno debajo del otro sin
-    // scroll. La pidió Agus así.
-    <div className="flex h-[calc(100vh-180px)] flex-col gap-2 px-3 py-2 lg:flex-row">
-      {/* IZQUIERDA: tabla de ventas (70%) */}
-      <div className="flex min-h-0 flex-1 flex-col rounded border border-slate-300 bg-white shadow-sm lg:basis-[70%]">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold sm:text-2xl">Ventas</h1>
+        <p className="text-sm text-muted-foreground">Historial de ventas con filtros.</p>
+      </div>
+
+      {/* Estilo Office: divs con border-slate-300 + headers bg-slate-50.
+          Reemplaza los Card del UI para tener la misma estética que
+          /productos (más "sistema viejo / ERP de escritorio"). */}
+      <div className="mb-4 rounded border border-slate-300 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold uppercase text-slate-700">
+          Filtros
+        </div>
+        <div className="p-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
+            <div>
+              <Label className="mb-1 block text-xs">Desde</Label>
+              <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Hasta</Label>
+              <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Cajero</Label>
+              <select
+                value={empleadoId}
+                onChange={(e) => setEmpleadoId(e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos</option>
+                {(empleadosQ.data ?? []).map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.nombre} {emp.apellido}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Local</Label>
+              <select
+                value={localId}
+                onChange={(e) => setLocalId(e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos</option>
+                {(localesQ.data ?? []).map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Método de pago</Label>
+              <select
+                value={metodo}
+                onChange={(e) => setMetodo(e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos</option>
+                {/* Cta corriente queda fuera del PoS — no se ofrece como
+                    medio de pago. Excluida del filtro. */}
+                {Object.entries(LABEL_METODO)
+                  .filter(([k]) => k !== 'cta_cte')
+                  .map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Estado</Label>
+              <select
+                value={estado}
+                onChange={(e) => setEstado(e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos</option>
+                <option value="completada">Completadas</option>
+                <option value="con_cambio">Con cambio</option>
+                <option value="anulada">Anuladas</option>
+                <option value="cancelada">Canceladas</option>
+                <option value="presupuesto">Presupuestos</option>
+              </select>
+            </div>
+            {/* Filtro por producto: código exacto si es numérico, parcial
+                por nombre si tiene letras. Mismo patrón que /productos. */}
+            <div className="md:col-span-3 lg:col-span-6">
+              <Label className="mb-1 block text-xs">Producto (código o nombre)</Label>
+              <Input
+                value={textoProducto}
+                onChange={(e) => setTextoProducto(e.target.value)}
+                placeholder="Ej: 1234 (código exacto) o 'lapicera' (parcial por nombre)"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded border border-slate-300 bg-white shadow-sm">
         <div className="flex flex-col items-start justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 sm:flex-row sm:items-center">
           <div className="text-xs font-semibold uppercase text-slate-700">
             {ventas.length} ventas · Total: {formatCurrency(total)}
@@ -238,7 +334,7 @@ export default function VentasPage() {
             )}
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto p-3">
+        <div className="p-3">
           {ventasQ.isLoading ? (
             <Skeleton className="h-40" />
           ) : ventas.length === 0 ? (
@@ -366,126 +462,6 @@ export default function VentasPage() {
               </TableBody>
             </Table>
           )}
-        </div>
-      </div>
-
-      {/* DERECHA: panel de filtros compactos (30%) — todos uno debajo
-          del otro, sin scroll. Mismo patrón visual que el panel detalle
-          de /productos. */}
-      <div className="flex min-h-0 flex-col rounded border border-slate-300 bg-white shadow-sm lg:basis-[30%]">
-        <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold uppercase text-slate-700">
-          Filtros
-        </div>
-        <div className="min-h-0 flex-1 space-y-2 overflow-auto p-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="mb-0 block text-[10px] uppercase text-slate-600">Desde</Label>
-              <Input
-                type="date"
-                value={desde}
-                onChange={(e) => setDesde(e.target.value)}
-                className="h-7 text-sm"
-              />
-            </div>
-            <div>
-              <Label className="mb-0 block text-[10px] uppercase text-slate-600">Hasta</Label>
-              <Input
-                type="date"
-                value={hasta}
-                onChange={(e) => setHasta(e.target.value)}
-                className="h-7 text-sm"
-              />
-            </div>
-          </div>
-          <div>
-            <Label className="mb-0 block text-[10px] uppercase text-slate-600">Cajero</Label>
-            <select
-              value={empleadoId}
-              onChange={(e) => setEmpleadoId(e.target.value)}
-              className="h-7 w-full rounded-sm border border-slate-300 bg-white px-2 text-sm"
-            >
-              <option value="">Todos</option>
-              {(empleadosQ.data ?? []).map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.nombre} {emp.apellido}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label className="mb-0 block text-[10px] uppercase text-slate-600">Local</Label>
-            <select
-              value={localId}
-              onChange={(e) => setLocalId(e.target.value)}
-              className="h-7 w-full rounded-sm border border-slate-300 bg-white px-2 text-sm"
-            >
-              <option value="">Todos</option>
-              {(localesQ.data ?? []).map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="mb-0 block text-[10px] uppercase text-slate-600">Método</Label>
-              <select
-                value={metodo}
-                onChange={(e) => setMetodo(e.target.value)}
-                className="h-7 w-full rounded-sm border border-slate-300 bg-white px-2 text-sm"
-              >
-                <option value="">Todos</option>
-                {Object.entries(LABEL_METODO)
-                  .filter(([k]) => k !== 'cta_cte')
-                  .map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div>
-              <Label className="mb-0 block text-[10px] uppercase text-slate-600">Estado</Label>
-              <select
-                value={estado}
-                onChange={(e) => setEstado(e.target.value)}
-                className="h-7 w-full rounded-sm border border-slate-300 bg-white px-2 text-sm"
-              >
-                <option value="">Todos</option>
-                <option value="completada">Completadas</option>
-                <option value="con_cambio">Con cambio</option>
-                <option value="anulada">Anuladas</option>
-                <option value="cancelada">Canceladas</option>
-                <option value="presupuesto">Presupuestos</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <Label className="mb-0 block text-[10px] uppercase text-slate-600">
-              Producto (código o nombre)
-            </Label>
-            <Input
-              value={textoProducto}
-              onChange={(e) => setTextoProducto(e.target.value)}
-              placeholder="Ej: 1234 o 'lapicera'"
-              className="h-7 text-sm"
-            />
-          </div>
-          {/* Botón limpiar para resetear todos los filtros de una vez */}
-          <button
-            type="button"
-            onClick={() => {
-              setEmpleadoId('');
-              setLocalId('');
-              setMetodo('');
-              setEstado('');
-              setTextoProducto('');
-            }}
-            className="w-full rounded-sm border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-          >
-            Limpiar filtros (no toca fechas)
-          </button>
         </div>
       </div>
 
