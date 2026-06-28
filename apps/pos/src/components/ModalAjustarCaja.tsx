@@ -1,29 +1,32 @@
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, Wallet } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { Dialog, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
+import { formatCurrency } from '@comercio/ui/utils';
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
+type Modo = 'ingreso' | 'egreso' | 'corregir';
+
 /**
- * Dialog de ajuste de caja durante la sesión. Crea un movimiento_caja
- * tipo 'ingreso' o 'egreso' en método efectivo. Sirve para:
- *  - Corregir error de apertura (la cajera puso $10k pero eran $8k).
- *  - Cargar más plata si hace falta cambio.
- *  - Sacar plata por algún motivo durante el turno.
+ * Dialog de ajuste de caja durante la sesión. Tres modos:
+ *  - Ingreso: sumar plata.
+ *  - Egreso: sacar plata.
+ *  - Corregir total: la cajera no recuerda el saldo inicial (ej. cargó
+ *    mal al abrir). El sistema muestra el efectivo esperado, ella tipea
+ *    el monto real que hay, y se registra ingreso/egreso por la diferencia.
  *
- * El movimiento queda registrado con el motivo para auditoría. NO toca
- * el `saldo_inicial` de la sesión — la diferencia aparece como
- * movimiento explícito en el cierre.
+ * Todos los modos crean un movimiento_caja en efectivo con motivo,
+ * empleado y monto. Queda en auditoría.
  */
 export function ModalAjustarCaja({ open, onOpenChange }: Props) {
   const db = getDb();
@@ -31,37 +34,101 @@ export function ModalAjustarCaja({ open, onOpenChange }: Props) {
   const sesion = useSesion((s) => s.sesionCaja);
   const empleado = useSesion((s) => s.empleado);
 
-  const [tipo, setTipo] = useState<'ingreso' | 'egreso'>('ingreso');
+  const [modo, setModo] = useState<Modo>('ingreso');
   const [monto, setMonto] = useState('');
+  const [montoReal, setMontoReal] = useState('');
   const [motivo, setMotivo] = useState('');
+
+  // Movimientos de la sesión para calcular el efectivo esperado actual
+  // (usado en modo "Corregir total"). Refresca al abrir el modal.
+  const movsQ = useQuery({
+    queryKey: ['movimientos-sesion', sesion?.id],
+    queryFn: () => (sesion ? db.sesionesCaja.movimientos(sesion.id) : Promise.resolve([])),
+    enabled: !!sesion && open,
+  });
+
+  const efectivoEsperado = (() => {
+    if (!sesion) return 0;
+    let neto = 0;
+    for (const m of movsQ.data ?? []) {
+      if (m.metodo !== 'efectivo') continue;
+      const signo = m.tipo === 'egreso' || m.tipo === 'retiro' || m.tipo === 'anulacion' ? -1 : 1;
+      neto += signo * m.monto;
+    }
+    return sesion.saldo_inicial + neto;
+  })();
+
+  // Reset al abrir
+  useEffect(() => {
+    if (open) {
+      setMonto('');
+      setMontoReal('');
+      setMotivo('');
+      setModo('ingreso');
+    }
+  }, [open]);
+
+  // En modo "corregir", pre-llenar el input con el esperado (para que la
+  // cajera vea de qué número partir y solo modifique lo necesario).
+  useEffect(() => {
+    if (modo === 'corregir' && open) {
+      setMontoReal(String(efectivoEsperado.toFixed(2)));
+    }
+  }, [modo, open, efectivoEsperado]);
 
   const ajustarMut = useMutation({
     mutationFn: async () => {
       if (!sesion || !empleado) throw new Error('Sin sesión activa');
-      const n = parseFloat(monto);
-      if (!Number.isFinite(n) || n <= 0) throw new Error('Monto inválido');
       if (!motivo.trim()) throw new Error('Indicá un motivo');
+
+      let tipo: 'ingreso' | 'egreso';
+      let montoAbsoluto: number;
+
+      if (modo === 'corregir') {
+        const real = parseFloat(montoReal);
+        if (!Number.isFinite(real) || real < 0) throw new Error('Monto real inválido');
+        const delta = real - efectivoEsperado;
+        if (Math.abs(delta) < 0.01) {
+          throw new Error('El monto coincide con el esperado, no hace falta ajustar');
+        }
+        tipo = delta > 0 ? 'ingreso' : 'egreso';
+        montoAbsoluto = Math.abs(delta);
+      } else {
+        const n = parseFloat(monto);
+        if (!Number.isFinite(n) || n <= 0) throw new Error('Monto inválido');
+        tipo = modo;
+        montoAbsoluto = n;
+      }
+
       await db.sesionesCaja.registrarMovimiento({
         sesion_caja_id: sesion.id,
         tipo,
         metodo: 'efectivo',
-        monto: n,
+        monto: montoAbsoluto,
         empleado_id: empleado.id,
         motivo: motivo.trim(),
       });
+      return { tipo, montoAbsoluto };
     },
-    onSuccess: () => {
-      const signo = tipo === 'ingreso' ? '+' : '−';
-      toast.success(`Caja ajustada: ${signo}$${parseFloat(monto).toLocaleString('es-AR')}`);
+    onSuccess: (r) => {
+      const signo = r.tipo === 'ingreso' ? '+' : '−';
+      toast.success(
+        `Caja ajustada: ${signo}$${r.montoAbsoluto.toLocaleString('es-AR')}`,
+      );
       qc.invalidateQueries({ queryKey: ['movimientos-sesion', sesion?.id] });
-      // Reset y cerrar
       setMonto('');
+      setMontoReal('');
       setMotivo('');
-      setTipo('ingreso');
+      setModo('ingreso');
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // Para modo "corregir": preview del delta calculado
+  const realN = parseFloat(montoReal);
+  const deltaPreview =
+    modo === 'corregir' && Number.isFinite(realN) ? realN - efectivoEsperado : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} className="max-w-md">
@@ -75,60 +142,132 @@ export function ModalAjustarCaja({ open, onOpenChange }: Props) {
       </DialogHeader>
 
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2">
+        {/* Selector de modo */}
+        <div className="grid grid-cols-3 gap-1.5">
           <button
             type="button"
-            onClick={() => setTipo('ingreso')}
-            className={`flex items-center justify-center gap-2 rounded-md border p-3 text-sm font-medium transition ${
-              tipo === 'ingreso'
+            onClick={() => setModo('ingreso')}
+            className={`flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition ${
+              modo === 'ingreso'
                 ? 'border-green-600 bg-green-50 text-green-800'
                 : 'border-input hover:bg-accent'
             }`}
           >
             <ArrowDownToLine className="h-4 w-4" />
-            Ingreso (sumar)
+            Ingreso
           </button>
           <button
             type="button"
-            onClick={() => setTipo('egreso')}
-            className={`flex items-center justify-center gap-2 rounded-md border p-3 text-sm font-medium transition ${
-              tipo === 'egreso'
+            onClick={() => setModo('egreso')}
+            className={`flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition ${
+              modo === 'egreso'
                 ? 'border-orange-600 bg-orange-50 text-orange-800'
                 : 'border-input hover:bg-accent'
             }`}
           >
             <ArrowUpFromLine className="h-4 w-4" />
-            Egreso (restar)
+            Egreso
+          </button>
+          <button
+            type="button"
+            onClick={() => setModo('corregir')}
+            className={`flex items-center justify-center gap-1.5 rounded-md border p-2 text-xs font-medium transition ${
+              modo === 'corregir'
+                ? 'border-blue-600 bg-blue-50 text-blue-800'
+                : 'border-input hover:bg-accent'
+            }`}
+          >
+            <Wallet className="h-4 w-4" />
+            Corregir total
           </button>
         </div>
 
-        <div>
-          <Label className="mb-1 block text-sm">Monto</Label>
-          <Input
-            type="number"
-            step="100"
-            min="0"
-            value={monto}
-            onChange={(e) => setMonto(e.target.value)}
-            onFocus={(e) => e.currentTarget.select()}
-            placeholder="0"
-            className="text-right text-lg"
-            autoFocus
-          />
-        </div>
+        {/* Modo INGRESO / EGRESO: input de monto + motivo */}
+        {(modo === 'ingreso' || modo === 'egreso') && (
+          <>
+            <div>
+              <Label className="mb-1 block text-sm">Monto</Label>
+              <Input
+                type="number"
+                step="100"
+                min="0"
+                value={monto}
+                onChange={(e) => setMonto(e.target.value)}
+                onFocus={(e) => e.currentTarget.select()}
+                placeholder="0"
+                className="text-right text-lg"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label className="mb-1 block text-sm">Motivo</Label>
+              <Input
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                placeholder={
+                  modo === 'ingreso'
+                    ? 'Ej: Corrección saldo apertura, cambio chico'
+                    : 'Ej: Pago proveedor, sacar para cambio, etc.'
+                }
+              />
+            </div>
+          </>
+        )}
 
-        <div>
-          <Label className="mb-1 block text-sm">Motivo</Label>
-          <Input
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            placeholder={
-              tipo === 'ingreso'
-                ? 'Ej: Corrección saldo apertura, cambio chico'
-                : 'Ej: Pago proveedor, sacar para cambio, etc.'
-            }
-          />
-        </div>
+        {/* Modo CORREGIR: muestra esperado + input monto real + preview delta */}
+        {modo === 'corregir' && (
+          <>
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs uppercase text-muted-foreground">
+                  Efectivo esperado en caja
+                </span>
+                <span className="text-lg font-semibold tabular-nums">
+                  {formatCurrency(efectivoEsperado)}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Calculado del saldo inicial + ventas en efectivo − retiros.
+              </p>
+            </div>
+
+            <div>
+              <Label className="mb-1 block text-sm">Monto real que hay en caja</Label>
+              <Input
+                type="number"
+                step="100"
+                min="0"
+                value={montoReal}
+                onChange={(e) => setMontoReal(e.target.value)}
+                onFocus={(e) => e.currentTarget.select()}
+                className="text-right text-lg"
+                autoFocus
+              />
+              {Number.isFinite(realN) && Math.abs(deltaPreview) >= 0.01 && (
+                <div
+                  className={`mt-1.5 rounded p-2 text-sm font-medium ${
+                    deltaPreview > 0
+                      ? 'bg-green-50 text-green-800'
+                      : 'bg-orange-50 text-orange-800'
+                  }`}
+                >
+                  Se registrará un{' '}
+                  <b>{deltaPreview > 0 ? 'ingreso' : 'egreso'}</b> de{' '}
+                  <b>{formatCurrency(Math.abs(deltaPreview))}</b>.
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label className="mb-1 block text-sm">Motivo</Label>
+              <Input
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                placeholder="Ej: Saldo apertura mal cargado, conteo de caja"
+              />
+            </div>
+          </>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <Button
@@ -140,7 +279,13 @@ export function ModalAjustarCaja({ open, onOpenChange }: Props) {
           </Button>
           <Button
             onClick={() => ajustarMut.mutate()}
-            disabled={ajustarMut.isPending || !monto || !motivo.trim()}
+            disabled={
+              ajustarMut.isPending ||
+              !motivo.trim() ||
+              (modo === 'corregir'
+                ? !Number.isFinite(realN) || Math.abs(deltaPreview) < 0.01
+                : !monto)
+            }
           >
             {ajustarMut.isPending ? 'Guardando…' : 'Confirmar ajuste'}
           </Button>
