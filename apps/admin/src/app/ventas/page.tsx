@@ -209,21 +209,17 @@ export default function VentasPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold sm:text-2xl">Ventas</h1>
-        <p className="text-sm text-muted-foreground">Historial de ventas con filtros.</p>
-      </div>
-
-      {/* Estilo Office: divs con border-slate-300 + headers bg-slate-50.
-          Reemplaza los Card del UI para tener la misma estética que
-          /productos (más "sistema viejo / ERP de escritorio"). */}
-      <div className="mb-4 rounded border border-slate-300 bg-white shadow-sm">
+    // Layout split como /productos: filtros en sidebar izquierdo (compactos,
+    // uno debajo del otro) y tabla a la derecha tomando el resto. Toda
+    // la página entra en una sola vista sin scroll de página.
+    <div className="flex h-[calc(100vh-180px)] flex-col gap-2 px-3 py-2 lg:flex-row">
+      {/* IZQUIERDA: filtros en columna */}
+      <div className="flex min-h-0 flex-col rounded border border-slate-300 bg-white shadow-sm lg:basis-[280px] lg:shrink-0">
         <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold uppercase text-slate-700">
           Filtros
         </div>
-        <div className="p-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <div className="min-h-0 flex-1 overflow-auto p-3">
+          <div className="flex flex-col gap-3">
             <div>
               <Label className="mb-1 block text-xs">Desde</Label>
               <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
@@ -298,19 +294,20 @@ export default function VentasPage() {
             </div>
             {/* Filtro por producto: código exacto si es numérico, parcial
                 por nombre si tiene letras. Mismo patrón que /productos. */}
-            <div className="md:col-span-3 lg:col-span-6">
+            <div>
               <Label className="mb-1 block text-xs">Producto (código o nombre)</Label>
               <Input
                 value={textoProducto}
                 onChange={(e) => setTextoProducto(e.target.value)}
-                placeholder="Ej: 1234 (código exacto) o 'lapicera' (parcial por nombre)"
+                placeholder="Ej: 1234 o 'lapicera'"
               />
             </div>
           </div>
         </div>
       </div>
 
-      <div className="rounded border border-slate-300 bg-white shadow-sm">
+      {/* DERECHA: tabla de ventas */}
+      <div className="flex min-h-0 flex-1 flex-col rounded border border-slate-300 bg-white shadow-sm">
         <div className="flex flex-col items-start justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 sm:flex-row sm:items-center">
           <div className="text-xs font-semibold uppercase text-slate-700">
             {ventas.length} ventas · Total: {formatCurrency(total)}
@@ -334,7 +331,7 @@ export default function VentasPage() {
             )}
           </div>
         </div>
-        <div className="p-3">
+        <div className="min-h-0 flex-1 overflow-auto p-3">
           {ventasQ.isLoading ? (
             <Skeleton className="h-40" />
           ) : ventas.length === 0 ? (

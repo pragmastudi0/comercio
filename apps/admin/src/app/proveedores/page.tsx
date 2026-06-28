@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { Search } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
@@ -46,15 +47,45 @@ export default function ProveedoresPage() {
   const cantProductos = (id: string) =>
     (productosQ.data ?? []).filter((p) => p.proveedor_id === id).length;
 
+  const [texto, setTexto] = useState('');
+  const filtrados = useMemo(() => {
+    const all = provQ.data ?? [];
+    if (!texto.trim()) return all;
+    const q = texto.toLowerCase();
+    return all.filter(
+      (p) =>
+        p.nombre.toLowerCase().includes(q) ||
+        (p.cuit ?? '').toLowerCase().includes(q) ||
+        (p.contacto ?? '').toLowerCase().includes(q),
+    );
+  }, [provQ.data, texto]);
+
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
-      <div className="mb-6">
+      <div className="mb-4">
         <h1 className="text-xl font-semibold sm:text-2xl">Proveedores</h1>
+      </div>
+
+      {/* Buscador arriba — mismo patrón que /categorias y /productos. */}
+      <div className="mb-3 rounded border border-slate-300 bg-white p-2 shadow-sm">
+        <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">
+          Filtrar por nombre, CUIT o contacto
+        </Label>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Input
+            placeholder="Buscar proveedor"
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            className="h-8 pl-7 text-sm"
+            autoFocus
+          />
+        </div>
       </div>
 
       <AbmSimple<Proveedor>
         titulo="Proveedores"
-        rows={provQ.data ?? []}
+        rows={filtrados}
         loading={provQ.isLoading}
         newButtonLabel="Nuevo proveedor"
         columns={[

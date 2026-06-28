@@ -1,23 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Trash2 } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
-import { Button } from '@comercio/ui/button';
-import { Badge } from '@comercio/ui/badge';
 import { AbmDialogFooter, AbmSimple } from '@/components/abm-simple';
 import type { Categoria } from '@comercio/db';
-
-type AtributoDef = {
-  clave: string;
-  tipo: 'string' | 'number' | 'boolean' | 'enum';
-  opciones?: string[];
-};
 
 export default function CategoriasPage() {
   const db = getDb();
@@ -25,9 +17,14 @@ export default function CategoriasPage() {
   const categoriasQ = useQuery({ queryKey: ['categorias'], queryFn: () => db.categorias.list() });
   const productosQ = useQuery({ queryKey: ['productos-all'], queryFn: () => db.productos.list() });
 
+  const [texto, setTexto] = useState('');
+
   const crearMut = useMutation({
-    mutationFn: (input: { nombre: string; atributos: Categoria['atributos'] }) =>
-      db.categorias.create(input),
+    mutationFn: (input: { nombre: string; descripcion?: string }) =>
+      // Casting porque el tipo Categoria no incluye descripcion todavía
+      // (campo opcional agregado a la tabla por SQL; ver mensaje al cliente).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      db.categorias.create(input as any),
     onSuccess: () => {
       toast.success('Categoría creada');
       qc.invalidateQueries({ queryKey: ['categorias'] });
@@ -35,8 +32,9 @@ export default function CategoriasPage() {
     onError: (e: Error) => toast.error(e.message),
   });
   const editarMut = useMutation({
-    mutationFn: ({ id, ...patch }: { id: string } & Partial<Categoria>) =>
-      db.categorias.update(id, patch),
+    mutationFn: ({ id, ...patch }: { id: string; nombre?: string; descripcion?: string }) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      db.categorias.update(id, patch as any),
     onSuccess: () => {
       toast.success('Categoría editada');
       qc.invalidateQueries({ queryKey: ['categorias'] });
@@ -55,23 +53,60 @@ export default function CategoriasPage() {
   const cantPorCat = (id: string) =>
     (productosQ.data ?? []).filter((p) => p.categoria_id === id).length;
 
+  // Filtro por nombre — case insensitive, parcial.
+  const filtradas = useMemo(() => {
+    const all = categoriasQ.data ?? [];
+    if (!texto.trim()) return all;
+    const q = texto.toLowerCase();
+    return all.filter((c) => c.nombre.toLowerCase().includes(q));
+  }, [categoriasQ.data, texto]);
+
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
-      <div className="mb-6">
+      <div className="mb-4">
         <h1 className="text-xl font-semibold sm:text-2xl">Categorías</h1>
         <p className="text-sm text-muted-foreground">
-          Las categorías agrupan productos y definen atributos opcionales por tipo (color,
-          talle, etc.).
+          Agrupan productos para organizarlos y filtrarlos en el catálogo.
         </p>
+      </div>
+
+      {/* Buscador arriba de la tabla — sigue el patrón del cuadro de productos */}
+      <div className="mb-3 rounded border border-slate-300 bg-white p-2 shadow-sm">
+        <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">
+          Filtrar por nombre
+        </Label>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Input
+            placeholder="Nombre de la categoría"
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            className="h-8 pl-7 text-sm"
+            autoFocus
+          />
+        </div>
       </div>
 
       <AbmSimple<Categoria>
         titulo="Categorías"
-        rows={categoriasQ.data ?? []}
+        rows={filtradas}
         loading={categoriasQ.isLoading}
         newButtonLabel="Nueva categoría"
         columns={[
           { header: 'Nombre', cell: (r) => <span className="font-medium">{r.nombre}</span> },
+          {
+            header: 'Descripción',
+            cell: (r) => {
+              // Casting porque el tipo Categoria todavía no incluye descripcion.
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const desc = (r as any).descripcion as string | null | undefined;
+              return desc ? (
+                <span className="text-sm text-slate-700">{desc}</span>
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
+              );
+            },
+          },
           {
             header: 'Productos',
             cell: (r) => {
@@ -90,21 +125,6 @@ export default function CategoriasPage() {
               );
             },
           },
-          {
-            header: 'Atributos',
-            cell: (r) =>
-              r.atributos && Object.keys(r.atributos).length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {Object.entries(r.atributos).map(([k, def]) => (
-                    <Badge key={k} variant="secondary" className="text-[10px]">
-                      {k} · {def.tipo}
-                    </Badge>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-xs text-muted-foreground">—</span>
-              ),
-          },
         ]}
         buildCreate={(close) => (
           <CategoriaForm
@@ -118,7 +138,8 @@ export default function CategoriasPage() {
         buildEdit={(row, close) => (
           <CategoriaForm
             initialNombre={row.nombre}
-            initialAtributos={row.atributos}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            initialDescripcion={(row as any).descripcion ?? ''}
             onSubmit={(v) => {
               editarMut.mutate({ id: row.id, ...v });
               close();
@@ -132,7 +153,11 @@ export default function CategoriasPage() {
           return true;
         }}
         onDelete={(r) => eliminarMut.mutateAsync(r.id)}
-        emptyMessage="No hay categorías. Creá la primera con el botón de arriba."
+        emptyMessage={
+          texto.trim()
+            ? 'No se encontraron categorías con ese nombre.'
+            : 'No hay categorías. Creá la primera con el botón de arriba.'
+        }
       />
     </div>
   );
@@ -140,147 +165,47 @@ export default function CategoriasPage() {
 
 function CategoriaForm({
   initialNombre = '',
-  initialAtributos,
+  initialDescripcion = '',
   onSubmit,
   onCancel,
 }: {
   initialNombre?: string;
-  initialAtributos?: Categoria['atributos'];
-  onSubmit: (v: { nombre: string; atributos: Categoria['atributos'] }) => void;
+  initialDescripcion?: string;
+  onSubmit: (v: { nombre: string; descripcion?: string }) => void;
   onCancel: () => void;
 }) {
   const [nombre, setNombre] = useState(initialNombre);
-  const [attrs, setAttrs] = useState<AtributoDef[]>(
-    initialAtributos
-      ? Object.entries(initialAtributos).map(([clave, def]) => ({
-          clave,
-          tipo: def.tipo,
-          opciones: def.opciones,
-        }))
-      : [],
-  );
-
-  function setAttr(idx: number, patch: Partial<AtributoDef>) {
-    setAttrs(attrs.map((a, i) => (i === idx ? { ...a, ...patch } : a)));
-  }
-  function addAttr() {
-    setAttrs([...attrs, { clave: '', tipo: 'string' }]);
-  }
-  function delAttr(idx: number) {
-    setAttrs(attrs.filter((_, i) => i !== idx));
-  }
+  const [descripcion, setDescripcion] = useState(initialDescripcion);
 
   function submit() {
     if (!nombre.trim()) return;
-    // Validar claves únicas no vacías
-    const claves = attrs.map((a) => a.clave.trim()).filter(Boolean);
-    if (new Set(claves).size !== claves.length) {
-      alert('Las claves de los atributos deben ser únicas');
-      return;
-    }
-    const atributos: Categoria['atributos'] = {};
-    for (const a of attrs) {
-      const k = a.clave.trim();
-      if (!k) continue;
-      atributos[k] =
-        a.tipo === 'enum'
-          ? {
-              tipo: 'enum',
-              opciones: (a.opciones ?? []).map((o) => o.trim()).filter(Boolean),
-            }
-          : { tipo: a.tipo };
-    }
     onSubmit({
       nombre: nombre.trim(),
-      atributos: Object.keys(atributos).length ? atributos : undefined,
+      descripcion: descripcion.trim() || undefined,
     });
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div>
         <Label className="mb-1 block">Nombre</Label>
-        <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
+        <Input
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder="Ej: Jugueteria"
+          autoFocus
+        />
       </div>
-
       <div>
-        <div className="mb-2 flex items-center justify-between">
-          <Label className="text-sm">Atributos por producto (opcional)</Label>
-          <Button type="button" variant="outline" size="sm" onClick={addAttr}>
-            <Plus className="mr-1 h-3 w-3" />
-            Agregar atributo
-          </Button>
-        </div>
-        {attrs.length === 0 ? (
-          <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-            Sin atributos. Sirven para que cada producto de esta categoría tenga campos
-            extra (ej: <em>talle</em>, <em>color</em>, <em>peso</em>).
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {attrs.map((a, i) => (
-              <div key={i} className="rounded-md border p-2">
-                <div className="grid grid-cols-[1fr_140px_auto] gap-2">
-                  <div>
-                    <Label className="mb-1 block text-[10px] uppercase text-muted-foreground">
-                      Clave
-                    </Label>
-                    <Input
-                      value={a.clave}
-                      onChange={(e) =>
-                        setAttr(i, { clave: e.target.value.replace(/\s+/g, '_').toLowerCase() })
-                      }
-                      placeholder="talle"
-                    />
-                  </div>
-                  <div>
-                    <Label className="mb-1 block text-[10px] uppercase text-muted-foreground">
-                      Tipo
-                    </Label>
-                    <select
-                      value={a.tipo}
-                      onChange={(e) =>
-                        setAttr(i, { tipo: e.target.value as AtributoDef['tipo'] })
-                      }
-                      className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-                    >
-                      <option value="string">Texto</option>
-                      <option value="number">Número</option>
-                      <option value="boolean">Sí/No</option>
-                      <option value="enum">Opciones</option>
-                    </select>
-                  </div>
-                  <div className="flex items-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => delAttr(i)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-                {a.tipo === 'enum' && (
-                  <div className="mt-2">
-                    <Label className="mb-1 block text-[10px] uppercase text-muted-foreground">
-                      Opciones (separadas por coma)
-                    </Label>
-                    <Input
-                      value={(a.opciones ?? []).join(', ')}
-                      onChange={(e) =>
-                        setAttr(i, { opciones: e.target.value.split(',').map((s) => s.trim()) })
-                      }
-                      placeholder="rojo, azul, negro"
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        <Label className="mb-1 block">Descripción (opcional)</Label>
+        <textarea
+          value={descripcion}
+          onChange={(e) => setDescripcion(e.target.value)}
+          placeholder="Descripción breve de la categoría"
+          rows={3}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        />
       </div>
-
       <AbmDialogFooter onCancel={onCancel} onSubmit={submit} disabled={!nombre.trim()} />
     </div>
   );

@@ -145,7 +145,10 @@ function ProductosPageInner() {
   return (
     <div className="flex h-[calc(100vh-180px)] flex-col gap-2 px-3 py-2 lg:flex-row">
       {/* IZQUIERDA: tabla + filtros */}
-      <div className="flex min-h-0 flex-1 flex-col rounded border border-slate-300 bg-white shadow-sm lg:max-w-[60%]">
+      {/* Tabla más ancha (~70%) y panel más angosto (~30%): Agus tiene
+          que ver más productos a la vez. El panel sigue siendo cómodo
+          de leer y editar. */}
+      <div className="flex min-h-0 flex-1 flex-col rounded border border-slate-300 bg-white shadow-sm lg:basis-[70%]">
         {/* Botón "+ Nuevo producto" arriba */}
         <RequierePermiso modulo="productos" accion="crear">
           <div className="border-b border-slate-200 bg-white px-2 py-1.5">
@@ -333,7 +336,7 @@ function ProductosPageInner() {
       </div>
 
       {/* DERECHA: panel detalle del producto seleccionado */}
-      <div className="flex min-h-0 flex-1 flex-col rounded border border-slate-300 bg-white shadow-sm lg:max-w-[40%]">
+      <div className="flex min-h-0 flex-1 flex-col rounded border border-slate-300 bg-white shadow-sm lg:basis-[30%]">
         {modoCrear ? (
           <PanelNuevoProducto
             onCreated={(nuevoId) => {
@@ -502,9 +505,10 @@ function PanelProducto({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-2">
-      {/* Encabezado del panel: disponible para vender + estadísticas + código */}
-      <div className="mb-1.5 flex items-center justify-between gap-2 border-b border-slate-200 pb-1.5">
+    <div className="flex min-h-0 flex-1 flex-col p-2">
+      {/* Encabezado del panel (no scrollea): disponible para vender +
+          estadísticas + código */}
+      <div className="mb-1.5 flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 pb-1.5">
         <label
           className="flex items-center gap-1.5 text-xs"
           title="Si está desmarcado, el cajero NO encuentra el producto en el PoS. Sirve para retirar de la venta un producto sin borrarlo (ej. discontinuado pero quedó stock)."
@@ -532,8 +536,8 @@ function PanelProducto({
         </div>
       </div>
 
-      {/* Campos editables */}
-      <div className="space-y-1.5">
+      {/* Campos editables (sí scrollea acá) */}
+      <div className="min-h-0 flex-1 space-y-1.5 overflow-auto pr-1">
         <div>
           <Label className="mb-0 block text-[10px] uppercase text-slate-600">Nombre</Label>
           <Input
@@ -663,8 +667,8 @@ function PanelProducto({
         />
       </div>
 
-      {/* Footer: botones de acción */}
-      <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200 pt-2">
+      {/* Footer fijo: "Guardar" siempre visible sin scroll */}
+      <div className="mt-2 flex shrink-0 items-center justify-between gap-2 border-t border-slate-200 pt-2">
         {puedeEditar && (
           <Button
             variant="outline"
@@ -932,8 +936,8 @@ function PanelNuevoProducto({
   });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-2">
-      <div className="mb-1.5 flex items-center justify-between border-b border-slate-200 pb-1.5">
+    <div className="flex min-h-0 flex-1 flex-col p-2">
+      <div className="mb-1.5 flex shrink-0 items-center justify-between border-b border-slate-200 pb-1.5">
         <label
           className="flex items-center gap-1.5 text-xs"
           title="Si está desmarcado, el cajero NO encuentra el producto en el PoS."
@@ -949,7 +953,7 @@ function PanelNuevoProducto({
         <span className="text-xs font-semibold text-emerald-700">NUEVO</span>
       </div>
 
-      <div className="space-y-1.5">
+      <div className="min-h-0 flex-1 space-y-1.5 overflow-auto pr-1">
         <div>
           <Label className="mb-0 block text-[10px] uppercase text-slate-600">
             Nombre <span className="text-red-600">*</span>
@@ -1088,7 +1092,7 @@ function PanelNuevoProducto({
         </div>
       </div>
 
-      <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200 pt-2">
+      <div className="mt-2 flex shrink-0 items-center justify-between gap-2 border-t border-slate-200 pt-2">
         <Button asChild variant="ghost" size="sm" className="text-xs">
           <Link href="/productos/nuevo">+ Más opciones (web, etc.)</Link>
         </Button>
