@@ -240,6 +240,11 @@ function DetalleSesion({
     queryKey: ['detalle-sesion-movs', sesion.id],
     queryFn: () => db.sesionesCaja.movimientos(sesion.id),
   });
+  // Catálogo para mostrar código + nombre de cada producto vendido.
+  const productosQ = useQuery({
+    queryKey: ['productos-all-cierre-admin'],
+    queryFn: () => db.productos.list(),
+  });
 
   const ventas = (ventasQ.data ?? []) as Venta[];
   const ventasCompletadas = ventas.filter((v) => v.estado === 'completada');
@@ -312,38 +317,58 @@ function DetalleSesion({
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-muted/40 text-xs text-muted-foreground">
                 <tr>
-                  <th className="px-2 py-1.5 text-left">N°</th>
-                  <th className="px-2 py-1.5 text-left">Fecha</th>
-                  <th className="px-2 py-1.5 text-left">Método</th>
-                  <th className="px-2 py-1.5 text-right">Total</th>
+                  <th className="px-2 py-1.5 text-left">Código</th>
+                  <th className="px-2 py-1.5 text-left">Producto</th>
+                  <th className="px-2 py-1.5 text-right">Cant.</th>
+                  <th className="px-2 py-1.5 text-right">Precio</th>
+                  <th className="px-2 py-1.5 text-right">Subtotal</th>
+                  <th className="px-2 py-1.5 text-left">Pago</th>
+                  <th className="px-2 py-1.5 text-left">Hora</th>
                 </tr>
               </thead>
               <tbody>
-                {ventas.map((v) => {
+                {/* Vista producto×producto del turno: una fila por ítem
+                    vendido. Items de la misma venta se bandean visualmente
+                    para distinguir tickets. Sin columna "Ticket" — el
+                    cliente no la consulta acá. */}
+                {ventas.map((v, vIdx) => {
                   const ms = Array.from(new Set(v.pagos.map((p) => p.metodo)));
                   const metodoLabel = ms.length > 1 ? 'Mixto' : ms[0] ?? '—';
                   const anulada = v.estado === 'anulada';
-                  return (
-                    <tr
-                      key={v.id}
-                      className={`border-t ${anulada ? 'bg-red-50/40' : ''}`}
-                    >
-                      <td className="px-2 py-1.5 font-mono text-xs">
-                        {v.numero}
-                      </td>
-                      <td className="px-2 py-1.5 text-xs text-muted-foreground">
-                        {formatDate(v.fecha)}
-                      </td>
-                      <td className="px-2 py-1.5 text-xs">{metodoLabel}</td>
-                      <td
-                        className={`px-2 py-1.5 text-right tabular-nums ${
-                          anulada ? 'text-red-700 line-through' : ''
-                        }`}
+                  const banda = vIdx % 2 === 0 ? '' : 'bg-slate-50/70';
+                  const horaTxt = new Date(v.fecha).toLocaleTimeString('es-AR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  });
+                  return v.items.map((it, idx) => {
+                    const p = (productosQ.data ?? []).find((x) => x.id === it.producto_id);
+                    const esPrimera = idx === 0;
+                    const subtotal = it.subtotal ?? it.precio_unitario * it.cantidad;
+                    return (
+                      <tr
+                        key={`${v.id}-${idx}`}
+                        className={`border-t border-border/50 ${banda} ${
+                          esPrimera ? 'border-t-2 border-t-foreground/20' : ''
+                        } ${anulada ? 'bg-red-50/40 opacity-60' : ''}`}
                       >
-                        {formatCurrency(v.total)}
-                      </td>
-                    </tr>
-                  );
+                        <td className="px-2 py-1 font-mono text-[11px]">
+                          {p?.codigo_interno ?? '—'}
+                        </td>
+                        <td className={`px-2 py-1 ${anulada ? 'line-through' : ''}`}>
+                          {p?.nombre ?? 'Producto borrado'}
+                        </td>
+                        <td className="px-2 py-1 text-right tabular-nums">{it.cantidad}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">
+                          {formatCurrency(it.precio_unitario)}
+                        </td>
+                        <td className="px-2 py-1 text-right font-medium tabular-nums">
+                          {formatCurrency(subtotal)}
+                        </td>
+                        <td className="px-2 py-1 text-xs">{esPrimera ? metodoLabel : ''}</td>
+                        <td className="px-2 py-1 text-xs">{esPrimera ? horaTxt : ''}</td>
+                      </tr>
+                    );
+                  });
                 })}
               </tbody>
             </table>

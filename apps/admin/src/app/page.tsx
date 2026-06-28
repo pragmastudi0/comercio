@@ -441,12 +441,31 @@ export default function DashboardPage() {
               <p className="text-sm text-muted-foreground">Sin ventas todavía.</p>
             ) : (
               <div className="space-y-1">
-                {[...ventasRango].reverse().slice(0, 8).map((v) => (
-                  <div key={v.id} className="flex items-center justify-between text-sm">
-                    <span className="font-mono text-xs text-muted-foreground">{v.numero}</span>
-                    <span className="tabular-nums">{formatCurrency(v.total)}</span>
-                  </div>
-                ))}
+                {[...ventasRango].reverse().slice(0, 8).map((v) => {
+                  // Texto resumen de los productos de la venta: si es 1
+                  // solo, muestro el nombre; si son varios, primer nombre
+                  // + "+N más". Más útil que el número de ticket para el
+                  // dueño (pedido del cliente).
+                  const productoLookup = (id: string) =>
+                    productosLookupQ.data?.find((p) => p.id === id)?.nombre ?? 'Producto';
+                  const nombres = v.items.map((it) => productoLookup(it.producto_id));
+                  const primero = nombres[0] ?? '—';
+                  const extra = nombres.length > 1 ? ` +${nombres.length - 1} más` : '';
+                  return (
+                    <div
+                      key={v.id}
+                      className="flex items-center justify-between gap-2 text-sm"
+                    >
+                      <span className="truncate text-xs text-foreground" title={nombres.join(', ')}>
+                        {primero}
+                        {extra && (
+                          <span className="text-muted-foreground">{extra}</span>
+                        )}
+                      </span>
+                      <span className="tabular-nums">{formatCurrency(v.total)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

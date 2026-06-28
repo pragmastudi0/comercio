@@ -150,7 +150,17 @@ export default function VentasPage() {
 
   let ventas = ventasQ.data ?? [];
   if (metodo) ventas = ventas.filter((v) => v.pagos.some((p) => p.metodo === metodo));
-  if (estado) ventas = ventas.filter((v) => v.estado === estado);
+  if (estado) {
+    if (estado === 'con_cambio') {
+      // Filtro virtual: ventas que aparecen en algún log cambio_venta,
+      // ya sea como original o como nueva.
+      ventas = ventas.filter(
+        (v) => cambioComoOriginal.has(v.id) || cambioComoNueva.has(v.id),
+      );
+    } else {
+      ventas = ventas.filter((v) => v.estado === estado);
+    }
+  }
   // Filtro por código/nombre de producto. Si la query es solo dígitos, match
   // EXACTO al código; con letras, match parcial al nombre (case-insensitive).
   if (textoProducto.trim()) {
@@ -260,7 +270,11 @@ export default function VentasPage() {
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="">Todos</option>
-                {Object.entries(LABEL_METODO).map(([k, v]) => (
+                {/* Cta corriente queda fuera del PoS — no se ofrece como
+                    medio de pago. Excluida del filtro. */}
+                {Object.entries(LABEL_METODO)
+                  .filter(([k]) => k !== 'cta_cte')
+                  .map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
                   </option>
@@ -276,6 +290,7 @@ export default function VentasPage() {
               >
                 <option value="">Todos</option>
                 <option value="completada">Completadas</option>
+                <option value="con_cambio">Con cambio</option>
                 <option value="anulada">Anuladas</option>
                 <option value="cancelada">Canceladas</option>
                 <option value="presupuesto">Presupuestos</option>

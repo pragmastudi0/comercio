@@ -12,7 +12,10 @@ import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
 import type { MetodoPago } from '@comercio/db';
 
-const METODOS: MetodoPago[] = ['efectivo', 'transferencia', 'debito', 'credito', 'qr', 'cta_cte'];
+// Cta corriente queda fuera del PoS — no se usa como medio de pago.
+// La excluimos del gráfico/tabla de "métodos" para que no aparezca
+// siempre en 0 confundiendo al dueño.
+const METODOS: MetodoPago[] = ['efectivo', 'transferencia', 'debito', 'credito', 'qr'];
 const LABEL: Record<MetodoPago, string> = {
   efectivo: 'Efectivo',
   transferencia: 'Transf.',

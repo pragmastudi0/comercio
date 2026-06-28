@@ -516,7 +516,7 @@ function PanelProducto({
             disabled={!puedeEditar}
             className="h-3.5 w-3.5 rounded border-slate-300"
           />
-          <span className="font-medium text-slate-700">Disponible para vender</span>
+          <span className="font-medium text-slate-700">Mostrar en ventas</span>
         </label>
         <div className="flex items-center gap-1.5">
           <button
@@ -944,7 +944,7 @@ function PanelNuevoProducto({
             onChange={(e) => setActivo(e.target.checked)}
             className="h-3.5 w-3.5 rounded border-slate-300"
           />
-          <span className="font-medium text-slate-700">Disponible para vender</span>
+          <span className="font-medium text-slate-700">Mostrar en ventas</span>
         </label>
         <span className="text-xs font-semibold text-emerald-700">NUEVO</span>
       </div>
