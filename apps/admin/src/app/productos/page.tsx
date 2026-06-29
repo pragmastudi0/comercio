@@ -389,6 +389,7 @@ function PanelProducto({
 }) {
   const db = getDb();
   const qc = useQueryClient();
+  const empleado = useSesion((s) => s.empleado);
   const productoQ = useQuery({
     queryKey: ['producto-detalle', productoId],
     queryFn: () => db.productos.get(productoId),
@@ -427,6 +428,10 @@ function PanelProducto({
   const [categoriaId, setCategoriaId] = useState('');
   const [proveedorId, setProveedorId] = useState('');
   const [activo, setActivo] = useState(true);
+  // Deltas de stock pendientes por local (string para soportar vacío
+  // y signos). Se aplican al apretar "Guardar cambios" — además los
+  // botones +/- inline de cada local también disparan ajustes directos.
+  const [stockDeltas, setStockDeltas] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (productoQ.data) {
@@ -458,6 +463,7 @@ function PanelProducto({
   const guardarMut = useMutation({
     mutationFn: async () => {
       if (!productoQ.data) throw new Error('Producto no cargado');
+      if (!empleado) throw new Error('Sin sesión');
       // Update del producto (campos básicos).
       const patch: Partial<Producto> = {
         nombre,
@@ -474,15 +480,46 @@ function PanelProducto({
           { desde: 1, precio: precioCf },
         ]);
       }
+      // Aplicar los deltas de stock pendientes (los que el user tipeó
+      // en los inputs +/- por local pero no apretó el botón). Es lo que
+      // espera intuitivamente el dueño cuando aprieta "Guardar cambios":
+      // que se guarde TODO, incluido lo que tipeó en stock.
+      const deltasAAplicar = Object.entries(stockDeltas).filter(([, txt]) => {
+        const n = parseFloat(txt);
+        return Number.isFinite(n) && n !== 0;
+      });
+      for (const [depositoId, txt] of deltasAAplicar) {
+        await db.stock.ajustar({
+          producto_id: productoId,
+          deposito_id: depositoId,
+          cantidad: parseFloat(txt),
+          motivo: 'Ajuste desde detalle de producto',
+          empleado_id: empleado.id,
+        });
+      }
+      return { stockChanges: deltasAAplicar.length };
     },
-    onSuccess: () => {
-      toast.success('Producto actualizado');
+    onSuccess: (r) => {
+      if (r.stockChanges > 0) {
+        toast.success(`Producto actualizado · ${r.stockChanges} ajuste(s) de stock aplicados`);
+      } else {
+        toast.success('Producto actualizado');
+      }
+      // Limpiar los inputs de stock una vez aplicados.
+      setStockDeltas({});
       qc.invalidateQueries({ queryKey: ['productos-admin'] });
       qc.invalidateQueries({ queryKey: ['producto-detalle', productoId] });
       qc.invalidateQueries({ queryKey: ['producto-precios-detalle', productoId] });
+      qc.invalidateQueries({ queryKey: ['producto-stock-detalle', productoId] });
       qc.invalidateQueries({ queryKey: ['precios-cf-page'] });
+      qc.invalidateQueries({ queryKey: ['stock-totales-page'] });
+      qc.invalidateQueries({ queryKey: ['stock-consolidado'] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      // eslint-disable-next-line no-console
+      console.error('Guardar producto falló:', e);
+      toast.error(`No se pudo guardar: ${e.message}`);
+    },
   });
 
   const eliminarMut = useMutation({
@@ -657,13 +694,17 @@ function PanelProducto({
           </div>
         </div>
 
-        {/* Stock por local con cargar inline (+/-)  */}
+        {/* Stock por local: deltas controlados desde el padre. Los
+            inputs +/- siguen funcionando para ajuste rápido, Y además
+            al apretar "Guardar cambios" se aplican los deltas pendientes. */}
         <StockPorLocal
           productoId={productoId}
           depositos={depositosQ.data ?? []}
           stocks={stockQ.data ?? []}
           totalStock={totalStock}
           puedeEditar={puedeEditar}
+          deltas={stockDeltas}
+          setDeltas={setStockDeltas}
         />
       </div>
 
@@ -719,18 +760,22 @@ function StockPorLocal({
   stocks,
   totalStock,
   puedeEditar,
+  deltas,
+  setDeltas,
 }: {
   productoId: string;
   depositos: { id: string; nombre: string }[];
   stocks: { deposito_id: string; cantidad: number | string }[];
   totalStock: number;
   puedeEditar: boolean;
+  // Deltas controlados desde el padre — el botón "Guardar cambios" del
+  // panel necesita acceso para aplicarlos junto al resto de cambios.
+  deltas: Record<string, string>;
+  setDeltas: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }) {
   const db = getDb();
   const qc = useQueryClient();
   const empleado = useSesion((s) => s.empleado);
-  // Delta por local (string para que se pueda dejar vacío sin convertir a 0).
-  const [deltas, setDeltas] = useState<Record<string, string>>({});
 
   const ajustarMut = useMutation({
     mutationFn: async ({ depositoId, delta }: { depositoId: string; delta: number }) => {
