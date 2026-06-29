@@ -2,6 +2,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { AlertTriangle } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { getDb } from '@/lib/db';
@@ -34,6 +35,30 @@ export function AbrirCaja() {
       setCajaId(cajasQ.data[0]!.id);
     }
   }, [cajasQ.data, cajaId]);
+
+  // Sesiones abiertas de la caja elegida — para detectar si OTRO empleado
+  // ya está atendiendo en esta caja (típico: el dueño quiere cobrar desde
+  // su browser y un cajero ya tiene sesión abierta). No bloqueamos: solo
+  // avisamos para que se coordinen el arqueo al cerrar.
+  const sesionesQ = useQuery({
+    queryKey: ['sesiones-abiertas-caja', cajaId],
+    queryFn: () => db.sesionesCaja.list({ caja_id: cajaId }),
+    enabled: !!cajaId,
+  });
+  const empleadosQ = useQuery({
+    queryKey: ['empleados-pos'],
+    queryFn: () => db.empleados.list(),
+    enabled: !!empleado,
+  });
+  const sesionesDeOtros = (sesionesQ.data ?? []).filter(
+    (s) => s.estado === 'abierta' && s.empleado_id !== empleado?.id,
+  );
+  const nombresOtros = sesionesDeOtros
+    .map((s) => {
+      const e = empleadosQ.data?.find((x) => x.id === s.empleado_id);
+      return e ? `${e.nombre} ${e.apellido ?? ''}`.trim() : 'otro empleado';
+    })
+    .join(', ');
 
   const abrirMut = useMutation({
     mutationFn: async () => {
@@ -109,6 +134,19 @@ export function AbrirCaja() {
               </div>
             )}
           </div>
+
+          {sesionesDeOtros.length > 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+              <div>
+                <div className="font-medium">Ya hay otra sesión abierta en esta caja</div>
+                <div className="mt-0.5 text-xs">
+                  {nombresOtros} está atendiendo ahora. Podés entrar igual, pero
+                  coordiná el arqueo al cerrar para no descuadrar el efectivo.
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <Label htmlFor="saldo" className="mb-2 block">

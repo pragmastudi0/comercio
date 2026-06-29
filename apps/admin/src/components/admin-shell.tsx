@@ -19,6 +19,7 @@ import {
   PackagePlus,
   PlusCircle,
   AlertTriangle,
+  CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PRESET_IDS } from '@comercio/db';
@@ -94,21 +95,32 @@ const MENU: MenuItem[] = [
 ];
 
 // Acciones de la toolbar de íconos grandes (lo que Agus toca todo el tiempo).
-// Cada una abre un modal o navega a una ruta.
+// Cada una abre un modal o navega a una ruta. `requiere` esconde la acción
+// si el rol no tiene ese permiso (un encargado de catálogo, p.ej., solo ve
+// Cargar stock / Productos / Faltantes).
 type ToolbarAction =
-  | { type: 'modal'; key: 'saldos' | 'ganancias' | 'cargar-stock'; label: string; icon: typeof Home; color: string }
-  | { type: 'link'; href: string; label: string; icon: typeof Home; color: string; external?: boolean };
+  | { type: 'modal'; key: 'saldos' | 'ganancias' | 'cargar-stock'; label: string; icon: typeof Home; color: string; requiere?: { modulo: ModuloPermiso; accion: string } }
+  | { type: 'link'; href: string; label: string; icon: typeof Home; color: string; external?: boolean; requiere?: { modulo: ModuloPermiso; accion: string } };
+
+// URL del PoS — se abre en pestaña nueva desde el botón Cobrar. Si no se
+// define la env var, fallback al deployment de Vercel del cliente.
+const POS_URL = process.env.NEXT_PUBLIC_POS_URL ?? 'https://turisteando-pos.vercel.app';
 
 const TOOLBAR: ToolbarAction[] = [
-  { type: 'modal', key: 'saldos', label: 'Saldos de cajas', icon: Wallet, color: 'bg-emerald-100 text-emerald-700' },
-  { type: 'modal', key: 'ganancias', label: 'Ganancias', icon: TrendingUp, color: 'bg-blue-100 text-blue-700' },
-  { type: 'link', href: '/ventas', label: 'Ventas', icon: ShoppingCart, color: 'bg-indigo-100 text-indigo-700' },
-  { type: 'modal', key: 'cargar-stock', label: 'Cargar stock', icon: PackagePlus, color: 'bg-amber-100 text-amber-700' },
+  { type: 'modal', key: 'saldos', label: 'Saldos de cajas', icon: Wallet, color: 'bg-emerald-100 text-emerald-700', requiere: req('caja', 'ver_otras_del_local') },
+  { type: 'modal', key: 'ganancias', label: 'Ganancias', icon: TrendingUp, color: 'bg-blue-100 text-blue-700', requiere: req('reportes', 'ver_ganancia') },
+  { type: 'link', href: '/ventas', label: 'Ventas', icon: ShoppingCart, color: 'bg-indigo-100 text-indigo-700', requiere: req('ventas', 'crear') },
+  { type: 'modal', key: 'cargar-stock', label: 'Cargar stock', icon: PackagePlus, color: 'bg-amber-100 text-amber-700', requiere: req('stock', 'ajustar') },
   // "Productos" abre /productos con el panel de creación inline ya
   // activado (?nuevo=1). Es la misma vista que "Faltantes" pero con
   // foco en agregar/editar en lugar de listar lo que falta.
-  { type: 'link', href: '/productos?nuevo=1', label: 'Productos', icon: PlusCircle, color: 'bg-purple-100 text-purple-700' },
-  { type: 'link', href: '/productos?stock=bajo', label: 'Faltantes', icon: AlertTriangle, color: 'bg-red-100 text-red-700' },
+  { type: 'link', href: '/productos?nuevo=1', label: 'Productos', icon: PlusCircle, color: 'bg-purple-100 text-purple-700', requiere: req('productos', 'crear') },
+  { type: 'link', href: '/productos?stock=bajo', label: 'Faltantes', icon: AlertTriangle, color: 'bg-red-100 text-red-700', requiere: req('productos', 'ver') },
+  // Cobrar → abre el PoS en pestaña nueva. La sesión Supabase no se
+  // comparte cross-origin, así que Agus va a tener que loguearse ahí
+  // la primera vez. Luego el PoS guarda la sesión en localStorage del
+  // navegador. Sólo lo ven roles con permiso de abrir caja.
+  { type: 'link', href: POS_URL, label: 'Cobrar', icon: CreditCard, color: 'bg-rose-100 text-rose-700', external: true, requiere: req('caja', 'abrir') },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -118,6 +130,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const logout = useSesion((s) => s.logout);
   const { puede, cargando: permisosCargando } = usePermisos();
   const isLoginRoute = pathname === '/login';
+
+  // Filtrar la toolbar de íconos grandes por permisos. Misma lógica que
+  // el menubar: si el rol no tiene el permiso, no ve el botón.
+  const toolbarVisible = TOOLBAR.filter((action) => {
+    if (!action.requiere) return true;
+    if (permisosCargando) return false;
+    return puede(action.requiere.modulo, action.requiere.accion as AccionPermiso<ModuloPermiso>);
+  });
 
   // Filtrar items del menú según permisos. Si todos los subs de un dropdown
   // quedan filtrados, ocultamos el dropdown entero.
@@ -352,7 +372,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             cuadrado; el ícono mismo lleva el color. Border separador
             entre grupos como en Word/Excel viejos. */}
         <div className="flex h-[78px] items-center gap-0.5 overflow-x-auto border-t border-slate-300 bg-gradient-to-b from-slate-50 to-slate-100 px-2 py-1.5">
-          {TOOLBAR.map((action, idx) => {
+          {toolbarVisible.map((action) => {
             const Icon = action.icon;
             // Extraemos solo el "text-color" del color combinado para
             // pintar el ícono sin fondo (estilo más plano y clásico).

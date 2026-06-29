@@ -12,8 +12,9 @@ import { Button } from '@comercio/ui/button';
 import { AbmDialogFooter, AbmSimple } from '@/components/abm-simple';
 import { AumentoMasivoDialog } from '@/components/aumento-masivo-dialog';
 import type { ListaPrecio } from '@comercio/db';
+import { PaginaProtegida } from '@/lib/permisos';
 
-export default function ListasPrecioPage() {
+function ListasPrecioPageInner() {
   const db = getDb();
   const qc = useQueryClient();
   const listasQ = useQuery({
@@ -167,5 +168,13 @@ function ListaForm({
         disabled={!nombre.trim()}
       />
     </div>
+  );
+}
+
+export default function ListasPrecioPage() {
+  return (
+    <PaginaProtegida modulo="listas_precio" accion="ver">
+      <ListasPrecioPageInner />
+    </PaginaProtegida>
   );
 }

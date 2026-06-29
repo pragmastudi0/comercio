@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@come
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
+import { PaginaProtegida } from '@/lib/permisos';
 
 /**
  * Limpia un nombre para que sea válido en sistemas de archivos (Windows
@@ -77,7 +78,7 @@ function fmtFecha(iso: string | null | undefined): string {
   });
 }
 
-export default function BackupPage() {
+function BackupPageInner() {
   const db = getDb();
   const empleado = useSesion((s) => s.empleado);
   const esAdmin = empleado?.rol_id === ADMIN_ROLE_ID;
@@ -714,5 +715,13 @@ export default function BackupPage() {
         </CardContent>
       </Card>
     </main>
+  );
+}
+
+export default function BackupPage() {
+  return (
+    <PaginaProtegida modulo="configuracion" accion="backup_restore">
+      <BackupPageInner />
+    </PaginaProtegida>
   );
 }

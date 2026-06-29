@@ -11,8 +11,9 @@ import { Label } from '@comercio/ui/label';
 import { Badge } from '@comercio/ui/badge';
 import { AbmDialogFooter, AbmSimple } from '@/components/abm-simple';
 import type { Proveedor } from '@comercio/db';
+import { PaginaProtegida } from '@/lib/permisos';
 
-export default function ProveedoresPage() {
+function ProveedoresPageInner() {
   const db = getDb();
   const qc = useQueryClient();
   const provQ = useQuery({ queryKey: ['proveedores-admin'], queryFn: () => db.proveedores.list() });
@@ -221,5 +222,13 @@ function ProveedorForm({
         disabled={!nombre.trim()}
       />
     </div>
+  );
+}
+
+export default function ProveedoresPage() {
+  return (
+    <PaginaProtegida modulo="proveedores" accion="ver">
+      <ProveedoresPageInner />
+    </PaginaProtegida>
   );
 }

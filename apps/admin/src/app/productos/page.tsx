@@ -25,7 +25,7 @@ import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
-import { RequierePermiso, usePermiso } from '@/lib/permisos';
+import { PaginaProtegida, RequierePermiso, usePermiso } from '@/lib/permisos';
 
 const PAGE_SIZE = 100;
 const UMBRAL_BAJO_STOCK = 5;
@@ -1161,8 +1161,10 @@ function PanelNuevoProducto({
 
 export default function ProductosPage() {
   return (
-    <Suspense fallback={null}>
-      <ProductosPageInner />
-    </Suspense>
+    <PaginaProtegida modulo="productos" accion="ver">
+      <Suspense fallback={null}>
+        <ProductosPageInner />
+      </Suspense>
+    </PaginaProtegida>
   );
 }

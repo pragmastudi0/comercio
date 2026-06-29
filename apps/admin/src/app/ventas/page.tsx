@@ -20,6 +20,7 @@ import {
 } from '@comercio/ui/dialog';
 import { formatCurrency, formatDate } from '@comercio/ui/utils';
 import type { MetodoPago, Venta } from '@comercio/db';
+import { PaginaProtegida } from '@/lib/permisos';
 
 const LABEL_METODO: Record<MetodoPago, string> = {
   efectivo: 'Efectivo',
@@ -30,7 +31,7 @@ const LABEL_METODO: Record<MetodoPago, string> = {
   cta_cte: 'Cta corriente',
 };
 
-export default function VentasPage() {
+function VentasPageInner() {
   const db = getDb();
   const hoy = format(new Date(), 'yyyy-MM-dd');
   const hace7 = format(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
@@ -1099,5 +1100,13 @@ function DetalleVenta({
         </div>
       )}
     </>
+  );
+}
+
+export default function VentasPage() {
+  return (
+    <PaginaProtegida modulo="ventas" accion="crear">
+      <VentasPageInner />
+    </PaginaProtegida>
   );
 }

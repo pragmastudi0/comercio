@@ -10,8 +10,9 @@ import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { AbmDialogFooter, AbmSimple } from '@/components/abm-simple';
 import type { Categoria } from '@comercio/db';
+import { PaginaProtegida } from '@/lib/permisos';
 
-export default function CategoriasPage() {
+function CategoriasPageInner() {
   const db = getDb();
   const qc = useQueryClient();
   const categoriasQ = useQuery({ queryKey: ['categorias'], queryFn: () => db.categorias.list() });
@@ -208,5 +209,13 @@ function CategoriaForm({
       </div>
       <AbmDialogFooter onCancel={onCancel} onSubmit={submit} disabled={!nombre.trim()} />
     </div>
+  );
+}
+
+export default function CategoriasPage() {
+  return (
+    <PaginaProtegida modulo="categorias" accion="ver">
+      <CategoriasPageInner />
+    </PaginaProtegida>
   );
 }

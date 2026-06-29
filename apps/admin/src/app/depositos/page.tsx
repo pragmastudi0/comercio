@@ -21,8 +21,9 @@ import {
 import { AbmDialogFooter, AbmSimple } from '@/components/abm-simple';
 import { formatCurrency } from '@comercio/ui/utils';
 import { PRESET_IDS, type Deposito, type TipoDeposito } from '@comercio/db';
+import { PaginaProtegida } from '@/lib/permisos';
 
-export default function DepositosPage() {
+function DepositosPageInner() {
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6">
@@ -647,5 +648,13 @@ function DepositoForm({
         disabled={!nombre.trim() || (tipo === 'local' && !localId)}
       />
     </div>
+  );
+}
+
+export default function DepositosPage() {
+  return (
+    <PaginaProtegida modulo="stock" accion="ver_todos_depositos">
+      <DepositosPageInner />
+    </PaginaProtegida>
   );
 }

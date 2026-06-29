@@ -11,6 +11,7 @@ import { Label } from '@comercio/ui/label';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
 import type { MetodoPago } from '@comercio/db';
+import { PaginaProtegida } from '@/lib/permisos';
 
 // Cta corriente queda fuera del PoS — no se usa como medio de pago.
 // La excluimos del gráfico/tabla de "métodos" para que no aparezca
@@ -25,7 +26,7 @@ const LABEL: Record<MetodoPago, string> = {
   cta_cte: 'Cta cte',
 };
 
-export default function ReportesPage() {
+function ReportesPageInner() {
   const db = getDb();
   const hoy = format(new Date(), 'yyyy-MM-dd');
   const hace7 = format(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
@@ -259,5 +260,13 @@ function KpiCard({
         <div className="text-2xl font-bold tabular-nums">{valor}</div>
       </CardContent>
     </Card>
+  );
+}
+
+export default function ReportesPage() {
+  return (
+    <PaginaProtegida modulo="reportes" accion="ver_local_propio">
+      <ReportesPageInner />
+    </PaginaProtegida>
   );
 }

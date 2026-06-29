@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { ArrowRight, Plus, Send, CheckCircle2, X, Trash2, Pencil } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
-import { RequierePermiso } from '@/lib/permisos';
+import { PaginaProtegida, RequierePermiso } from '@/lib/permisos';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
@@ -24,7 +24,7 @@ const ESTADO_COLOR: Record<Transferencia['estado'], 'default' | 'secondary' | 'd
   anulada: 'destructive',
 };
 
-export default function TransferenciasPage() {
+function TransferenciasPageInner() {
   const db = getDb();
   const qc = useQueryClient();
   const empleadoId = useSesion((s) => s.empleado?.id) ?? '';
@@ -405,5 +405,13 @@ function TransferenciaDialog({
         </Button>
       </DialogFooter>
     </Dialog>
+  );
+}
+
+export default function TransferenciasPage() {
+  return (
+    <PaginaProtegida modulo="stock" accion="transferir">
+      <TransferenciasPageInner />
+    </PaginaProtegida>
   );
 }

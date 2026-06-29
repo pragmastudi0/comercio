@@ -21,8 +21,9 @@ import {
 } from '@comercio/ui/dialog';
 import { formatCurrency, formatDate } from '@comercio/ui/utils';
 import type { NotaCredito } from '@comercio/db';
+import { PaginaProtegida } from '@/lib/permisos';
 
-export default function NotasCreditoPage() {
+function NotasCreditoPageInner() {
   const db = getDb();
   const hoy = format(new Date(), 'yyyy-MM-dd');
   const hace30 = format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
@@ -548,5 +549,13 @@ function DetalleNotaCredito({
         </p>
       </div>
     </>
+  );
+}
+
+export default function NotasCreditoPage() {
+  return (
+    <PaginaProtegida modulo="ventas" accion="anular_propia_del_dia">
+      <NotasCreditoPageInner />
+    </PaginaProtegida>
   );
 }

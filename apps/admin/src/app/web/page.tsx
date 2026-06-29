@@ -31,13 +31,14 @@ import { Badge } from '@comercio/ui/badge';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
 import { PRESET_IDS } from '@comercio/db';
+import { PaginaProtegida } from '@/lib/permisos';
 
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'https://turisteando-web.vercel.app';
 // Acepta tanto el UUID real como el id legacy del mock.
 const LISTA_MAY_IDS = [PRESET_IDS.listas.mayorista, 'lp_may'];
 const PAGE_SIZE = 50;
 
-export default function WebPage() {
+function WebPageInner() {
   const db = getDb();
   const qc = useQueryClient();
   const [texto, setTexto] = useState('');
@@ -420,5 +421,13 @@ function KpiCard({
         <p className="text-xs text-muted-foreground">{sub}</p>
       </CardContent>
     </Card>
+  );
+}
+
+export default function WebPage() {
+  return (
+    <PaginaProtegida modulo="productos" accion="publicar_ecommerce">
+      <WebPageInner />
+    </PaginaProtegida>
   );
 }

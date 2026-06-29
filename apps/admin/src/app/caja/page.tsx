@@ -6,7 +6,7 @@ import { Wallet, LockOpen, Lock, Eye, ChevronDown, ChevronUp } from 'lucide-reac
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
-import { RequierePermiso } from '@/lib/permisos';
+import { PaginaProtegida, RequierePermiso } from '@/lib/permisos';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Badge } from '@comercio/ui/badge';
 import { Skeleton } from '@comercio/ui/skeleton';
@@ -24,7 +24,7 @@ import type { MetodoPago, MovimientoCaja, SesionCaja, Venta } from '@comercio/db
 
 const METODOS: MetodoPago[] = ['efectivo', 'transferencia', 'debito', 'credito', 'qr', 'cta_cte'];
 
-export default function CajasPage() {
+function CajasPageInner() {
   const db = getDb();
   const sesionesQ = useQuery({
     queryKey: ['sesiones-caja-todas'],
@@ -802,5 +802,13 @@ function SesionCard({
         </DialogFooter>
       </Dialog>
     </div>
+  );
+}
+
+export default function CajasPage() {
+  return (
+    <PaginaProtegida modulo="caja" accion="ver_propia">
+      <CajasPageInner />
+    </PaginaProtegida>
   );
 }
