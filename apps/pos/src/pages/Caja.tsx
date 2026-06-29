@@ -100,6 +100,22 @@ export function Caja() {
   useHotkeys(SHORTCUTS.pagoMixto, (e) => { e.preventDefault(); abrirCobro(); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cancelar, () => cancelarVenta(), { enableOnFormTags: true });
 
+  // Enter global = "Cobrar efectivo" cuando hay items en el carrito Y el
+  // foco NO está en un input/textarea (el buscador maneja su propio Enter:
+  // agregar producto, o si está vacío también dispara cobrar). Esto cubre
+  // los casos donde el cajero perdió foco por un click en la tabla del
+  // carrito o un Tab — apretás Enter y arranca el cobro sin tocar el mouse.
+  useHotkeys(
+    'enter',
+    (e) => {
+      if (items.length === 0) return;
+      e.preventDefault();
+      abrirCobro('efectivo');
+    },
+    { enableOnFormTags: false },
+    [items],
+  );
+
   // Supr / Backspace fuera del buscador: borra el último ítem agregado.
   // Si volvés a apretar, borra el penúltimo (que ahora es el último), etc.
   // enableOnFormTags: false → NO dispara si el foco está en input/textarea

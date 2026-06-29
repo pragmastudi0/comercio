@@ -37,14 +37,19 @@ export function usePermisos() {
     enabled: !!empleado,
   });
 
-  // Base: si el rol existe en BD usamos sus permisos guardados. Si la BD
-  // todavía no cargó pero el rol_id matchea un preset, usamos el preset
-  // hardcodeado para no devolver "false a todo" mientras carga.
-  const base =
-    rolQ.data?.permisos ??
-    (empleado?.rol_id && ROL_PRESET_POR_ID[empleado.rol_id]
-      ? PERMISOS_PRESET[ROL_PRESET_POR_ID[empleado.rol_id]!]
-      : undefined);
+  // Base de permisos:
+  // - Roles preset (admin/encargado/cajero/catalogo): SIEMPRE usamos el
+  //   preset hardcodeado de @comercio/business, ignorando lo que diga la
+  //   BD. Esto garantiza que los cambios al código se apliquen al
+  //   instante en producción sin necesidad de re-grabar el rol. Si Agus
+  //   quiere permisos custom, debe CREAR un rol nuevo en /roles, no
+  //   editar los 4 preset.
+  // - Roles custom: usamos los permisos guardados en BD. Mientras carga,
+  //   undefined (que se interpreta como "todo en false" arriba).
+  const presetKey = empleado?.rol_id ? ROL_PRESET_POR_ID[empleado.rol_id] : undefined;
+  const base = presetKey
+    ? PERMISOS_PRESET[presetKey]
+    : rolQ.data?.permisos;
 
   const efectivos = base
     ? evaluarPermisos(base, empleado?.permisos_override ?? undefined)

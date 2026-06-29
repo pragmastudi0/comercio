@@ -47,6 +47,54 @@ export function BuscadorProducto({
     inputRef.current?.focus();
   }, []);
 
+  // "Foco siempre listo": el cajero no debería tener que tocar el mouse.
+  // Dos mecanismos complementarios:
+  //
+  //  1) Tecla printable apretada fuera de cualquier input → redirigimos
+  //     el caracter al buscador. Patrón típico de PoS: tipeás un código
+  //     desde cualquier lugar y aparece en el buscador.
+  //  2) Si el body queda con foco (click en zona vacía), re-enfocamos
+  //     el buscador. No reenfocamos si el foco fue a otro input legítimo
+  //     (precio/cantidad del carrito, dialog, etc).
+  //
+  // Ambos están limitados a "estamos en la pantalla principal de Caja":
+  // detectamos eso chequeando que el body no tenga modales/dialogs abiertos
+  // (los Radix-style ponen role=dialog en el árbol del body).
+  useEffect(() => {
+    function hayModalAbierto(): boolean {
+      return !!document.querySelector('[role="dialog"], [data-state="open"][role="menu"]');
+    }
+    function esTagInteractivo(el: Element | null): boolean {
+      if (!el) return false;
+      const tag = el.tagName;
+      return (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        tag === 'BUTTON' ||
+        (el as HTMLElement).isContentEditable === true
+      );
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.length !== 1) return; // solo printable
+      if (esTagInteractivo(e.target as Element)) return;
+      if (hayModalAbierto()) return;
+      const input = inputRef.current;
+      if (!input || document.activeElement === input) return;
+      e.preventDefault();
+      input.focus();
+      // Agregar el caracter manualmente — el evento original ya pasó por
+      // body, no llegaría al input por sí solo.
+      const nuevo = (input.value ?? '') + e.key;
+      setQ(nuevo);
+      setMostrarLista(true);
+      setResaltadoIdx(0);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
   const resultadosQ = useQuery({
     queryKey: ['pos-buscar', q],
     queryFn: () => db.productos.buscarRapido(q, 8),
@@ -235,6 +283,19 @@ export function BuscadorProducto({
         ref={inputRef}
         value={q}
         autoFocus
+        onBlur={() => {
+          // Si el foco se va al body (click en zona vacía / detrás del
+          // carrito), recuperamos. Si va a OTRO input legítimo (precio,
+          // cantidad, dialog), respetamos el destino.
+          setTimeout(() => {
+            const active = document.activeElement;
+            const hayModal = !!document.querySelector('[role="dialog"]');
+            if (hayModal) return;
+            if (!active || active === document.body) {
+              inputRef.current?.focus();
+            }
+          }, 0);
+        }}
         onChange={(e) => {
           setQ(e.target.value);
           setMostrarLista(true);
