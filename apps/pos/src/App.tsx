@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Login } from './pages/Login';
 import { AbrirCaja } from './pages/AbrirCaja';
@@ -67,9 +67,6 @@ export default function App() {
  * Si no hay hash SSO, este wrapper es transparente.
  */
 function SSOGate({ children }: { children: React.ReactNode }) {
-  const setEmpleado = useSesion((s) => s.setEmpleado);
-  const logout = useSesion((s) => s.logout);
-  const navigate = useNavigate();
   const [procesando, setProcesando] = useState(() => /^#sso=/.test(window.location.hash));
 
   useEffect(() => {
@@ -88,29 +85,35 @@ function SSOGate({ children }: { children: React.ReactNode }) {
         const db = getDb();
         if (!db.empleados.hidratarSesion) {
           toast.error('Auto-login no soportado en este modo');
-          navigate('/login', { replace: true });
+          window.location.replace('/login');
           return;
         }
         const empleado = await db.empleados.hidratarSesion(at!, rt!);
         if (!empleado) {
           toast.error('Sesión expirada. Iniciá sesión normalmente.');
-          navigate('/login', { replace: true });
+          window.location.replace('/login');
           return;
         }
-        // Si el empleado SSO es distinto al persistido, limpiamos primero
-        // para no arrastrar caja/sesionCaja del usuario anterior.
-        logout();
-        setEmpleado(empleado);
+        // Pisamos toda la sesión en un único setState atómico (si veníamos
+        // logueados con otro empleado, su caja/sesion no debe arrastrarse).
+        // Zustand persist guarda en localStorage sincrónicamente, así que
+        // el siguiente reload va a leer al empleado SSO ya hidratado.
+        useSesion.setState({ empleado, caja: null, sesionCaja: null });
         toast.success(`Hola ${empleado.nombre}`);
-        navigate('/abrir-caja', { replace: true });
+        // Full reload en vez de navigate: el routing interno de React
+        // a veces no se entera del cambio de URL mientras estamos en el
+        // gate (el componente Routes está oculto detrás de "Iniciando
+        // sesión…"). location.replace garantiza que el router monte
+        // limpio en /abrir-caja con la sesión ya en localStorage.
+        window.location.replace('/abrir-caja');
       } catch (e) {
         toast.error(`No pudimos iniciar tu sesión: ${(e as Error).message}`);
-        navigate('/login', { replace: true });
+        window.location.replace('/login');
       } finally {
         setProcesando(false);
       }
     })();
-  }, [navigate, setEmpleado, logout]);
+  }, []);
 
   if (procesando) {
     return (

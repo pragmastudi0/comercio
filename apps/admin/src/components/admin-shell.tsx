@@ -131,27 +131,29 @@ const TOOLBAR: ToolbarAction[] = [
  * Abre el PoS en una pestaña nueva y le pasa la sesión Supabase actual
  * por hash fragment para que el cajero/dueño entre directo a abrir caja
  * sin volver a tipear su contraseña. Si no podemos resolver la sesión
- * (falta env, sin login, error de red), abrimos el PoS pelado y el PoS
- * pide login normal — nunca peor que antes.
+ * (falta env, sin login, error de red), abrimos el PoS con `?email=...`
+ * pre-llenado para que sólo tenga que escribir la contraseña.
  *
- * Hash fragment (no query string) porque NO viaja al servidor: queda
- * sólo en el browser y lo borramos inmediatamente al hidratar.
+ * Hash fragment (no query string) para los tokens: NO viaja al servidor,
+ * queda sólo en el browser, y el PoS lo borra apenas hidrata. El email
+ * SÍ va en query string porque no es secreto.
  */
-async function abrirPoSConSesion() {
+async function abrirPoSConSesion(emailHint?: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  let target = POS_URL;
+  const qs = emailHint ? `?email=${encodeURIComponent(emailHint)}` : '';
+  let target = `${POS_URL}/${qs}`;
   try {
     if (url && key) {
       const { createSupabaseRaw } = await import('@comercio/db');
       const sb = createSupabaseRaw(url, key);
       const { data } = await sb.auth.getSession();
       if (data.session?.access_token && data.session.refresh_token) {
-        target = `${POS_URL}/#sso=${data.session.access_token}|${data.session.refresh_token}`;
+        target = `${POS_URL}/${qs}#sso=${data.session.access_token}|${data.session.refresh_token}`;
       }
     }
   } catch {
-    // Cualquier falla cae al PoS sin SSO — mejor login manual que nada.
+    // Cualquier falla cae al PoS sin SSO — al menos el email queda pre-llenado.
   }
   window.open(target, '_blank', 'noopener');
 }
@@ -423,7 +425,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     // loguee automático. Si por algún motivo no podemos
                     // (falta env, no hay sesión, error), abrimos sin SSO.
                     if (action.href === POS_URL) {
-                      abrirPoSConSesion();
+                      abrirPoSConSesion(empleado?.email);
                     } else {
                       window.open(action.href, '_blank', 'noopener');
                     }

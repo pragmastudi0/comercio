@@ -22,7 +22,14 @@ export function Login() {
   // Si entra con otro email (cambio de turno) → /abrir-caja como siempre.
   const sesionCaja = useSesion((s) => s.sesionCaja);
   const empleadoPersistido = useSesion((s) => s.empleado);
-  const [email, setEmail] = useState('');
+  // Cuando el SSO desde admin falla y caemos al login manual, el admin
+  // nos pasa ?email=... para que el dueño/encargado no tenga que tipear
+  // el email también — sólo la contraseña.
+  const [email, setEmail] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    const param = new URLSearchParams(window.location.search).get('email');
+    return param ?? '';
+  });
   const [password, setPassword] = useState('');
 
   const loginMut = useMutation({
@@ -68,7 +75,7 @@ export function Login() {
               <Input
                 id="email"
                 type="email"
-                autoFocus
+                autoFocus={email === ''}
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -82,6 +89,7 @@ export function Login() {
               </Label>
               <PasswordInput
                 id="password"
+                autoFocus={email !== ''}
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
