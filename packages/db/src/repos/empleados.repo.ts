@@ -20,4 +20,12 @@ export type EmpleadosRepo = {
   cambiarRol(id: ID, rolId: ID): Promise<Empleado>;
   setPassword(id: ID, password: string): Promise<void>;
   autenticar(email: string, password: string): Promise<Empleado | null>;
+  /**
+   * Inicia sesión a partir de un par de tokens Supabase ya emitidos en
+   * otra app (típicamente: el admin pasa la sesión al PoS por URL para
+   * que el usuario no tenga que volver a tipear su contraseña). Setea
+   * la sesión en el cliente local y devuelve el empleado correspondiente.
+   * Devuelve null si los tokens están vencidos / inválidos.
+   */
+  hidratarSesion?(accessToken: string, refreshToken: string): Promise<Empleado | null>;
 };

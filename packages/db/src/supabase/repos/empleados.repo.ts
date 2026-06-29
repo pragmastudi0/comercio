@@ -148,5 +148,30 @@ export function makeEmpleadosRepo(sb: SupabaseClient): EmpleadosRepo {
       }
       return data as Empleado;
     },
+    async hidratarSesion(accessToken, refreshToken) {
+      // SSO admin → PoS: el admin pasa los tokens que YA tiene en su
+      // localStorage al PoS por URL hash. Acá los aplicamos al cliente
+      // local y resolvemos el empleado por el email del JWT.
+      const { data: setRes, error: setErr } = await sb.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (setErr || !setRes?.user?.email) {
+        await sb.auth.signOut().catch(() => {});
+        return null;
+      }
+      const email = setRes.user.email;
+      const { data, error } = await sb
+        .from('empleados')
+        .select('*')
+        .ilike('email', email)
+        .eq('activo', true)
+        .maybeSingle();
+      if (error || !data) {
+        await sb.auth.signOut().catch(() => {});
+        return null;
+      }
+      return data as Empleado;
+    },
   };
 }

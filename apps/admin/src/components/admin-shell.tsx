@@ -119,12 +119,42 @@ const TOOLBAR: ToolbarAction[] = [
   // foco en agregar/editar en lugar de listar lo que falta.
   { type: 'link', href: '/productos?nuevo=1', label: 'Productos', icon: PlusCircle, color: 'bg-purple-100 text-purple-700', requiere: req('productos', 'crear') },
   { type: 'link', href: '/productos?stock=bajo', label: 'Faltantes', icon: AlertTriangle, color: 'bg-red-100 text-red-700', requiere: req('productos', 'ver') },
-  // Cobrar → abre el PoS en pestaña nueva. La sesión Supabase no se
-  // comparte cross-origin, así que Agus va a tener que loguearse ahí
-  // la primera vez. Luego el PoS guarda la sesión en localStorage del
-  // navegador. Sólo lo ven roles con permiso de abrir caja.
-  { type: 'link', href: POS_URL, label: 'Cobrar', icon: CreditCard, color: 'bg-rose-100 text-rose-700', external: true, requiere: req('caja', 'abrir') },
+  // Cobrar → abre el PoS en pestaña nueva CON LA SESIÓN YA INICIADA.
+  // El handler pasa el access/refresh token de Supabase en el hash
+  // fragment (que no llega al servidor) y el PoS los aplica al boot.
+  // Sin permiso requerido: lo ven todos los roles que pueden entrar
+  // al admin (cajeros ya están bloqueados arriba).
+  { type: 'link', href: POS_URL, label: 'Cobrar', icon: CreditCard, color: 'bg-rose-100 text-rose-700', external: true },
 ];
+
+/**
+ * Abre el PoS en una pestaña nueva y le pasa la sesión Supabase actual
+ * por hash fragment para que el cajero/dueño entre directo a abrir caja
+ * sin volver a tipear su contraseña. Si no podemos resolver la sesión
+ * (falta env, sin login, error de red), abrimos el PoS pelado y el PoS
+ * pide login normal — nunca peor que antes.
+ *
+ * Hash fragment (no query string) porque NO viaja al servidor: queda
+ * sólo en el browser y lo borramos inmediatamente al hidratar.
+ */
+async function abrirPoSConSesion() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  let target = POS_URL;
+  try {
+    if (url && key) {
+      const { createSupabaseRaw } = await import('@comercio/db');
+      const sb = createSupabaseRaw(url, key);
+      const { data } = await sb.auth.getSession();
+      if (data.session?.access_token && data.session.refresh_token) {
+        target = `${POS_URL}/#sso=${data.session.access_token}|${data.session.refresh_token}`;
+      }
+    }
+  } catch {
+    // Cualquier falla cae al PoS sin SSO — mejor login manual que nada.
+  }
+  window.open(target, '_blank', 'noopener');
+}
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -388,7 +418,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   if (action.type === 'modal') {
                     setModalActivo(action.key);
                   } else if (action.external) {
-                    window.open(action.href, '_blank', 'noopener');
+                    // Si es el botón Cobrar (apunta al PoS), intentamos pasar
+                    // los tokens de Supabase en el hash para que el PoS se
+                    // loguee automático. Si por algún motivo no podemos
+                    // (falta env, no hay sesión, error), abrimos sin SSO.
+                    if (action.href === POS_URL) {
+                      abrirPoSConSesion();
+                    } else {
+                      window.open(action.href, '_blank', 'noopener');
+                    }
                   } else {
                     router.push(action.href);
                   }

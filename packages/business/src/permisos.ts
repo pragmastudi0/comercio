@@ -274,8 +274,20 @@ export const PERMISOS_PRESET: Record<RolPreset, PermisosConfig> = {
     },
     categorias: { ver: true, crear: true, editar: true },
     proveedores: { ver: true, crear: true, editar: true },
-    stock: { ver_todos_depositos: true, ajustar: true },
+    stock: { ver_propio_deposito: true, ver_todos_depositos: true, ajustar: true },
     listas_precio: { ver: true, crear: true, editar: true },
+    // Catálogo también puede entrar al PoS desde el botón "Cobrar" del
+    // admin (todos los roles del admin lo ven, no sólo el dueño). Para
+    // que efectivamente pueda operar damos los permisos mínimos de
+    // venta y caja. Sin acceso a números agregados en el admin.
+    caja: { abrir: true, cerrar: true, ingreso_efectivo: true, egreso_efectivo: true },
+    ventas: {
+      crear: true,
+      anular_propia_del_dia: true,
+      descuento_manual: true,
+      modificar_precio_unitario: true,
+    },
+    clientes: { ver: true, crear: true },
   },
 };
 
