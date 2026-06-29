@@ -75,6 +75,17 @@ export function Historial() {
     }
     return set;
   }, [auditoriaQ.data]);
+  // Items con precio editado por el cajero (logs `precio_editado`).
+  // Sirve para resaltar el precio en color en el historial.
+  const itemsConPrecioEditado = useMemo(() => {
+    const set = new Set<string>();
+    for (const log of auditoriaQ.data ?? []) {
+      if (log.accion !== 'precio_editado' || !log.entidad_id) continue;
+      const productoId = (log.detalle as { producto_id?: string } | null)?.producto_id;
+      if (productoId) set.add(`${log.entidad_id}::${productoId}`);
+    }
+    return set;
+  }, [auditoriaQ.data]);
   const empleadoNombre = (id: string) => {
     const e = empleadosQ.data?.find((x) => x.id === id);
     return e ? `${e.nombre} ${e.apellido}` : '—';
@@ -203,6 +214,9 @@ export function Historial() {
                 return v.items.map((it, idx) => {
                   const p = productoPorId(it.producto_id);
                   const esPrimera = idx === 0;
+                  const precioEditado = itemsConPrecioEditado.has(
+                    `${v.id}::${it.producto_id}`,
+                  );
                   return (
                     <tr
                       key={`${v.id}-${idx}`}
@@ -238,8 +252,16 @@ export function Historial() {
                       <td className="px-3 py-2 text-right tabular-nums">
                         {it.cantidad}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
+                      <td
+                        className={`px-3 py-2 text-right tabular-nums ${
+                          precioEditado
+                            ? 'font-semibold text-orange-700 bg-orange-50'
+                            : ''
+                        }`}
+                        title={precioEditado ? 'Precio modificado en la venta' : undefined}
+                      >
                         {formatCurrency(it.precio_unitario)}
+                        {precioEditado && <span className="ml-1 text-[10px]">●</span>}
                       </td>
                       <td className="px-3 py-2 text-xs">
                         {esPrimera ? metodos : ''}

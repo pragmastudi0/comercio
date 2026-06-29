@@ -172,6 +172,18 @@ export default function VentasPage() {
     return map;
   })();
 
+  // Set de "venta::producto" con precio editado. Permite resaltar
+  // visualmente la celda de precio en el historial.
+  const itemsConPrecioEditado = (() => {
+    const set = new Set<string>();
+    for (const log of descuentosQ.data ?? []) {
+      if (log.accion !== 'precio_editado' || !log.entidad_id) continue;
+      const productoId = (log.detalle as { producto_id?: string } | null)?.producto_id;
+      if (productoId) set.add(`${log.entidad_id}::${productoId}`);
+    }
+    return set;
+  })();
+
   let ventas = ventasQ.data ?? [];
   if (metodo) ventas = ventas.filter((v) => v.pagos.some((p) => p.metodo === metodo));
   if (estado) {
@@ -424,6 +436,9 @@ export default function VentasPage() {
                       const esPrimera = idx === 0;
                       const subtotal =
                         it.subtotal ?? it.precio_unitario * it.cantidad;
+                      const precioEditado = itemsConPrecioEditado.has(
+                        `${v.id}::${it.producto_id}`,
+                      );
                       return (
                         <TableRow
                           key={`${v.id}-${idx}`}
@@ -461,8 +476,20 @@ export default function VentasPage() {
                           <TableCell className="text-right tabular-nums">
                             {it.cantidad}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums">
+                          <TableCell
+                            className={`text-right tabular-nums ${
+                              precioEditado
+                                ? 'bg-orange-50 font-semibold text-orange-700'
+                                : ''
+                            }`}
+                            title={
+                              precioEditado
+                                ? 'Precio modificado en esta venta — ver detalle'
+                                : undefined
+                            }
+                          >
                             {formatCurrency(it.precio_unitario)}
+                            {precioEditado && <span className="ml-1 text-[10px]">●</span>}
                           </TableCell>
                           <TableCell className="text-right font-medium tabular-nums">
                             {cancelada ? '—' : formatCurrency(subtotal)}

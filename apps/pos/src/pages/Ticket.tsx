@@ -16,8 +16,7 @@ import {
 } from '@comercio/ui/dialog';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency, formatDate } from '@comercio/ui/utils';
-import { Printer, ArrowLeft, Receipt, Ban, RefreshCw } from 'lucide-react';
-import { ModalNotaCredito } from '@/components/ModalNotaCredito';
+import { Printer, ArrowLeft, Ban, RefreshCw } from 'lucide-react';
 import { ModalCambio } from '@/components/ModalCambio';
 
 const LABEL_METODO: Record<string, string> = {
@@ -35,7 +34,6 @@ export function Ticket() {
   const db = getDb();
   const qc = useQueryClient();
   const empleado = useSesion((s) => s.empleado);
-  const [ncOpen, setNcOpen] = useState(false);
   const [cambioOpen, setCambioOpen] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
   const [motivoAnular, setMotivoAnular] = useState('');
@@ -138,12 +136,6 @@ export function Ticket() {
                 Cambio
               </Button>
             )}
-            {venta.estado === 'completada' && (
-              <Button variant="outline" size="sm" onClick={() => setNcOpen(true)}>
-                <Receipt className="mr-1 h-4 w-4" />
-                Nota de crédito
-              </Button>
-            )}
             {esPropiaDelDia && (
               <Button
                 variant="outline"
@@ -162,12 +154,6 @@ export function Ticket() {
           </div>
         </div>
       </header>
-
-      <ModalNotaCredito
-        venta={venta}
-        open={ncOpen}
-        onOpenChange={setNcOpen}
-      />
 
       <ModalCambio
         venta={venta}
