@@ -219,10 +219,11 @@ export const PERMISOS_PRESET: Record<RolPreset, PermisosConfig> = {
       vender_cuenta_corriente: true,
     },
     caja: {
+      // Encargado puede ABRIR y operar caja para cobrar en el PoS,
+      // pero NO ve las pantallas con números (saldos, sesiones, arqueo
+      // de otros). El dueño es el único que ve la plata.
       abrir: true,
       cerrar: true,
-      ver_propia: true,
-      ver_otras_del_local: true,
       ingreso_efectivo: true,
       egreso_efectivo: true,
     },
@@ -239,7 +240,7 @@ export const PERMISOS_PRESET: Record<RolPreset, PermisosConfig> = {
     stock: { ver_propio_deposito: true, ajustar: true, registrar_merma: true },
     proveedores: { ver: true, crear: true, editar: true },
     listas_precio: { ver: true },
-    reportes: { ver_caja_propia: true, ver_local_propio: true, ver_ganancia: true },
+    // reportes vacío: sin dashboard, sin ganancias, sin historial de ventas.
   },
   cajero: {
     ventas: {

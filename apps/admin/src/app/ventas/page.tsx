@@ -1105,7 +1105,7 @@ function DetalleVenta({
 
 export default function VentasPage() {
   return (
-    <PaginaProtegida modulo="ventas" accion="crear">
+    <PaginaProtegida modulo="reportes" accion="ver_local_propio">
       <VentasPageInner />
     </PaginaProtegida>
   );

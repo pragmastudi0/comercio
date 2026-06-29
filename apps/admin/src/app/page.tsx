@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { PRESET_IDS } from '@comercio/db';
 import { getDb } from '@/lib/db';
+import { PaginaProtegida } from '@/lib/permisos';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { Button } from '@comercio/ui/button';
@@ -56,6 +57,14 @@ function formatHoyAR(): string {
 }
 
 export default function DashboardPage() {
+  return (
+    <PaginaProtegida modulo="reportes" accion="ver_local_propio" redirectTo="/productos">
+      <DashboardInner />
+    </PaginaProtegida>
+  );
+}
+
+function DashboardInner() {
   const db = getDb();
   const [rango, setRango] = useState<Rango>('hoy');
   const [customDesde, setCustomDesde] = useState(formatHoyAR());

@@ -1,7 +1,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, type ReactNode } from 'react';
 import {
   evaluarPermisos,
   makePuede,
@@ -97,15 +98,30 @@ export function RequierePermiso<M extends ModuloPermiso>({
 export function PaginaProtegida<M extends ModuloPermiso>({
   modulo,
   accion,
+  redirectTo,
   children,
 }: {
   modulo: M;
   accion: AccionPermiso<M>;
+  /** Si se pasa, en vez de mostrar "Acceso restringido" redirige a esta URL. */
+  redirectTo?: string;
   children: ReactNode;
 }) {
   const { puede, cargando } = usePermisos();
+  const router = useRouter();
+  const ok = !cargando && puede(modulo, accion);
+  // Cuando hay redirectTo y el usuario no tiene permiso, mandarlo a la
+  // ruta indicada en vez de mostrar la pantalla de bloqueo. Útil para
+  // la home: un encargado/catálogo va a /productos en vez de ver una
+  // pantalla "Acceso restringido" en lo primero que abre.
+  useEffect(() => {
+    if (!cargando && !ok && redirectTo) {
+      router.replace(redirectTo);
+    }
+  }, [cargando, ok, redirectTo, router]);
   if (cargando) return null;
-  if (!puede(modulo, accion)) {
+  if (!ok) {
+    if (redirectTo) return null; // mientras redirige
     return (
       <main className="container mx-auto max-w-md px-4 py-16 text-center">
         <h1 className="text-xl font-semibold">Acceso restringido</h1>

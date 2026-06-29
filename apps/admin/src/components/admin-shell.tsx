@@ -59,11 +59,14 @@ function req<M extends ModuloPermiso>(
 // Las acciones más usadas (saldos, ganancias, cargar stock, faltantes)
 // viven en la toolbar de íconos grandes debajo, no acá.
 const MENU: MenuItem[] = [
-  { label: 'Inicio', href: '/', icon: Home },
-  // Ventas como link directo (no dropdown) — el dueño lo abre constantemente
-  // y no quiere un menú extra. Notas de crédito sale del menú principal:
-  // los "cambios" ya se ven dentro del detalle de cada venta.
-  { label: 'Ventas', href: '/ventas', icon: ShoppingCart, requiere: req('ventas', 'crear') },
+  // Inicio = dashboard con KPIs financieros. Sólo lo ven los roles que
+  // pueden ver reportes (admin). Encargado/catálogo van directo a su
+  // página principal sin pasar por acá.
+  { label: 'Inicio', href: '/', icon: Home, requiere: req('reportes', 'ver_local_propio') },
+  // Ventas = historial completo (con totales). Lo ven sólo los que tienen
+  // acceso a reportes. El permiso ventas.crear es para crear venta en el
+  // PoS, no para ver el historial financiero del admin.
+  { label: 'Ventas', href: '/ventas', icon: ShoppingCart, requiere: req('reportes', 'ver_local_propio') },
   { label: 'Caja', href: '/caja', icon: Wallet, requiere: req('caja', 'ver_propia') },
   {
     label: 'Productos',
@@ -109,7 +112,7 @@ const POS_URL = process.env.NEXT_PUBLIC_POS_URL ?? 'https://turisteando-pos.verc
 const TOOLBAR: ToolbarAction[] = [
   { type: 'modal', key: 'saldos', label: 'Saldos de cajas', icon: Wallet, color: 'bg-emerald-100 text-emerald-700', requiere: req('caja', 'ver_otras_del_local') },
   { type: 'modal', key: 'ganancias', label: 'Ganancias', icon: TrendingUp, color: 'bg-blue-100 text-blue-700', requiere: req('reportes', 'ver_ganancia') },
-  { type: 'link', href: '/ventas', label: 'Ventas', icon: ShoppingCart, color: 'bg-indigo-100 text-indigo-700', requiere: req('ventas', 'crear') },
+  { type: 'link', href: '/ventas', label: 'Ventas', icon: ShoppingCart, color: 'bg-indigo-100 text-indigo-700', requiere: req('reportes', 'ver_local_propio') },
   { type: 'modal', key: 'cargar-stock', label: 'Cargar stock', icon: PackagePlus, color: 'bg-amber-100 text-amber-700', requiere: req('stock', 'ajustar') },
   // "Productos" abre /productos con el panel de creación inline ya
   // activado (?nuevo=1). Es la misma vista que "Faltantes" pero con
