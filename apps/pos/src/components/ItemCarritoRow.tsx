@@ -12,7 +12,9 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
   const db = getDb();
   const setCantidad = useVenta((s) => s.setCantidad);
   const setPrecio = useVenta((s) => s.setPrecio);
+  const setMotivoPrecio = useVenta((s) => s.setMotivoPrecio);
   const setDescuento = useVenta((s) => s.setDescuentoLinea);
+  const setMotivoDescuentoLinea = useVenta((s) => s.setMotivoDescuentoLinea);
   const quitar = useVenta((s) => s.quitar);
   const seleccionar = useVenta((s) => s.seleccionar);
   const seleccionado = useVenta((s) => s.seleccionadoId === item.producto.id);
@@ -70,10 +72,18 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
     setDescuento(item.producto.id, pct > 0 ? pct : undefined);
   }
 
+  // Si hubo cambio de precio o descuento por línea, mostramos una
+  // sub-fila debajo con un input de motivo (obligatorio al cobrar).
+  // Queda guardado en auditoría y se ve después en el detalle de la venta.
+  const requiereMotivoPrecio = item.precio_unitario !== item.precio_base;
+  const requiereMotivoDescuento = !!item.descuento_pct && item.descuento_pct > 0;
+  const mostrarMotivos = requiereMotivoPrecio || requiereMotivoDescuento;
+
   return (
+    <>
     <tr
       onClick={() => seleccionar(item.producto.id)}
-      className={`cursor-pointer border-b align-top last:border-0 ${
+      className={`cursor-pointer ${mostrarMotivos ? '' : 'border-b'} align-top last:border-0 ${
         seleccionado ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : 'hover:bg-muted/40'
       }`}
     >
@@ -183,5 +193,53 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
         </Button>
       </td>
     </tr>
+
+    {/* Sub-fila con motivos: solo aparece si el cajero editó precio o
+        aplicó descuento en esta línea. Sin motivo, el cobro se bloquea
+        con un toast claro y el motivo queda en auditoría. */}
+    {mostrarMotivos && (
+      <tr
+        className={`border-b align-top last:border-0 ${
+          seleccionado ? 'bg-primary/10' : 'bg-muted/20'
+        }`}
+        onClick={() => seleccionar(item.producto.id)}
+      >
+        <td colSpan={7} className="px-3 pb-2 pt-0">
+          <div className="flex flex-wrap gap-2 text-[11px]">
+            {requiereMotivoPrecio && (
+              <div className="flex flex-1 items-center gap-1.5 rounded border border-orange-300 bg-orange-50/60 px-2 py-1">
+                <span className="font-medium text-orange-800 whitespace-nowrap">
+                  Motivo cambio de precio:
+                </span>
+                <Input
+                  type="text"
+                  value={item.motivo_precio ?? ''}
+                  onChange={(e) => setMotivoPrecio(item.producto.id, e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Ej: promo, cliente conocido, daño en la unidad"
+                  className="h-6 flex-1 border-orange-300 bg-white text-xs"
+                />
+              </div>
+            )}
+            {requiereMotivoDescuento && (
+              <div className="flex flex-1 items-center gap-1.5 rounded border border-green-300 bg-green-50/60 px-2 py-1">
+                <span className="font-medium text-green-800 whitespace-nowrap">
+                  Motivo descuento {item.descuento_pct}%:
+                </span>
+                <Input
+                  type="text"
+                  value={item.motivo_descuento_linea ?? ''}
+                  onChange={(e) => setMotivoDescuentoLinea(item.producto.id, e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Ej: cliente frecuente, error de marcado"
+                  className="h-6 flex-1 border-green-300 bg-white text-xs"
+                />
+              </div>
+            )}
+          </div>
+        </td>
+      </tr>
+    )}
+    </>
   );
 }

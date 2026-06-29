@@ -12,6 +12,12 @@ export type ItemCarrito = {
   precio_unitario: number;
   precio_base: number;
   descuento_pct?: number;
+  /** Motivo del cambio de precio. Obligatorio si precio_unitario != precio_base
+   *  al confirmar la venta. Queda en auditoría. */
+  motivo_precio?: string;
+  /** Motivo del descuento por línea. Obligatorio si descuento_pct > 0
+   *  al confirmar la venta. Queda en auditoría. */
+  motivo_descuento_linea?: string;
 };
 
 export type ModoDescuento = 'pct' | 'monto';
@@ -50,7 +56,9 @@ type VentaState = {
   agregar: (producto: Producto, precio: number) => void;
   setCantidad: (productoId: string, cantidad: number) => void;
   setPrecio: (productoId: string, precio: number) => void;
+  setMotivoPrecio: (productoId: string, motivo: string) => void;
   setDescuentoLinea: (productoId: string, pct: number | undefined) => void;
+  setMotivoDescuentoLinea: (productoId: string, motivo: string) => void;
   quitar: (productoId: string) => void;
   seleccionar: (productoId: string | null) => void;
   moverSeleccion: (delta: 1 | -1) => void;
@@ -114,16 +122,47 @@ export const useVenta = create<VentaState>()(
         set((state) => ({
           // Bloqueamos precios ≤ 0. Si el cajero edita y borra el campo,
           // el input vuelve al mínimo en lugar de quedar en 0/negativo.
+          // Si el nuevo precio vuelve al base, limpiamos el motivo (ya no
+          // es un precio "editado").
+          items: state.items.map((i) => {
+            if (i.producto.id !== productoId) return i;
+            const nuevo = Math.max(PRECIO_MINIMO, precio);
+            return {
+              ...i,
+              precio_unitario: nuevo,
+              motivo_precio:
+                nuevo === i.precio_base ? undefined : i.motivo_precio,
+            };
+          }),
+        })),
+      setMotivoPrecio: (productoId, motivo) =>
+        set((state) => ({
           items: state.items.map((i) =>
             i.producto.id === productoId
-              ? { ...i, precio_unitario: Math.max(PRECIO_MINIMO, precio) }
+              ? { ...i, motivo_precio: motivo || undefined }
               : i,
           ),
         })),
       setDescuentoLinea: (productoId, pct) =>
         set((state) => ({
+          // Si el descuento se borra (pct=0/undefined), también limpiamos
+          // el motivo asociado.
           items: state.items.map((i) =>
-            i.producto.id === productoId ? { ...i, descuento_pct: pct } : i,
+            i.producto.id === productoId
+              ? {
+                  ...i,
+                  descuento_pct: pct,
+                  motivo_descuento_linea: pct ? i.motivo_descuento_linea : undefined,
+                }
+              : i,
+          ),
+        })),
+      setMotivoDescuentoLinea: (productoId, motivo) =>
+        set((state) => ({
+          items: state.items.map((i) =>
+            i.producto.id === productoId
+              ? { ...i, motivo_descuento_linea: motivo || undefined }
+              : i,
           ),
         })),
       quitar: (productoId) =>

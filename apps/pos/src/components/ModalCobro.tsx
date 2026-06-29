@@ -263,6 +263,23 @@ export function ModalCobro({
       const pagosUsar = pagosOverride ?? pagos;
       if (pagosUsar.length === 0) throw new Error('No hay pagos');
 
+      // Validación: cada línea con precio editado o descuento debe tener
+      // motivo. Sin esto, ni se intenta la venta — el cajero ve el toast
+      // y corrige antes de seguir. Los motivos quedan en auditoría
+      // después de crear la venta (más abajo).
+      for (const it of items) {
+        if (it.precio_unitario !== it.precio_base && !it.motivo_precio?.trim()) {
+          throw new Error(
+            `Falta motivo del cambio de precio para "${it.producto.nombre}"`,
+          );
+        }
+        if (it.descuento_pct && it.descuento_pct > 0 && !it.motivo_descuento_linea?.trim()) {
+          throw new Error(
+            `Falta motivo del descuento aplicado a "${it.producto.nombre}"`,
+          );
+        }
+      }
+
       // Defensa final: validar que todos los IDs que viajan al RPC sean UUID.
       // Si algo está roto en la sesión, falla con mensaje claro antes de pegarle
       // a Supabase (evita el cryptic "invalid input syntax for type uuid").
@@ -401,6 +418,58 @@ export function ModalCobro({
           },
         });
       }
+      // Registrar auditoría por cada línea con precio editado o descuento.
+      // Cada log queda atado a la venta para que el admin lo muestre en el
+      // detalle. Los hacemos en paralelo (no esperan unos a otros) porque
+      // no son críticos al éxito de la venta.
+      const logsLinea: Promise<unknown>[] = [];
+      for (const it of items) {
+        if (it.precio_unitario !== it.precio_base) {
+          logsLinea.push(
+            db.auditoria.log({
+              empleado_id: empleado.id,
+              accion: 'precio_editado',
+              entidad: 'venta',
+              entidad_id: venta.id,
+              detalle: {
+                producto_id: it.producto.id,
+                producto_nombre: it.producto.nombre,
+                codigo_interno: it.producto.codigo_interno,
+                precio_base: it.precio_base,
+                precio_nuevo: it.precio_unitario,
+                diferencia: it.precio_unitario - it.precio_base,
+                cantidad: it.cantidad,
+                motivo: it.motivo_precio ?? null,
+              },
+            }),
+          );
+        }
+        if (it.descuento_pct && it.descuento_pct > 0) {
+          logsLinea.push(
+            db.auditoria.log({
+              empleado_id: empleado.id,
+              accion: 'descuento_linea',
+              entidad: 'venta',
+              entidad_id: venta.id,
+              detalle: {
+                producto_id: it.producto.id,
+                producto_nombre: it.producto.nombre,
+                codigo_interno: it.producto.codigo_interno,
+                porcentaje: it.descuento_pct,
+                precio_unitario: it.precio_unitario,
+                cantidad: it.cantidad,
+                motivo: it.motivo_descuento_linea ?? null,
+              },
+            }),
+          );
+        }
+      }
+      // No esperamos a que terminen — si alguno falla solo loguea console
+      // y la venta queda registrada igual.
+      Promise.all(logsLinea).catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('Algunos logs de auditoría por línea fallaron:', e);
+      });
       return venta;
     },
     onSuccess: (v) => {

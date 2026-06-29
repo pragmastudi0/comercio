@@ -148,6 +148,30 @@ export default function VentasPage() {
     return { cambioComoOriginal: original, cambioComoNueva: nueva };
   })();
 
+  // Map ventaId → [logs de precio_editado / descuento_linea]. Lo arma
+  // el popup de detalle para listar los motivos al lado de cada producto.
+  type LogLinea = {
+    accion: 'precio_editado' | 'descuento_linea';
+    detalle: Record<string, unknown>;
+  };
+  const motivosLineaPorVenta = (() => {
+    const map = new Map<string, LogLinea[]>();
+    for (const log of descuentosQ.data ?? []) {
+      if (
+        (log.accion !== 'precio_editado' && log.accion !== 'descuento_linea') ||
+        !log.entidad_id
+      )
+        continue;
+      const arr = map.get(log.entidad_id) ?? [];
+      arr.push({
+        accion: log.accion,
+        detalle: (log.detalle ?? {}) as Record<string, unknown>,
+      });
+      map.set(log.entidad_id, arr);
+    }
+    return map;
+  })();
+
   let ventas = ventasQ.data ?? [];
   if (metodo) ventas = ventas.filter((v) => v.pagos.some((p) => p.metodo === metodo));
   if (estado) {
@@ -493,6 +517,7 @@ export default function VentasPage() {
               )}
               cambioComoNueva={enrich(cambioComoNueva.get(ventaDetalle.id))}
               productosCache={productosQ.data ?? []}
+              motivosLinea={motivosLineaPorVenta.get(ventaDetalle.id) ?? []}
             />
           );
         })()}
@@ -536,6 +561,7 @@ function DetalleVenta({
   cambioComoOriginal,
   cambioComoNueva,
   productosCache,
+  motivosLinea,
 }: {
   venta: Venta;
   empleadoNombre: (id: string) => string;
@@ -544,6 +570,10 @@ function DetalleVenta({
   cambioComoOriginal: CambioInfoView | null;
   cambioComoNueva: CambioInfoView | null;
   productosCache: { id: string; codigo_interno: string; nombre: string }[];
+  motivosLinea: {
+    accion: 'precio_editado' | 'descuento_linea';
+    detalle: Record<string, unknown>;
+  }[];
 }) {
   const db = getDb();
   const productoInfo = (id: string) =>
@@ -942,6 +972,77 @@ function DetalleVenta({
           <span className="tabular-nums">{formatCurrency(venta.total)}</span>
         </div>
       </div>
+
+      {/* Motivos por línea (precios editados y descuentos por línea).
+          Cada uno guardado en auditoría desde el PoS al momento del cobro. */}
+      {motivosLinea.length > 0 && (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+          <div className="mb-2 text-xs font-semibold uppercase text-amber-800">
+            Cambios manuales en esta venta
+          </div>
+          <ul className="space-y-1.5 text-xs">
+            {motivosLinea.map((log, i) => {
+              const d = log.detalle;
+              const nombre = (d.producto_nombre as string) ?? '—';
+              const codigo = (d.codigo_interno as string) ?? '—';
+              const motivo = (d.motivo as string | null) ?? null;
+              if (log.accion === 'precio_editado') {
+                const base = Number(d.precio_base ?? 0);
+                const nuevo = Number(d.precio_nuevo ?? 0);
+                const diff = nuevo - base;
+                return (
+                  <li
+                    key={i}
+                    className="rounded border border-orange-200 bg-white p-2"
+                  >
+                    <div className="font-medium text-orange-900">
+                      <span className="font-mono text-[10px] text-slate-500">
+                        #{codigo}
+                      </span>{' '}
+                      {nombre} — precio editado
+                    </div>
+                    <div className="text-[11px] text-slate-700">
+                      Base {formatCurrency(base)} → Cobrado{' '}
+                      <b>{formatCurrency(nuevo)}</b>{' '}
+                      <span
+                        className={diff < 0 ? 'text-green-700' : 'text-orange-700'}
+                      >
+                        ({diff > 0 ? '+' : ''}
+                        {formatCurrency(diff)})
+                      </span>
+                    </div>
+                    {motivo && (
+                      <div className="mt-0.5 text-[11px] italic text-slate-600">
+                        Motivo: {motivo}
+                      </div>
+                    )}
+                  </li>
+                );
+              }
+              // descuento_linea
+              const pct = Number(d.porcentaje ?? 0);
+              return (
+                <li
+                  key={i}
+                  className="rounded border border-green-200 bg-white p-2"
+                >
+                  <div className="font-medium text-green-900">
+                    <span className="font-mono text-[10px] text-slate-500">
+                      #{codigo}
+                    </span>{' '}
+                    {nombre} — descuento {pct}%
+                  </div>
+                  {motivo && (
+                    <div className="mt-0.5 text-[11px] italic text-slate-600">
+                      Motivo: {motivo}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Anulación, si aplica */}
       {venta.estado === 'anulada' && (
