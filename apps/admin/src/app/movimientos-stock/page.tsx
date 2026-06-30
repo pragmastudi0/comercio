@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { ArrowLeftRight, RefreshCw, Search } from 'lucide-react';
+import { ArrowLeftRight, ArrowRight, RefreshCw, Search } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { PaginaProtegida } from '@/lib/permisos';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
@@ -12,15 +12,6 @@ import { Label } from '@comercio/ui/label';
 import { Button } from '@comercio/ui/button';
 import { Badge } from '@comercio/ui/badge';
 import { Skeleton } from '@comercio/ui/skeleton';
-
-const LABEL_TIPO: Record<string, string> = {
-  venta: 'Venta',
-  devolucion: 'Devolución',
-  ajuste: 'Ajuste',
-  merma: 'Merma',
-  transferencia_salida: 'Transferencia salida',
-  transferencia_entrada: 'Transferencia entrada',
-};
 
 function formatHora(iso: string): string {
   return new Date(iso).toLocaleString('es-AR', {
@@ -39,21 +30,26 @@ function MovimientosStockInner() {
 
   const [desde, setDesde] = useState(hace7);
   const [hasta, setHasta] = useState(hoy);
-  const [tipo, setTipo] = useState<string>('');
   const [empleadoId, setEmpleadoId] = useState<string>('');
   const [depositoId, setDepositoId] = useState<string>('');
   const [texto, setTexto] = useState<string>('');
+  // Filtro de "solo activas" — esconde las transferencias que ya fueron
+  // anuladas. Por default ON: lo más usual es ver lo que sigue vigente.
+  const [soloActivas, setSoloActivas] = useState(true);
 
   const desdeIso = new Date(`${desde}T00:00:00`).toISOString();
   const hastaIso = new Date(`${hasta}T23:59:59`).toISOString();
 
+  // OJO: no filtramos por deposito_id en el query porque cada transferencia
+  // tiene 2 movs (uno por depósito). Si filtramos en el server, traemos solo
+  // la mitad del par y no podemos reconstruir la fila "Origen → Destino".
+  // El filtro por depósito se aplica DESPUÉS de armar los pares.
   const movsQ = useQuery({
-    queryKey: ['admin-movs-stock', desdeIso, hastaIso, depositoId],
+    queryKey: ['admin-movs-stock', desdeIso, hastaIso],
     queryFn: () =>
       db.stock.movimientos({
         desde: desdeIso,
         hasta: hastaIso,
-        deposito_id: depositoId || undefined,
       }),
     refetchInterval: 30_000,
   });
@@ -83,30 +79,97 @@ function MovimientosStockInner() {
     return m;
   }, [empleadosQ.data]);
 
-  // Filtrado client-side: tipo, empleado, texto (código o nombre)
-  const movsFiltrados = useMemo(() => {
-    let movs = movsQ.data ?? [];
-    if (tipo === 'transferencia') {
-      movs = movs.filter(
-        (m) => m.tipo === 'transferencia_salida' || m.tipo === 'transferencia_entrada',
-      );
-    } else if (tipo) {
-      movs = movs.filter((m) => m.tipo === tipo);
+  // Agrupamos las transferencias en pares (salida+entrada con misma
+  // fecha+producto+cantidad) — cada par es UNA fila "De → A" en la tabla.
+  // Las anulaciones se detectan por motivo y se marcan sobre la transferencia
+  // original, en vez de listarlas como filas propias.
+  type Transferencia = {
+    keyPar: string;
+    salidaId: string;
+    fecha: string;
+    producto_id: string;
+    cantidad: number;
+    origen_id: string;
+    destino_id: string;
+    empleado_id: string;
+    motivo?: string;
+    anulada: boolean;
+    /** Si la transferencia ES una anulación de otra, este flag la marca.
+     * Útil para verla cuando soloActivas=false. */
+    esAnulacionDe?: string;
+  };
+
+  const transferencias = useMemo<Transferencia[]>(() => {
+    const movs = (movsQ.data ?? []).filter(
+      (m) =>
+        m.tipo === 'transferencia_salida' || m.tipo === 'transferencia_entrada',
+    );
+    const grupos = new Map<
+      string,
+      { salida?: typeof movs[number]; entrada?: typeof movs[number] }
+    >();
+    for (const m of movs) {
+      const key = `${m.producto_id}|${m.cantidad}|${m.fecha}`;
+      const g = grupos.get(key) ?? {};
+      if (m.tipo === 'transferencia_salida') g.salida = m;
+      else g.entrada = m;
+      grupos.set(key, g);
     }
-    if (empleadoId) movs = movs.filter((m) => m.empleado_id === empleadoId);
+    const pares: Transferencia[] = [];
+    const anuladasIds = new Set<string>();
+    for (const [, g] of grupos) {
+      if (!g.salida || !g.entrada) continue;
+      const motivo = g.salida.motivo ?? '';
+      const matchAnul = /^Anulaci[óo]n de transferencia (\S+)/.exec(motivo);
+      pares.push({
+        keyPar: g.salida.id,
+        salidaId: g.salida.id,
+        fecha: g.salida.fecha,
+        producto_id: g.salida.producto_id,
+        cantidad: g.salida.cantidad,
+        origen_id: g.salida.deposito_id,
+        destino_id: g.entrada.deposito_id,
+        empleado_id: g.salida.empleado_id,
+        motivo: g.salida.motivo,
+        anulada: false,
+        esAnulacionDe: matchAnul?.[1],
+      });
+      if (matchAnul) anuladasIds.add(matchAnul[1]!);
+    }
+    // Marcar las que tienen anulación
+    for (const t of pares) {
+      if (anuladasIds.has(t.salidaId)) t.anulada = true;
+    }
+    return pares;
+  }, [movsQ.data]);
+
+  const transferenciasFiltradas = useMemo(() => {
+    let lista = transferencias;
+    // Por default escondemos tanto las anuladas como las propias filas
+    // de anulación. Si soloActivas=false, las mostramos para auditoría.
+    if (soloActivas) {
+      lista = lista.filter((t) => !t.anulada && !t.esAnulacionDe);
+    }
+    if (depositoId) {
+      lista = lista.filter(
+        (t) => t.origen_id === depositoId || t.destino_id === depositoId,
+      );
+    }
+    if (empleadoId) {
+      lista = lista.filter((t) => t.empleado_id === empleadoId);
+    }
     if (texto.trim()) {
       const q = texto.trim().toLowerCase();
       const esNumerico = /^\d+$/.test(q);
-      movs = movs.filter((m) => {
-        const p = prodPorId.get(m.producto_id);
+      lista = lista.filter((t) => {
+        const p = prodPorId.get(t.producto_id);
         if (!p) return false;
         if (esNumerico) return p.codigo_interno === q;
         return p.nombre.toLowerCase().includes(q);
       });
     }
-    // Más nuevos arriba
-    return [...movs].sort((a, b) => b.fecha.localeCompare(a.fecha));
-  }, [movsQ.data, tipo, empleadoId, texto, prodPorId]);
+    return [...lista].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  }, [transferencias, soloActivas, depositoId, empleadoId, texto, prodPorId]);
 
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
@@ -117,7 +180,8 @@ function MovimientosStockInner() {
             Movimientos de stock
           </h1>
           <p className="text-sm text-muted-foreground">
-            Quién movió qué, cuánto, de dónde a dónde y cuándo. Refresca cada 30s.
+            Transferencias asentadas desde el PoS: quién movió qué cantidad,
+            de qué local a cuál y cuándo. Refresca cada 30s.
           </p>
         </div>
         <Button
@@ -136,7 +200,7 @@ function MovimientosStockInner() {
           <CardTitle className="text-sm">Filtros</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-5">
             <div>
               <Label className="mb-1 block text-xs">Desde</Label>
               <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
@@ -146,28 +210,13 @@ function MovimientosStockInner() {
               <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
             </div>
             <div>
-              <Label className="mb-1 block text-xs">Tipo</Label>
-              <select
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value)}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">Todos</option>
-                <option value="transferencia">Solo transferencias</option>
-                <option value="ajuste">Ajustes</option>
-                <option value="merma">Mermas</option>
-                <option value="venta">Ventas (descuento)</option>
-                <option value="devolucion">Devoluciones</option>
-              </select>
-            </div>
-            <div>
               <Label className="mb-1 block text-xs">Local / depósito</Label>
               <select
                 value={depositoId}
                 onChange={(e) => setDepositoId(e.target.value)}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="">Todos</option>
+                <option value="">Todos (origen o destino)</option>
                 {(depositosQ.data ?? []).map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.nombre}
@@ -203,6 +252,17 @@ function MovimientosStockInner() {
               </div>
             </div>
           </div>
+          <div className="mt-2 flex items-center">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={soloActivas}
+                onChange={(e) => setSoloActivas(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              Solo activas (esconder anuladas y sus reversos)
+            </label>
+          </div>
         </CardContent>
       </Card>
 
@@ -212,13 +272,14 @@ function MovimientosStockInner() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">
-              {movsFiltrados.length} movimientos
+              {transferenciasFiltradas.length}{' '}
+              {transferenciasFiltradas.length === 1 ? 'transferencia' : 'transferencias'}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {movsFiltrados.length === 0 ? (
+            {transferenciasFiltradas.length === 0 ? (
               <p className="rounded-md border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-                No hay movimientos con esos filtros.
+                No hay transferencias de stock con esos filtros.
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -226,64 +287,66 @@ function MovimientosStockInner() {
                   <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                     <tr className="border-b">
                       <th className="px-3 py-2 text-left">Fecha</th>
-                      <th className="px-3 py-2 text-left">Tipo</th>
                       <th className="px-3 py-2 text-left">Código</th>
                       <th className="px-3 py-2 text-left">Producto</th>
                       <th className="px-3 py-2 text-right">Cant.</th>
-                      <th className="px-3 py-2 text-left">Local</th>
+                      <th className="px-3 py-2 text-left">De</th>
+                      <th className="px-3 py-2"></th>
+                      <th className="px-3 py-2 text-left">A</th>
                       <th className="px-3 py-2 text-left">Empleado</th>
-                      <th className="px-3 py-2 text-left">Motivo</th>
+                      <th className="px-3 py-2 text-left">Estado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {movsFiltrados.map((m) => {
-                      const prod = prodPorId.get(m.producto_id);
-                      const dep = depPorId.get(m.deposito_id);
-                      const emp = empPorId.get(m.empleado_id);
+                    {transferenciasFiltradas.map((t) => {
+                      const prod = prodPorId.get(t.producto_id);
+                      const origenDep = depPorId.get(t.origen_id);
+                      const destinoDep = depPorId.get(t.destino_id);
+                      const emp = empPorId.get(t.empleado_id);
                       const empNombre = emp
                         ? `${emp.nombre} ${emp.apellido ?? ''}`.trim()
                         : '—';
-                      const esAnulacion =
-                        m.motivo?.startsWith('Anulación de transferencia ') ?? false;
                       return (
-                        <tr key={m.id} className="border-b border-border/50 hover:bg-accent/40">
+                        <tr
+                          key={t.keyPar}
+                          className={`border-b border-border/50 hover:bg-accent/40 ${
+                            t.anulada || t.esAnulacionDe ? 'opacity-60' : ''
+                          }`}
+                        >
                           <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap">
-                            {formatHora(m.fecha)}
-                          </td>
-                          <td className="px-3 py-2">
-                            <Badge
-                              variant="outline"
-                              className={
-                                m.tipo === 'transferencia_salida'
-                                  ? 'border-orange-300 text-orange-700'
-                                  : m.tipo === 'transferencia_entrada'
-                                    ? 'border-green-300 text-green-700'
-                                    : m.tipo === 'venta'
-                                      ? 'border-blue-300 text-blue-700'
-                                      : m.tipo === 'merma'
-                                        ? 'border-red-300 text-red-700'
-                                        : ''
-                              }
-                            >
-                              {LABEL_TIPO[m.tipo] ?? m.tipo}
-                            </Badge>
-                            {esAnulacion && (
-                              <Badge variant="outline" className="ml-1 border-amber-300 text-amber-700">
-                                Anulación
-                              </Badge>
-                            )}
+                            {formatHora(t.fecha)}
                           </td>
                           <td className="px-3 py-2 font-mono text-xs">
                             {prod?.codigo_interno ?? '—'}
                           </td>
-                          <td className="px-3 py-2">{prod?.nombre ?? 'Producto borrado'}</td>
-                          <td className="px-3 py-2 text-right font-medium tabular-nums">
-                            {m.cantidad}
+                          <td
+                            className={`px-3 py-2 ${t.anulada ? 'line-through' : ''}`}
+                          >
+                            {prod?.nombre ?? 'Producto borrado'}
                           </td>
-                          <td className="px-3 py-2 text-xs">{dep?.nombre ?? '—'}</td>
+                          <td className="px-3 py-2 text-right font-medium tabular-nums">
+                            {t.cantidad}
+                          </td>
+                          <td className="px-3 py-2 text-xs">{origenDep?.nombre ?? '—'}</td>
+                          <td className="px-3 py-2 text-center text-muted-foreground">
+                            <ArrowRight className="inline h-3 w-3" />
+                          </td>
+                          <td className="px-3 py-2 text-xs">{destinoDep?.nombre ?? '—'}</td>
                           <td className="px-3 py-2 text-xs">{empNombre}</td>
-                          <td className="px-3 py-2 text-xs text-muted-foreground">
-                            {m.motivo ?? ''}
+                          <td className="px-3 py-2 text-xs">
+                            {t.anulada ? (
+                              <Badge variant="outline" className="border-amber-300 text-amber-700">
+                                Anulada
+                              </Badge>
+                            ) : t.esAnulacionDe ? (
+                              <Badge variant="outline" className="border-slate-300 text-slate-600">
+                                Reverso
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="border-green-300 text-green-700">
+                                Activa
+                              </Badge>
+                            )}
                           </td>
                         </tr>
                       );
