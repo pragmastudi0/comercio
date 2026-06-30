@@ -360,8 +360,14 @@ export function BuscadorProducto() {
                 key={p.id}
                 onClick={() => agregarProducto(p.id)}
                 onMouseEnter={() => setResaltadoIdx(idx)}
-                className={`flex w-full items-center justify-between border-b px-4 py-3 text-left last:border-0 ${
-                  resaltado ? 'bg-accent' : 'hover:bg-accent'
+                // Resaltado contrastado: azul fuerte con borde a la izquierda
+                // para que el cajero vea de un vistazo en qué fila está parado
+                // (antes era bg-accent — demasiado leve, se perdía la visual
+                // al navegar con ↑↓ o mover el mouse).
+                className={`flex w-full items-center justify-between border-b px-4 py-3 text-left transition-colors last:border-0 ${
+                  resaltado
+                    ? 'border-l-4 border-l-blue-600 bg-blue-100 pl-3 font-medium text-blue-900'
+                    : 'hover:bg-blue-50'
                 }`}
               >
                 <div className="min-w-0 flex-1">
