@@ -156,13 +156,17 @@ function BackupPageInner() {
         return `${c.nombre} ${c.apellido}`.trim() || c.id;
       };
 
-      // 2) Cargar datos transaccionales del rango.
-      setProgreso('Descargando ventas, sesiones, movimientos…');
-      const [ventas, sesiones, movsStock, notasCredito] = await Promise.all([
+      // 2) Cargar datos transaccionales del rango + snapshot de stock.
+      //    Stock NO depende del rango — es la foto al momento del backup,
+      //    para que Agus pueda saber exactamente qué tenía en cada local
+      //    si después necesita reconstruir o auditar.
+      setProgreso('Descargando ventas, sesiones, movimientos, stock…');
+      const [ventas, sesiones, movsStock, notasCredito, stockActual] = await Promise.all([
         db.ventas.list({ desde: desdeISO, hasta: hastaISO }),
         db.sesionesCaja.list({ desde: desdeISO, hasta: hastaISO }),
         db.stock.movimientos({ desde: desdeISO, hasta: hastaISO }),
         db.notasCredito.list({ desde: desdeISO, hasta: hastaISO }),
+        db.stock.consolidado({}),
       ]);
 
       setProgreso('Descargando movimientos de caja…');
@@ -256,6 +260,29 @@ function BackupPageInner() {
         Motivo: (m as { motivo?: string }).motivo ?? '',
       }));
 
+      // Snapshot del stock al momento del backup — una fila por
+       // (producto × depósito), con cantidad actual y mínimo configurado.
+       // Filtramos productos que no existen más en el catálogo (huérfanos
+       // por borrado) para no tener filas sin código/nombre.
+      const stockRows = stockActual
+        .filter((s) => prodPorId.has(s.producto_id))
+        .map((s) => {
+          const cant = Number(s.cantidad);
+          return {
+            Código: productoCodigo(s.producto_id),
+            Producto: productoNombre(s.producto_id),
+            Local: depositoNombre(s.deposito_id),
+            Cantidad: cant,
+            Mínimo: s.minimo ?? 0,
+            'Bajo mínimo': cant <= (s.minimo ?? 0) ? 'SÍ' : '',
+            'Sin stock': cant <= 0 ? 'SÍ' : '',
+          };
+        })
+        .sort((a, b) => {
+          const c = a.Local.localeCompare(b.Local);
+          return c !== 0 ? c : a.Producto.localeCompare(b.Producto);
+        });
+
       const ncRows = notasCredito.map((n) => ({
         'N°': n.numero,
         Fecha: fmtFecha(n.fecha),
@@ -329,6 +356,15 @@ function BackupPageInner() {
         { Concepto: 'Sesiones de caja', Valor: sesiones.length },
         { Concepto: 'Movimientos de caja', Valor: movsCaja.length },
         { Concepto: 'Movimientos de stock', Valor: movsStock.length },
+        { Concepto: 'Stock — filas (producto × local)', Valor: stockRows.length },
+        {
+          Concepto: 'Stock — productos bajo mínimo',
+          Valor: stockRows.filter((r) => r['Bajo mínimo'] === 'SÍ').length,
+        },
+        {
+          Concepto: 'Stock — productos sin stock',
+          Valor: stockRows.filter((r) => r['Sin stock'] === 'SÍ').length,
+        },
         { Concepto: 'Notas de crédito', Valor: notasCredito.length },
         { Concepto: 'Clientes (snapshot)', Valor: clientes.length },
       ];
@@ -364,6 +400,7 @@ function BackupPageInner() {
       append('Cajas', sesionesRows);
       append('Movimientos caja', movsCajaRows);
       append('Movimientos stock', movsStockRows);
+      append('Stock al momento', stockRows);
       append('Notas crédito', ncRows);
       append('NC - items', ncItemsRows);
       append('Clientes', clientesRows);
