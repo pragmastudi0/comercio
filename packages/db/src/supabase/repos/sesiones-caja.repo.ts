@@ -6,14 +6,24 @@ import { ok, okList, okMaybe } from '../helpers';
 export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
   return {
     async abrir({ caja_id, empleado_id, saldo_inicial }) {
-      // Validar que no haya otra abierta para esa caja
-      const { data: existing } = await sb
+      // Política Turisteando: permitimos múltiples sesiones abiertas en
+      // la misma caja con DISTINTOS empleados (típico: dueño entra a
+      // testear o cobrar mientras el cajero también está en la caja, o
+      // turnos solapados). El warning amarillo de AbrirCaja avisa al
+      // segundo entrante para que coordinen el arqueo. Cada venta queda
+      // asociada a la sesión de QUIEN cobró (empleado_id propio), así
+      // las cuentas no se mezclan al cierre.
+      //
+      // Lo único que sí bloqueamos es que el MISMO empleado abra dos
+      // sesiones en la misma caja — eso es siempre un error operativo.
+      const { data: yaMia } = await sb
         .from('sesiones_caja')
         .select('id')
         .eq('caja_id', caja_id)
+        .eq('empleado_id', empleado_id)
         .eq('estado', 'abierta')
         .maybeSingle();
-      if (existing) throw new Error('Ya hay una sesión abierta para esta caja');
+      if (yaMia) throw new Error('Ya tenés una sesión abierta en esta caja');
 
       return ok<SesionCaja>(
         await sb

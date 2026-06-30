@@ -6,10 +6,16 @@ import { clone, makeId, notFound, now } from '../utils';
 export function makeSesionesCajaRepo(store: Store): SesionesCajaRepo {
   return {
     async abrir({ caja_id, empleado_id, saldo_inicial }) {
-      const yaAbierta = store.sesionesCaja.find(
-        (s) => s.caja_id === caja_id && s.estado === 'abierta',
+      // Permitimos múltiples sesiones abiertas en la misma caja con
+      // empleados distintos (ver supabase repo). Solo bloqueamos si el
+      // MISMO empleado intenta abrir dos veces en la misma caja.
+      const yaMia = store.sesionesCaja.find(
+        (s) =>
+          s.caja_id === caja_id &&
+          s.empleado_id === empleado_id &&
+          s.estado === 'abierta',
       );
-      if (yaAbierta) throw new Error('Ya hay una sesión abierta para esta caja');
+      if (yaMia) throw new Error('Ya tenés una sesión abierta en esta caja');
       const s: SesionCaja = {
         id: makeId('ses'),
         caja_id,
