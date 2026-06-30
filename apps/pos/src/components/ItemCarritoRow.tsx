@@ -116,6 +116,29 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
               <Tag className="h-3 w-3" /> -{item.descuento_pct}%
             </span>
           ) : null}
+          {/* Promo cargada por Agus desde /admin/productos. Texto siempre
+              visible; si hay promo_pct > 0 y no está aplicado, botón
+              "Aplicar X%" que setea descuento de esta línea con un click. */}
+          {item.producto.promo_texto && (
+            <span className="rounded bg-purple-100 px-1.5 py-0.5 text-purple-800">
+              {item.producto.promo_texto}
+            </span>
+          )}
+          {!!item.producto.promo_pct &&
+            item.producto.promo_pct > 0 &&
+            item.descuento_pct !== item.producto.promo_pct && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDescuento(item.producto.id, item.producto.promo_pct);
+                }}
+                className="rounded border border-purple-400 bg-white px-1.5 py-0.5 text-purple-800 hover:bg-purple-50"
+                title="Aplicar el descuento sugerido por la promo"
+              >
+                Aplicar {item.producto.promo_pct}%
+              </button>
+            )}
         </div>
       </td>
       <td className="px-3 py-3">

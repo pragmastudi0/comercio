@@ -131,6 +131,14 @@ export type Producto = {
   cantidad_minima_web?: number;
   /** Incremento permitido (e-commerce). 1 = unidad, 6 = de a media docena, 12 = de a docena. */
   incremento_web?: number;
+  /** Texto libre de promoción/descuento visible para el cajero en el PoS.
+   *  Ej. "10% efectivo", "2x1 sábados", "Saldo navideño". Solo informativo
+   *  si promo_pct está vacío. Si hay promo_pct > 0, aparece un botón
+   *  "Aplicar X%" en el carrito que setea descuento_pct de la línea. */
+  promo_texto?: string;
+  /** Porcentaje sugerido para la promo (0-100). Si está definido y > 0,
+   *  el cajero puede aplicarlo con un click sobre la línea del carrito. */
+  promo_pct?: number;
   activo: boolean;
   creado_en: ISODate;
 };

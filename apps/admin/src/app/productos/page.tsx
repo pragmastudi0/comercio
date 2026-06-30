@@ -433,6 +433,15 @@ function PanelProducto({
   const [categoriaId, setCategoriaId] = useState('');
   const [proveedorId, setProveedorId] = useState('');
   const [activo, setActivo] = useState(true);
+  // Promo/descuento que ve el cajero en el PoS.
+  const [promoTexto, setPromoTexto] = useState('');
+  const [promoPctTxt, setPromoPctTxt] = useState('');
+  // Sección colapsable de e-commerce (fotos / descripción larga /
+  // publicado web / config de bulto). Colapsada por default — el cliente
+  // pidió tener todo en un solo lugar sin tener que navegar a otra ruta.
+  const [ecommerceAbierto, setEcommerceAbierto] = useState(false);
+  const [publicadoWeb, setPublicadoWeb] = useState(false);
+  const [descripcionLarga, setDescripcionLarga] = useState('');
   // Deltas de stock pendientes por local (string para soportar vacío
   // y signos). Se aplican al apretar "Guardar cambios" — además los
   // botones +/- inline de cada local también disparan ajustes directos.
@@ -446,6 +455,10 @@ function PanelProducto({
       setCategoriaId(productoQ.data.categoria_id ?? '');
       setProveedorId(productoQ.data.proveedor_id ?? '');
       setActivo(productoQ.data.activo ?? true);
+      setPromoTexto(productoQ.data.promo_texto ?? '');
+      setPromoPctTxt(productoQ.data.promo_pct != null ? String(productoQ.data.promo_pct) : '');
+      setPublicadoWeb(productoQ.data.publicado_web ?? false);
+      setDescripcionLarga(productoQ.data.descripcion_larga ?? '');
     }
   }, [productoQ.data]);
 
@@ -469,7 +482,8 @@ function PanelProducto({
     mutationFn: async () => {
       if (!productoQ.data) throw new Error('Producto no cargado');
       if (!empleado) throw new Error('Sin sesión');
-      // Update del producto (campos básicos).
+      // Update del producto (campos básicos + promo + e-commerce).
+      const promoPctNum = promoPctTxt.trim() === '' ? null : parseFloat(promoPctTxt);
       const patch: Partial<Producto> = {
         nombre,
         codigo_interno: codigo,
@@ -477,6 +491,10 @@ function PanelProducto({
         categoria_id: categoriaId || undefined,
         proveedor_id: proveedorId || undefined,
         activo,
+        promo_texto: promoTexto.trim() || undefined,
+        promo_pct: promoPctNum != null && isFinite(promoPctNum) ? promoPctNum : undefined,
+        publicado_web: publicadoWeb,
+        descripcion_larga: descripcionLarga.trim() || undefined,
       };
       await db.productos.update(productoId, patch);
       // Update del precio CF si cambió.
@@ -713,6 +731,47 @@ function PanelProducto({
           </div>
         </div>
 
+        {/* Promo/descuento del producto — se ve en el PoS. El texto es
+            descriptivo (lo que lee el cajero) y el % es opcional. Si hay
+            %, el cajero ve un botón "Aplicar X%" en el carrito que setea
+            el descuento de esa línea automático. */}
+        <div className="rounded border border-purple-200 bg-purple-50/40 p-1.5">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-purple-800">
+            Promo / descuento (visible en el PoS)
+          </div>
+          <div className="grid grid-cols-[1fr_70px] gap-2">
+            <div>
+              <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                Texto
+              </Label>
+              <Input
+                value={promoTexto}
+                onChange={(e) => setPromoTexto(e.target.value)}
+                disabled={!puedeEditar}
+                placeholder='Ej: "10% efectivo", "2x1 los sábados"'
+                maxLength={80}
+                className="h-7 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                % aplicar
+              </Label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={promoPctTxt}
+                onChange={(e) => setPromoPctTxt(e.target.value)}
+                disabled={!puedeEditar}
+                placeholder="Opt."
+                className="h-7 text-sm tabular-nums"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Stock por local: deltas controlados desde el padre. Los
             inputs +/- siguen funcionando para ajuste rápido, Y además
             al apretar "Guardar cambios" se aplican los deltas pendientes. */}
@@ -725,6 +784,49 @@ function PanelProducto({
           deltas={stockDeltas}
           setDeltas={setStockDeltas}
         />
+
+        {/* Sección colapsable: más opciones (e-commerce). Por default
+            cerrada porque no todos los productos están publicados online. */}
+        <div className="rounded border border-slate-300 bg-slate-50/40">
+          <button
+            type="button"
+            onClick={() => setEcommerceAbierto((v) => !v)}
+            className="flex w-full items-center justify-between px-2 py-1.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            <span>Más opciones (e-commerce)</span>
+            <span className="text-slate-500">{ecommerceAbierto ? '▲' : '▼'}</span>
+          </button>
+          {ecommerceAbierto && (
+            <div className="space-y-2 border-t border-slate-300 p-2">
+              <label className="flex items-center gap-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  checked={publicadoWeb}
+                  onChange={(e) => setPublicadoWeb(e.target.checked)}
+                  disabled={!puedeEditar}
+                  className="h-3.5 w-3.5"
+                />
+                Publicado en e-commerce
+              </label>
+              <div>
+                <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                  Descripción larga (para la web)
+                </Label>
+                <textarea
+                  value={descripcionLarga}
+                  onChange={(e) => setDescripcionLarga(e.target.value)}
+                  disabled={!puedeEditar}
+                  rows={3}
+                  className="w-full rounded-sm border border-slate-300 bg-white px-2 py-1 text-sm"
+                />
+              </div>
+              <p className="text-[10px] text-slate-500">
+                Fotos, escalas de precio por cantidad y otras opciones avanzadas se
+                gestionan desde la vista completa de e-commerce (menú Sistema → E-commerce).
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Footer fijo: "Guardar" siempre visible sin scroll */}
