@@ -42,6 +42,10 @@ function VentasPageInner() {
   const [localId, setLocalId] = useState<string>('');
   const [metodo, setMetodo] = useState<string>('');
   const [estado, setEstado] = useState<string>('');
+  // Filtro por turno: '' = todos, 'manana' = 7-15hs, 'tarde' = 15-23hs.
+  // Se aplica client-side sobre la hora de cada venta. Madrugada cae en
+  // tarde para no crear un tercer grupo.
+  const [turno, setTurno] = useState<'' | 'manana' | 'tarde'>('');
   // Filtro por código o nombre de producto. Filtra las ventas que tienen
   // al menos un ítem con un producto cuyo código/nombre matchee.
   // Aplicado en memoria sobre las ventas ya traídas (no hace round-trip).
@@ -186,6 +190,13 @@ function VentasPageInner() {
   })();
 
   let ventas = ventasQ.data ?? [];
+  if (turno) {
+    ventas = ventas.filter((v) => {
+      const h = new Date(v.fecha).getHours();
+      const esManana = h >= 7 && h < 15;
+      return turno === 'manana' ? esManana : !esManana;
+    });
+  }
   if (metodo) ventas = ventas.filter((v) => v.pagos.some((p) => p.metodo === metodo));
   if (estado) {
     if (estado === 'con_cambio') {
@@ -331,6 +342,18 @@ function VentasPageInner() {
                 <option value="anulada">Anuladas</option>
                 <option value="cancelada">Canceladas</option>
                 <option value="presupuesto">Presupuestos</option>
+              </select>
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs">Turno</Label>
+              <select
+                value={turno}
+                onChange={(e) => setTurno(e.target.value as '' | 'manana' | 'tarde')}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos</option>
+                <option value="manana">Mañana (7-15)</option>
+                <option value="tarde">Tarde (15-23)</option>
               </select>
             </div>
             {/* Filtro por producto: código exacto si es numérico, parcial

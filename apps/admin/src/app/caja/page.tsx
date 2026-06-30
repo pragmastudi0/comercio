@@ -46,6 +46,8 @@ function CajasPageInner() {
   const [hasta, setHasta] = useState(hoy);
   // Default: más nueva arriba.
   const [ordenDesc, setOrdenDesc] = useState(true);
+  // Filtro por turno (hora de apertura): mañana 7-15 / tarde 15-23.
+  const [turno, setTurno] = useState<'' | 'manana' | 'tarde'>('');
 
   const empleadoNombre = (id: string) => {
     const e = empleadosQ.data?.find((x) => x.id === id);
@@ -62,7 +64,14 @@ function CajasPageInner() {
     .filter((s) => {
       if (s.estado !== 'cerrada') return false;
       const ref = s.cerrada_en ?? s.abierta_en;
-      return ref >= desdeIso && ref <= hastaIso;
+      if (ref < desdeIso || ref > hastaIso) return false;
+      if (turno) {
+        const h = new Date(s.abierta_en).getHours();
+        const esManana = h >= 7 && h < 15;
+        if (turno === 'manana' && !esManana) return false;
+        if (turno === 'tarde' && esManana) return false;
+      }
+      return true;
     })
     .sort((a, b) => {
       const aRef = a.cerrada_en ?? a.abierta_en;
@@ -114,8 +123,8 @@ function CajasPageInner() {
             <Lock className="h-4 w-4" />
             Historial de sesiones cerradas ({cerradas.length})
           </CardTitle>
-          {/* Filtros por fecha de cierre. */}
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr]">
+          {/* Filtros por fecha de cierre + turno. */}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_1fr]">
             <div>
               <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
                 Desde
@@ -137,6 +146,20 @@ function CajasPageInner() {
                 onChange={(e) => setHasta(e.target.value)}
                 className="h-9"
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
+                Turno
+              </label>
+              <select
+                value={turno}
+                onChange={(e) => setTurno(e.target.value as '' | 'manana' | 'tarde')}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos</option>
+                <option value="manana">Mañana (7-15)</option>
+                <option value="tarde">Tarde (15-23)</option>
+              </select>
             </div>
           </div>
         </CardHeader>
