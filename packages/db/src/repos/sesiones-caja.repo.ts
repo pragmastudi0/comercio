@@ -8,4 +8,10 @@ export type SesionesCajaRepo = {
   get(id: ID): Promise<SesionCaja | null>;
   movimientos(sesionId: ID): Promise<MovimientoCaja[]>;
   registrarMovimiento(input: Omit<MovimientoCaja, 'id' | 'fecha'>): Promise<MovimientoCaja>;
+  /**
+   * Corrige el saldo inicial de una sesión ya abierta. Útil cuando el
+   * cajero declaró un monto erróneo al abrir y quiere ajustarlo sin
+   * cerrar/reabrir la caja. Devuelve la sesión actualizada.
+   */
+  actualizarSaldoInicial?(id: ID, nuevoSaldoInicial: number): Promise<SesionCaja>;
 };

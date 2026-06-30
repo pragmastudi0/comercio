@@ -36,6 +36,21 @@ export function AbrirCaja() {
     }
   }, [cajasQ.data, cajaId]);
 
+  // Si ya hay una sesión activa para este empleado/caja, pre-llenamos el
+  // input con el saldo inicial registrado. Si el usuario lo edita, al
+  // confirmar actualizamos la sesión existente en BD (no abrimos una nueva).
+  const sesionExistenteQ = useQuery({
+    queryKey: ['sesion-activa-de', empleado?.id, cajaId],
+    queryFn: () =>
+      empleado && cajaId ? db.sesionesCaja.sesionActivaDe(empleado.id, cajaId) : Promise.resolve(null),
+    enabled: !!(empleado && cajaId),
+  });
+  useEffect(() => {
+    if (sesionExistenteQ.data) {
+      setSaldoInicial(String(sesionExistenteQ.data.saldo_inicial));
+    }
+  }, [sesionExistenteQ.data]);
+
   // Sesiones abiertas de la caja elegida — para detectar si OTRO empleado
   // ya está atendiendo en esta caja (típico: el dueño quiere cobrar desde
   // su browser y un cajero ya tiene sesión abierta). No bloqueamos: solo
@@ -70,7 +85,19 @@ export function AbrirCaja() {
       const yaAbierta = await db.sesionesCaja.sesionActivaDe(empleado.id, caja.id);
       let sesion;
       if (yaAbierta) {
-        sesion = yaAbierta;
+        // Si el monto cambió respecto del registrado, actualizamos en BD.
+        // Fix del bug: antes ignorábamos lo que tipeaba el cajero y dejaba
+        // el saldo viejo. Ahora si lo edita, queda persistido como el
+        // saldo inicial de la sesión.
+        if (
+          monto !== yaAbierta.saldo_inicial &&
+          db.sesionesCaja.actualizarSaldoInicial
+        ) {
+          sesion = await db.sesionesCaja.actualizarSaldoInicial(yaAbierta.id, monto);
+          toast.success('Saldo inicial actualizado');
+        } else {
+          sesion = yaAbierta;
+        }
       } else {
         sesion = await db.sesionesCaja.abrir({
           caja_id: caja.id,

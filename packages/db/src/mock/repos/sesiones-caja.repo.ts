@@ -66,5 +66,15 @@ export function makeSesionesCajaRepo(store: Store): SesionesCajaRepo {
       store.movimientosCaja.push(m);
       return clone(m);
     },
+    async actualizarSaldoInicial(id, nuevoSaldoInicial) {
+      const idx = store.sesionesCaja.findIndex((x) => x.id === id);
+      if (idx === -1) throw notFound('Sesión de caja', id);
+      const ses = store.sesionesCaja[idx]!;
+      if (ses.estado === 'cerrada') {
+        throw new Error('No se puede modificar el saldo inicial de una sesión cerrada');
+      }
+      store.sesionesCaja[idx] = { ...ses, saldo_inicial: nuevoSaldoInicial };
+      return clone(store.sesionesCaja[idx]!);
+    },
   };
 }
