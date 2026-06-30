@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
-import { LogOut, Wallet, Ban, UserCog } from 'lucide-react';
+import { LogOut, Wallet, Ban, UserCog, ArrowLeftRight } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { useVenta } from '@/stores/venta';
@@ -14,6 +14,7 @@ import { Carrito } from '@/components/Carrito';
 import { ResumenVenta } from '@/components/ResumenVenta';
 import { ModalCobro } from '@/components/ModalCobro';
 import { ModalAjustarCaja } from '@/components/ModalAjustarCaja';
+import { ModalTransferenciaStock } from '@/components/ModalTransferenciaStock';
 import { SHORTCUTS, SHORTCUT_LABELS } from '@/lib/shortcuts';
 import { Button } from '@comercio/ui/button';
 import type { MetodoPago } from '@comercio/db';
@@ -33,6 +34,7 @@ export function Caja() {
     open: false,
   });
   const [ajustarCajaOpen, setAjustarCajaOpen] = useState(false);
+  const [transferenciaOpen, setTransferenciaOpen] = useState(false);
 
   function abrirCobro(metodo?: MetodoPago) {
     if (items.length === 0) {
@@ -170,6 +172,15 @@ export function Caja() {
               <Wallet className="mr-1 h-3 w-3" />
               Ajustar caja
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setTransferenciaOpen(true)}
+              title="Asentar movimiento de stock entre locales/depósitos"
+            >
+              <ArrowLeftRight className="mr-1 h-3 w-3" />
+              Stock
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate('/cerrar-caja')}>
               Cerrar caja
             </Button>
@@ -252,6 +263,7 @@ export function Caja() {
       </div>
 
       <ModalAjustarCaja open={ajustarCajaOpen} onOpenChange={setAjustarCajaOpen} />
+      <ModalTransferenciaStock open={transferenciaOpen} onOpenChange={setTransferenciaOpen} />
 
       <ModalCobro
         open={modalCobro.open}

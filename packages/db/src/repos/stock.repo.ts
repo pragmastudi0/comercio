@@ -19,5 +19,25 @@ export type StockRepo = {
   // Llamado por VentasRepo. Falla si no hay stock y el llamante no autoriza vender sin stock.
   descontarPorVenta(input: { producto_id: ID; variante_id?: ID; deposito_id: ID; cantidad: number; venta_id: ID; empleado_id: ID; permitirSinStock: boolean }): Promise<MovimientoStock>;
 
+  /**
+   * Transferencia inmediata entre dos depósitos: decrementa origen, incrementa
+   * destino, registra los 2 movimientos (transferencia_salida / transferencia_entrada).
+   * Pensado para el botón "Stock" del PoS — el cajero asienta una transferencia
+   * que ya ocurrió físicamente. NO hay flujo de aprobación (a diferencia del
+   * crear→emitir→recibir de TransferenciasRepo).
+   *
+   * Devuelve los 2 movimientos creados [salida, entrada]. Falla si origen=destino
+   * o si cantidad <= 0.
+   */
+  transferenciaInmediata?(input: {
+    producto_id: ID;
+    variante_id?: ID;
+    deposito_origen_id: ID;
+    deposito_destino_id: ID;
+    cantidad: number;
+    motivo?: string;
+    empleado_id: ID;
+  }): Promise<{ salida: MovimientoStock; entrada: MovimientoStock }>;
+
   movimientos(filtro?: { producto_id?: ID; deposito_id?: ID; desde?: string; hasta?: string }): Promise<MovimientoStock[]>;
 };
