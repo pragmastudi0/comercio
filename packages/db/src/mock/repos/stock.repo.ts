@@ -149,6 +149,74 @@ export function makeStockRepo(store: Store): StockRepo {
       store.movimientosStock.push(salida, entrada);
       return { salida: clone(salida), entrada: clone(entrada) };
     },
+    async anularTransferenciaInmediata({ movimiento_id, empleado_id }) {
+      const original = store.movimientosStock.find((m) => m.id === movimiento_id);
+      if (!original) throw new Error('Movimiento no encontrado');
+      if (
+        original.tipo !== 'transferencia_salida' &&
+        original.tipo !== 'transferencia_entrada'
+      ) {
+        throw new Error('Solo se pueden anular transferencias');
+      }
+      // Buscar el par: misma fecha + mismo producto + cantidad. El otro
+      // tipo (si éste es salida, el par es entrada y viceversa).
+      const tipoPar =
+        original.tipo === 'transferencia_salida'
+          ? 'transferencia_entrada'
+          : 'transferencia_salida';
+      const par = store.movimientosStock.find(
+        (m) =>
+          m.tipo === tipoPar &&
+          m.producto_id === original.producto_id &&
+          m.cantidad === original.cantidad &&
+          m.fecha === original.fecha &&
+          m.deposito_id !== original.deposito_id,
+      );
+      if (!par) throw new Error('No se encontró el par de la transferencia');
+
+      // Detectar ya anulada: si hay 2 movs (entrada+salida) con motivo
+      // que referencia el id original, ya fue anulada.
+      const refMotivo = `Anulación de transferencia ${movimiento_id}`;
+      const yaAnulada = store.movimientosStock.some((m) => m.motivo === refMotivo);
+      if (yaAnulada) throw new Error('Esta transferencia ya fue anulada');
+
+      const origenId =
+        original.tipo === 'transferencia_salida' ? original.deposito_id : par.deposito_id;
+      const destinoId =
+        original.tipo === 'transferencia_salida' ? par.deposito_id : original.deposito_id;
+
+      // Crear par inverso: el origen recupera, el destino pierde.
+      const origenItem = findOrCreate(original.producto_id, origenId, original.variante_id);
+      const destinoItem = findOrCreate(original.producto_id, destinoId, original.variante_id);
+      origenItem.cantidad += original.cantidad;
+      destinoItem.cantidad -= original.cantidad;
+
+      const fecha = now();
+      const salidaInversa: MovimientoStock = {
+        id: makeId('mov_st'),
+        producto_id: original.producto_id,
+        variante_id: original.variante_id,
+        deposito_id: destinoId,
+        tipo: 'transferencia_salida',
+        cantidad: original.cantidad,
+        motivo: refMotivo,
+        empleado_id,
+        fecha,
+      };
+      const entradaInversa: MovimientoStock = {
+        id: makeId('mov_st'),
+        producto_id: original.producto_id,
+        variante_id: original.variante_id,
+        deposito_id: origenId,
+        tipo: 'transferencia_entrada',
+        cantidad: original.cantidad,
+        motivo: refMotivo,
+        empleado_id,
+        fecha,
+      };
+      store.movimientosStock.push(salidaInversa, entradaInversa);
+      return { salida: clone(salidaInversa), entrada: clone(entradaInversa) };
+    },
     async movimientos(filtro = {}) {
       return clone(
         store.movimientosStock.filter((m) => {

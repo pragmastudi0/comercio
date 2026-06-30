@@ -39,5 +39,19 @@ export type StockRepo = {
     empleado_id: ID;
   }): Promise<{ salida: MovimientoStock; entrada: MovimientoStock }>;
 
+  /**
+   * Anula una transferencia inmediata creando el par inverso. Recibe el id
+   * de uno de los 2 movimientos (salida o entrada) y revierte el efecto:
+   * suma al origen, resta al destino, registra 2 movs nuevos con motivo
+   * "Anulación de transferencia #...". NO borra los movs originales para
+   * mantener el historial auditable.
+   *
+   * Falla si el id no corresponde a una transferencia o si ya fue anulada.
+   */
+  anularTransferenciaInmediata?(input: {
+    movimiento_id: ID;
+    empleado_id: ID;
+  }): Promise<{ salida: MovimientoStock; entrada: MovimientoStock }>;
+
   movimientos(filtro?: { producto_id?: ID; deposito_id?: ID; desde?: string; hasta?: string }): Promise<MovimientoStock[]>;
 };

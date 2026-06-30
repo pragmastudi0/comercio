@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { StockRepo } from '../../repos/stock.repo';
 import type { MovimientoStock, StockItem } from '../../types';
-import { ok, okList } from '../helpers';
+import { ok, okList, okMaybe } from '../helpers';
 
 /**
  * Aplica un DELTA al stock de (producto, variante, depósito).
@@ -350,6 +350,120 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
           .select('*')
           .single(),
         'stock.transferenciaInmediata (mov entrada)',
+      );
+      return { salida, entrada };
+    },
+    async anularTransferenciaInmediata({ movimiento_id, empleado_id }) {
+      // 1. Cargar el movimiento original.
+      const original = okMaybe<MovimientoStock>(
+        await sb.from('movimientos_stock').select('*').eq('id', movimiento_id).maybeSingle(),
+        'stock.anularTransferencia (original)',
+      );
+      if (!original) throw new Error('Movimiento no encontrado');
+      if (
+        original.tipo !== 'transferencia_salida' &&
+        original.tipo !== 'transferencia_entrada'
+      ) {
+        throw new Error('Solo se pueden anular transferencias');
+      }
+
+      // 2. Buscar el par (mismo producto, misma cantidad, misma fecha exacta,
+      //    distinto depósito, tipo opuesto). transferenciaInmediata inserta
+      //    ambos movs con el mismo timestamp.
+      const tipoPar =
+        original.tipo === 'transferencia_salida'
+          ? 'transferencia_entrada'
+          : 'transferencia_salida';
+      const par = okMaybe<MovimientoStock>(
+        await sb
+          .from('movimientos_stock')
+          .select('*')
+          .eq('producto_id', original.producto_id)
+          .eq('cantidad', original.cantidad)
+          .eq('fecha', original.fecha)
+          .eq('tipo', tipoPar)
+          .neq('deposito_id', original.deposito_id)
+          .maybeSingle(),
+        'stock.anularTransferencia (par)',
+      );
+      if (!par) throw new Error('No se encontró el par de la transferencia');
+
+      // 3. Check de idempotencia: ya hay un mov con motivo de anulación
+      //    apuntando a este id?
+      const refMotivo = `Anulación de transferencia ${movimiento_id}`;
+      const yaAnuladaList = okList<MovimientoStock>(
+        await sb.from('movimientos_stock').select('*').eq('motivo', refMotivo).limit(1),
+        'stock.anularTransferencia (check)',
+      );
+      if (yaAnuladaList.length > 0) {
+        throw new Error('Esta transferencia ya fue anulada');
+      }
+
+      const origenId =
+        original.tipo === 'transferencia_salida' ? original.deposito_id : par.deposito_id;
+      const destinoId =
+        original.tipo === 'transferencia_salida' ? par.deposito_id : original.deposito_id;
+
+      // 4. Mover stock al revés: +al origen, -al destino. Si falla el segundo,
+      //    revertir el primero. Mismo patrón que transferenciaInmediata.
+      try {
+        await aplicarDeltaStock(sb, {
+          producto_id: original.producto_id,
+          variante_id: original.variante_id ?? null,
+          deposito_id: origenId,
+          delta: original.cantidad,
+        });
+      } catch (e) {
+        throw new Error(`stock.anularTransferencia (origen): ${(e as Error).message}`);
+      }
+      try {
+        await aplicarDeltaStock(sb, {
+          producto_id: original.producto_id,
+          variante_id: original.variante_id ?? null,
+          deposito_id: destinoId,
+          delta: -original.cantidad,
+        });
+      } catch (e) {
+        await aplicarDeltaStock(sb, {
+          producto_id: original.producto_id,
+          variante_id: original.variante_id ?? null,
+          deposito_id: origenId,
+          delta: -original.cantidad,
+        }).catch(() => {});
+        throw new Error(`stock.anularTransferencia (destino): ${(e as Error).message}`);
+      }
+
+      const salida = ok<MovimientoStock>(
+        await sb
+          .from('movimientos_stock')
+          .insert({
+            producto_id: original.producto_id,
+            variante_id: original.variante_id,
+            deposito_id: destinoId,
+            tipo: 'transferencia_salida',
+            cantidad: original.cantidad,
+            motivo: refMotivo,
+            empleado_id,
+          })
+          .select('*')
+          .single(),
+        'stock.anularTransferencia (mov salida)',
+      );
+      const entrada = ok<MovimientoStock>(
+        await sb
+          .from('movimientos_stock')
+          .insert({
+            producto_id: original.producto_id,
+            variante_id: original.variante_id,
+            deposito_id: origenId,
+            tipo: 'transferencia_entrada',
+            cantidad: original.cantidad,
+            motivo: refMotivo,
+            empleado_id,
+          })
+          .select('*')
+          .single(),
+        'stock.anularTransferencia (mov entrada)',
       );
       return { salida, entrada };
     },

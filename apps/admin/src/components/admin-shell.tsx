@@ -20,6 +20,7 @@ import {
   PlusCircle,
   AlertTriangle,
   CreditCard,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PRESET_IDS } from '@comercio/db';
@@ -119,6 +120,10 @@ const TOOLBAR: ToolbarAction[] = [
   // nuevo Agus tiene el botón "Nuevo" dentro de la página.
   { type: 'link', href: '/productos', label: 'Productos', icon: PlusCircle, color: 'bg-purple-100 text-purple-700', requiere: req('productos', 'crear') },
   { type: 'link', href: '/productos?stock=bajo', label: 'Faltantes', icon: AlertTriangle, color: 'bg-red-100 text-red-700', requiere: req('productos', 'ver') },
+  // Movimientos de stock — auditoría para Agus: quién transfirió qué, cuándo,
+  // de dónde a dónde. Refleja también ajustes/mermas/ventas para tener todo
+  // el historial en una sola vista.
+  { type: 'link', href: '/movimientos-stock', label: 'Mov. stock', icon: ArrowLeftRight, color: 'bg-amber-100 text-amber-700', requiere: req('stock', 'ver_propio_deposito') },
   // Cobrar → abre el PoS en pestaña nueva CON LA SESIÓN YA INICIADA.
   // El handler pasa el access/refresh token de Supabase en el hash
   // fragment (que no llega al servidor) y el PoS los aplica al boot.
