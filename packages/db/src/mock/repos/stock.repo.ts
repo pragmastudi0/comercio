@@ -103,6 +103,52 @@ export function makeStockRepo(store: Store): StockRepo {
       store.movimientosStock.push(mov);
       return clone(mov);
     },
+    async transferenciaInmediata({
+      producto_id,
+      variante_id,
+      deposito_origen_id,
+      deposito_destino_id,
+      cantidad,
+      motivo,
+      empleado_id,
+    }) {
+      if (cantidad <= 0) throw new Error('La cantidad debe ser mayor a 0');
+      if (deposito_origen_id === deposito_destino_id) {
+        throw new Error('Origen y destino no pueden ser el mismo depósito');
+      }
+      const origen = findOrCreate(producto_id, deposito_origen_id, variante_id);
+      const destino = findOrCreate(producto_id, deposito_destino_id, variante_id);
+      // Política Turisteando: NO bloqueamos por stock insuficiente — el
+      // cajero asienta lo que físicamente ya pasó. Si quedó en negativo
+      // se ve en el admin y se ajusta.
+      origen.cantidad -= cantidad;
+      destino.cantidad += cantidad;
+      const fecha = now();
+      const salida: MovimientoStock = {
+        id: makeId('mov_st'),
+        producto_id,
+        variante_id,
+        deposito_id: deposito_origen_id,
+        tipo: 'transferencia_salida',
+        cantidad,
+        motivo,
+        empleado_id,
+        fecha,
+      };
+      const entrada: MovimientoStock = {
+        id: makeId('mov_st'),
+        producto_id,
+        variante_id,
+        deposito_id: deposito_destino_id,
+        tipo: 'transferencia_entrada',
+        cantidad,
+        motivo,
+        empleado_id,
+        fecha,
+      };
+      store.movimientosStock.push(salida, entrada);
+      return { salida: clone(salida), entrada: clone(entrada) };
+    },
     async movimientos(filtro = {}) {
       return clone(
         store.movimientosStock.filter((m) => {

@@ -272,6 +272,87 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
         'stock.descontarPorVenta (mov)',
       );
     },
+    async transferenciaInmediata({
+      producto_id,
+      variante_id,
+      deposito_origen_id,
+      deposito_destino_id,
+      cantidad,
+      motivo,
+      empleado_id,
+    }) {
+      if (cantidad <= 0) throw new Error('La cantidad debe ser mayor a 0');
+      if (deposito_origen_id === deposito_destino_id) {
+        throw new Error('Origen y destino no pueden ser el mismo depósito');
+      }
+      // No usamos transacción real (Supabase JS no expone BEGIN/COMMIT).
+      // Hacemos los pasos en orden y si algo falla, intentamos compensar:
+      //   1. Bajamos stock origen
+      //   2. Subimos stock destino  (si falla → revertir 1)
+      //   3. Insertamos los 2 movimientos
+      // Es la mejor garantía sin RPC. Si llega a haber inconsistencias
+      // raras, el admin tiene movimientos_stock para auditar.
+      try {
+        await aplicarDeltaStock(sb, {
+          producto_id,
+          variante_id: variante_id ?? null,
+          deposito_id: deposito_origen_id,
+          delta: -cantidad,
+        });
+      } catch (e) {
+        throw new Error(`stock.transferenciaInmediata (origen): ${(e as Error).message}`);
+      }
+      try {
+        await aplicarDeltaStock(sb, {
+          producto_id,
+          variante_id: variante_id ?? null,
+          deposito_id: deposito_destino_id,
+          delta: cantidad,
+        });
+      } catch (e) {
+        // Revertir el descuento del origen
+        await aplicarDeltaStock(sb, {
+          producto_id,
+          variante_id: variante_id ?? null,
+          deposito_id: deposito_origen_id,
+          delta: cantidad,
+        }).catch(() => {});
+        throw new Error(`stock.transferenciaInmediata (destino): ${(e as Error).message}`);
+      }
+      const salida = ok<MovimientoStock>(
+        await sb
+          .from('movimientos_stock')
+          .insert({
+            producto_id,
+            variante_id,
+            deposito_id: deposito_origen_id,
+            tipo: 'transferencia_salida',
+            cantidad,
+            motivo,
+            empleado_id,
+          })
+          .select('*')
+          .single(),
+        'stock.transferenciaInmediata (mov salida)',
+      );
+      const entrada = ok<MovimientoStock>(
+        await sb
+          .from('movimientos_stock')
+          .insert({
+            producto_id,
+            variante_id,
+            deposito_id: deposito_destino_id,
+            tipo: 'transferencia_entrada',
+            cantidad,
+            motivo,
+            empleado_id,
+          })
+          .select('*')
+          .single(),
+        'stock.transferenciaInmediata (mov entrada)',
+      );
+      return { salida, entrada };
+    },
     async movimientos(filtro = {}) {
       let q = sb.from('movimientos_stock').select('*').order('fecha', { ascending: false });
       if (filtro.producto_id) q = q.eq('producto_id', filtro.producto_id);
