@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowRight, ArrowLeftRight, Search } from 'lucide-react';
+import { ArrowRight, ArrowLeftRight, Search, Trash2 } from 'lucide-react';
 import { Dialog, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { Button } from '@comercio/ui/button';
+import { Skeleton } from '@comercio/ui/skeleton';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { useDepositoActivo } from '@/lib/deposito-activo';
@@ -33,6 +34,9 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
   const qc = useQueryClient();
   const empleado = useSesion((s) => s.empleado);
   const { depositoId: depositoActivo } = useDepositoActivo();
+
+  // Pestañas: asentar nuevo movimiento vs ver/anular recientes.
+  const [tab, setTab] = useState<'asentar' | 'movimientos'>('asentar');
 
   // Búsqueda y selección de producto
   const [q, setQ] = useState('');
@@ -75,6 +79,7 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
   // Reset cuando se abre/cierra
   useEffect(() => {
     if (open) {
+      setTab('asentar');
       setQ('');
       setProducto(null);
       setResaltadoIdx(0);
@@ -135,16 +140,45 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
         <DialogTitle>
           <span className="flex items-center gap-2">
             <ArrowLeftRight className="h-5 w-5 text-amber-600" />
-            Asentar movimiento de stock
+            Movimientos de stock
           </span>
         </DialogTitle>
-        <p className="mt-1 text-xs text-muted-foreground">
+      </DialogHeader>
+
+      {/* Pestañas: nueva transferencia | historial (con anular) */}
+      <div className="mb-3 flex gap-1 border-b">
+        <button
+          type="button"
+          onClick={() => setTab('asentar')}
+          className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
+            tab === 'asentar'
+              ? 'border-amber-600 text-amber-900'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Asentar nuevo
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('movimientos')}
+          className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
+            tab === 'movimientos'
+              ? 'border-amber-600 text-amber-900'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Movimientos recientes
+        </button>
+      </div>
+
+      {tab === 'movimientos' ? (
+        <MovimientosRecientes onClose={() => onOpenChange(false)} />
+      ) : (
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
           Registrá una transferencia que ya hiciste físicamente entre depósitos
           o locales. El stock se actualiza al instante.
         </p>
-      </DialogHeader>
-
-      <div className="space-y-3">
         {/* Paso 1: buscar / elegir producto */}
         <div>
           <Label className="mb-1 block text-xs">Producto</Label>
@@ -308,7 +342,9 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
           </>
         )}
       </div>
+      )}
 
+      {tab === 'asentar' && (
       <div className="mt-4 flex justify-end gap-2 border-t pt-3">
         <Button variant="outline" onClick={() => onOpenChange(false)}>
           Cancelar
@@ -320,6 +356,213 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
           {transferirMut.isPending ? 'Asentando…' : 'Asentar transferencia'}
         </Button>
       </div>
+      )}
     </Dialog>
+  );
+}
+
+/**
+ * Lista de transferencias de stock de las últimas 48hs. Agrupa salida+entrada
+ * en una sola fila ("Producto · X unidades · Origen → Destino · Hora · Cajero").
+ * Botón Anular crea el par inverso y revierte el stock. Las anuladas quedan
+ * con un pill "Anulada" en lugar del botón.
+ */
+function MovimientosRecientes({ onClose: _onClose }: { onClose: () => void }) {
+  const db = getDb();
+  const qc = useQueryClient();
+  const empleado = useSesion((s) => s.empleado);
+  const desde = useMemo(() => {
+    const d = new Date();
+    d.setHours(d.getHours() - 48);
+    return d.toISOString();
+  }, []);
+
+  const movsQ = useQuery({
+    queryKey: ['stock-movs-recientes-pos', desde],
+    queryFn: () => db.stock.movimientos({ desde }),
+  });
+  const depositosQ = useQuery({
+    queryKey: ['depositos-pos-recientes'],
+    queryFn: () => db.depositos.list(),
+  });
+  const productosQ = useQuery({
+    queryKey: ['productos-pos-recientes'],
+    queryFn: () => db.productos.list(),
+  });
+  const empleadosQ = useQuery({
+    queryKey: ['empleados-pos-recientes'],
+    queryFn: () => db.empleados.list(),
+  });
+
+  type Par = {
+    keyPar: string;
+    salidaId: string;
+    fecha: string;
+    producto_id: string;
+    cantidad: number;
+    origen_id: string;
+    destino_id: string;
+    empleado_id: string;
+    motivo?: string;
+  };
+
+  // Agrupamos por (producto + cantidad + fecha) — transferenciaInmediata
+  // crea ambos movs con el MISMO timestamp. Cada par tiene 1 salida + 1 entrada.
+  const { pares, anuladas } = useMemo(() => {
+    const movs = movsQ.data ?? [];
+    const grupos = new Map<string, { salida?: typeof movs[number]; entrada?: typeof movs[number] }>();
+    for (const m of movs) {
+      if (m.tipo !== 'transferencia_salida' && m.tipo !== 'transferencia_entrada') continue;
+      const key = `${m.producto_id}|${m.cantidad}|${m.fecha}`;
+      const g = grupos.get(key) ?? {};
+      if (m.tipo === 'transferencia_salida') g.salida = m;
+      else g.entrada = m;
+      grupos.set(key, g);
+    }
+    const pares: Par[] = [];
+    const anuladas = new Set<string>();
+    for (const [, g] of grupos) {
+      if (!g.salida || !g.entrada) continue;
+      const motivo = g.salida.motivo ?? '';
+      // Anulación: el motivo apunta a un id de movimiento previo.
+      const matchAnul = /^Anulaci[óo]n de transferencia (\S+)/.exec(motivo);
+      if (matchAnul) {
+        anuladas.add(matchAnul[1]!);
+        continue; // no listamos las anulaciones como filas propias
+      }
+      pares.push({
+        keyPar: g.salida.id,
+        salidaId: g.salida.id,
+        fecha: g.salida.fecha,
+        producto_id: g.salida.producto_id,
+        cantidad: g.salida.cantidad,
+        origen_id: g.salida.deposito_id,
+        destino_id: g.entrada.deposito_id,
+        empleado_id: g.salida.empleado_id,
+        motivo: g.salida.motivo,
+      });
+    }
+    pares.sort((a, b) => b.fecha.localeCompare(a.fecha));
+    return { pares, anuladas };
+  }, [movsQ.data]);
+
+  const anularMut = useMutation({
+    mutationFn: async (movimiento_id: string) => {
+      if (!empleado) throw new Error('Sin sesión');
+      if (!db.stock.anularTransferenciaInmediata) {
+        throw new Error('Anulación no disponible en este modo');
+      }
+      return db.stock.anularTransferenciaInmediata({
+        movimiento_id,
+        empleado_id: empleado.id,
+      });
+    },
+    onSuccess: () => {
+      toast.success('Transferencia anulada — stock revertido');
+      qc.invalidateQueries({ queryKey: ['stock-movs-recientes-pos'] });
+      qc.invalidateQueries({ queryKey: ['stock-prod'] });
+      qc.invalidateQueries({ queryKey: ['pos-stocks-buscar'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function nombreProd(id: string) {
+    return productosQ.data?.find((p) => p.id === id)?.nombre ?? '—';
+  }
+  function codigoProd(id: string) {
+    return productosQ.data?.find((p) => p.id === id)?.codigo_interno ?? '—';
+  }
+  function nombreDep(id: string) {
+    return depositosQ.data?.find((d) => d.id === id)?.nombre ?? '—';
+  }
+  function nombreEmp(id: string) {
+    const e = empleadosQ.data?.find((x) => x.id === id);
+    return e ? `${e.nombre} ${e.apellido ?? ''}`.trim() : '—';
+  }
+  function horaTxt(iso: string) {
+    return new Date(iso).toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  if (movsQ.isLoading) return <Skeleton className="h-40" />;
+  if (pares.length === 0) {
+    return (
+      <p className="rounded-md border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+        No hay transferencias en las últimas 48 horas.
+      </p>
+    );
+  }
+
+  return (
+    <div className="max-h-[60vh] space-y-1.5 overflow-y-auto">
+      {pares.map((p) => {
+        const anulada = anuladas.has(p.salidaId);
+        return (
+          <div
+            key={p.keyPar}
+            className={`rounded-md border bg-card p-2 text-sm ${
+              anulada ? 'opacity-60' : ''
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {codigoProd(p.producto_id)}
+                  </span>
+                  <span className={`truncate font-medium ${anulada ? 'line-through' : ''}`}>
+                    {nombreProd(p.producto_id)}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">
+                    {p.cantidad} unidades
+                  </span>
+                  <span className="rounded bg-muted px-1.5 py-0.5">
+                    {nombreDep(p.origen_id)}
+                  </span>
+                  <ArrowRight className="h-3 w-3" />
+                  <span className="rounded bg-muted px-1.5 py-0.5">
+                    {nombreDep(p.destino_id)}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  {horaTxt(p.fecha)} · {nombreEmp(p.empleado_id)}
+                </div>
+              </div>
+              {anulada ? (
+                <span className="shrink-0 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                  Anulada
+                </span>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="shrink-0 text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    if (
+                      confirm(
+                        `¿Anular esta transferencia? Se va a revertir el stock: ${p.cantidad} × ${nombreProd(p.producto_id)} vuelve de ${nombreDep(p.destino_id)} a ${nombreDep(p.origen_id)}.`,
+                      )
+                    ) {
+                      anularMut.mutate(p.salidaId);
+                    }
+                  }}
+                  disabled={anularMut.isPending}
+                  title="Anular y revertir el stock"
+                >
+                  <Trash2 className="mr-1 h-3 w-3" />
+                  Anular
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
