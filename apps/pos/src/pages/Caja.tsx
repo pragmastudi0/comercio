@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
-import { LogOut, History, Wallet } from 'lucide-react';
+import { LogOut, History, Wallet, Ban, UserCog } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { useVenta } from '@/stores/venta';
@@ -24,6 +24,7 @@ export function Caja() {
   const empleado = useSesion((s) => s.empleado);
   const caja = useSesion((s) => s.caja);
   const sesion = useSesion((s) => s.sesionCaja);
+  const setEmpleado = useSesion((s) => s.setEmpleado);
   const { depositoId } = useDepositoActivo();
   const items = useVenta((s) => s.items);
   const limpiar = useVenta((s) => s.limpiar);
@@ -100,13 +101,13 @@ export function Caja() {
   useHotkeys(SHORTCUTS.pagoMixto, (e) => { e.preventDefault(); abrirCobro(); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cancelar, () => cancelarVenta(), { enableOnFormTags: true });
 
-  // Enter global = "Cobrar efectivo" cuando hay items en el carrito Y el
-  // foco NO está en un input/textarea (el buscador maneja su propio Enter:
-  // agregar producto, o si está vacío también dispara cobrar). Esto cubre
-  // los casos donde el cajero perdió foco por un click en la tabla del
-  // carrito o un Tab — apretás Enter y arranca el cobro sin tocar el mouse.
+  // Tecla "+" global = abrir Cobrar efectivo. Funciona desde cualquier
+  // parte de la pantalla EXCEPTO cuando el foco está en un input (en
+  // ese caso, "+" entra al campo si tiene sentido). Antes era Enter,
+  // pero Enter ahora se usa para sumar cantidad del mismo producto en
+  // el buscador, así que separamos: Enter = sumar, "+" = cobrar.
   useHotkeys(
-    'enter',
+    '+, numpadadd',
     (e) => {
       if (items.length === 0) return;
       e.preventDefault();
@@ -159,6 +160,15 @@ export function Caja() {
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => navigate('/historial')}
+              title="Anular venta — abre el historial"
+            >
+              <Ban className="mr-1 h-3 w-3" />
+              Anular
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setAjustarCajaOpen(true)}
               title="Cargar o sacar efectivo de caja, corregir saldo"
             >
@@ -167,6 +177,23 @@ export function Caja() {
             </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate('/cerrar-caja')}>
               Cerrar caja
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (confirm('¿Cambiar de usuario? La caja queda abierta y el próximo usuario sigue desde acá.')) {
+                  // Solo limpiamos el empleado; sesionCaja y caja siguen vivas
+                  // en el store y en BD. Login.tsx detecta la caja abierta y
+                  // lleva al nuevo empleado directo a /caja.
+                  setEmpleado(null);
+                  navigate('/login');
+                }
+              }}
+              title="Cambiar usuario sin cerrar caja (turno mañana → tarde)"
+            >
+              <UserCog className="mr-1 h-3 w-3" />
+              Cambiar usuario
             </Button>
             <Button
               variant="ghost"
@@ -189,7 +216,7 @@ export function Caja() {
         <div className="flex flex-col overflow-hidden">
           <TabsCarritos />
           <div className="border-b p-4">
-            <BuscadorProducto onCobrarRapido={() => abrirCobro('efectivo')} />
+            <BuscadorProducto />
           </div>
           <div className="flex-1 overflow-y-auto">
             <Carrito />
@@ -209,10 +236,10 @@ export function Caja() {
                 Cancelar
               </span>
               <span className="text-muted-foreground/70">
-                Cobro: F5 Efectivo · F6 Tarjeta · F7 QR · F8 Pago mixto
+                Cobro: <kbd className="rounded bg-background px-1 py-0.5 font-mono shadow-sm">+</kbd> Efectivo · F5/F6/F7 Efectivo/Tarjeta/QR · F8 Pago mixto
               </span>
               <span className="text-muted-foreground/70">
-                Buscador: Enter agrega producto · Enter con buscador vacío + carrito = Cobrar · ↑↓ navega · Supr borra ítem
+                Buscador: Enter suma cantidad · ↑↓ navega · Supr borra ítem
               </span>
             </div>
           </div>

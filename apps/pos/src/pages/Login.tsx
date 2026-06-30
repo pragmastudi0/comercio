@@ -21,7 +21,6 @@ export function Login() {
   // mandamos directo a /caja, no a /abrir-caja (no debe abrir una nueva).
   // Si entra con otro email (cambio de turno) → /abrir-caja como siempre.
   const sesionCaja = useSesion((s) => s.sesionCaja);
-  const empleadoPersistido = useSesion((s) => s.empleado);
   // Cuando el SSO desde admin falla y caemos al login manual, el admin
   // nos pasa ?email=... para que el dueño/encargado no tenga que tipear
   // el email también — sólo la contraseña.
@@ -41,8 +40,11 @@ export function Login() {
     onSuccess: (emp) => {
       setEmpleado(emp);
       toast.success(`Hola ${emp.nombre}`);
-      const cajaSigueAbierta = sesionCaja && empleadoPersistido?.id === emp.id;
-      navigate(cajaSigueAbierta ? '/caja' : '/abrir-caja');
+      // Si hay una caja activa en el store (la dejó abierta el usuario
+      // anterior via "Cambiar usuario"), el nuevo empleado entra a /caja
+      // y sigue desde donde quedó. RequireSesionAbierta poolea contra BD
+      // y si la sesión ya fue cerrada desde otro lado, kickea a /abrir-caja.
+      navigate(sesionCaja ? '/caja' : '/abrir-caja');
     },
     onError: (e: Error) => toast.error(e.message),
   });

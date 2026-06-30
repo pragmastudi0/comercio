@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Search, Receipt, RefreshCw } from 'lucide-react';
@@ -9,6 +9,22 @@ import { Input } from '@comercio/ui/input';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { Badge } from '@comercio/ui/badge';
 import { formatCurrency } from '@comercio/ui/utils';
+
+// Turnos del local — mañana 7-15, tarde 15-23. Fuera de ese rango
+// (madrugada) lo metemos en "tarde" del día anterior para no crear
+// un tercer grupo "noche" que confunde.
+function turnoDe(fecha: Date): 'mañana' | 'tarde' {
+  const h = fecha.getHours();
+  return h >= 7 && h < 15 ? 'mañana' : 'tarde';
+}
+function labelTurno(turno: 'mañana' | 'tarde', fecha: Date): string {
+  const dia = fecha.toLocaleDateString('es-AR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+  });
+  return `Turno ${turno} · ${dia}`;
+}
 
 const LABEL_METODO: Record<string, string> = {
   efectivo: 'Efectivo',
@@ -203,6 +219,18 @@ export function Historial() {
                   .join(' + ');
                 const anulada = v.estado === 'anulada';
                 const tuvoCambio = ventasConCambio.has(v.id);
+
+                // Separador de turno: cada vez que cambia día o turno
+                // mostramos una fila grande tipo "Turno mañana · lunes 30/06".
+                // El historial viene ordenado por fecha (desc por default),
+                // así que comparamos contra la venta anterior del map.
+                const turno = turnoDe(fecha);
+                const grupo = `${fecha.toDateString()}-${turno}`;
+                const fechaPrev = vIdx > 0 ? new Date(ventas[vIdx - 1]!.fecha) : null;
+                const grupoPrev = fechaPrev
+                  ? `${fechaPrev.toDateString()}-${turnoDe(fechaPrev)}`
+                  : null;
+                const cambioDeTurno = grupo !== grupoPrev;
                 // Bandeo alternado por venta: ventas pares un color,
                 // impares otro, así el cajero ve qué filas son la misma.
                 // Si tuvo cambio, banda ámbar para distinguirla a la vista.
@@ -211,7 +239,19 @@ export function Historial() {
                   : vIdx % 2 === 0
                     ? 'bg-card'
                     : 'bg-muted/30';
-                return v.items.map((it, idx) => {
+                return (
+                <Fragment key={`grupo-${v.id}`}>
+                {cambioDeTurno && (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="border-y-2 border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-primary"
+                    >
+                      {labelTurno(turno, fecha)}
+                    </td>
+                  </tr>
+                )}
+                {v.items.map((it, idx) => {
                   const p = productoPorId(it.producto_id);
                   const esPrimera = idx === 0;
                   const precioEditado = itemsConPrecioEditado.has(
@@ -274,7 +314,9 @@ export function Historial() {
                       </td>
                     </tr>
                   );
-                });
+                })}
+                </Fragment>
+                );
               })}
             </tbody>
           </table>

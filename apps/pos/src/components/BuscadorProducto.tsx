@@ -23,14 +23,7 @@ export type BuscadorProductoHandle = {
   focus: () => void;
 };
 
-export function BuscadorProducto({
-  onCobrarRapido,
-}: {
-  /** Callback que abre el modal Cobrar. Se dispara al apretar Enter en
-   *  el buscador cuando está vacío y hay items en el carrito. Si no se
-   *  pasa, Enter no hace nada en ese caso. */
-  onCobrarRapido?: () => void;
-} = {}) {
+export function BuscadorProducto() {
   const db = getDb();
   const { depositoId } = useDepositoActivo();
 
@@ -237,8 +230,11 @@ export function BuscadorProducto({
     const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
     const precio = cf?.escalas[0]?.precio ?? 0;
     agregar(p, precio);
-    setQ('');
+    // NO borramos el código: dejamos el texto seleccionado para que el
+    // siguiente Enter sume otra unidad del mismo producto, o que al tipear
+    // se reemplace automáticamente con el código nuevo.
     setMostrarLista(false);
+    setTimeout(() => inputRef.current?.select(), 0);
     if (eval_.crossDeposito) {
       const lugares = eval_.nombresOtros.length > 0
         ? `pedilo a ${eval_.nombresOtros.join(' o ')}`
@@ -261,8 +257,10 @@ export function BuscadorProducto({
     const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
     const precio = cf?.escalas[0]?.precio ?? 0;
     agregar(p, precio);
-    setQ('');
+    // Igual que agregarPorCodigoExacto: mantenemos el texto seleccionado
+    // para sumar más unidades con Enter o reemplazar tipeando.
     setMostrarLista(false);
+    setTimeout(() => inputRef.current?.select(), 0);
     if (eval_.crossDeposito) {
       const lugares = eval_.nombresOtros.length > 0
         ? `pedilo a ${eval_.nombresOtros.join(' o ')}`
@@ -305,19 +303,16 @@ export function BuscadorProducto({
           const lista = resultadosQ.data ?? [];
           if (e.key === 'Enter') {
             // Caso 1: hay resultados → agregar el resaltado.
+            //   Si el código ya está en el carrito, el store suma cantidad.
+            //   El texto del input NO se borra: un segundo Enter sigue
+            //   sumando, o se reemplaza al empezar a tipear.
             // Caso 2: hay query pero sin resultados → intentar código exacto.
-            // Caso 3: BUSCADOR VACÍO + carrito con items → atajo a Cobrar.
-            //   Es el "Enter rápido" del cliente: termina la carga,
-            //   un Enter abre el modal de Cobrar directo. Si NO hay items,
-            //   no hace nada (evita abrir modal por error).
+            // Buscador vacío + Enter: no hace nada (para cobrar se usa "+").
             if (lista.length > 0) {
               const target = lista[Math.min(resaltadoIdx, lista.length - 1)];
               if (target) agregarProducto(target.id);
             } else if (q.trim() !== '') {
               void agregarPorCodigoExacto();
-            } else if (itemsEnCarrito.length > 0 && onCobrarRapido) {
-              e.preventDefault();
-              onCobrarRapido();
             }
           } else if (e.key === 'ArrowDown') {
             e.preventDefault();
