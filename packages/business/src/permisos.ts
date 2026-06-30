@@ -34,6 +34,13 @@ export type PermisosConfig = {
     importar?: boolean;
     gestionar_atributos?: boolean;
     publicar_ecommerce?: boolean;
+    // Visibilidad de finanzas en el admin (NO afecta al PoS). Default true.
+    // Solo Agus (admin) puede tildar/destildar a otros roles desde /admin/roles
+    // para esconder estos campos en la pantalla de productos y el modal de
+    // cargar stock.
+    ver_costo?: boolean;
+    ver_margen?: boolean;
+    ver_precio_venta?: boolean;
   };
   categorias?: {
     ver?: boolean;
@@ -151,6 +158,9 @@ const PERMISO_ADMIN: PermisosConfig = {
     importar: true,
     gestionar_atributos: true,
     publicar_ecommerce: true,
+    ver_costo: true,
+    ver_margen: true,
+    ver_precio_venta: true,
   },
   categorias: { ver: true, crear: true, editar: true, eliminar: true },
   clientes: {
@@ -227,7 +237,18 @@ export const PERMISOS_PRESET: Record<RolPreset, PermisosConfig> = {
       ingreso_efectivo: true,
       egreso_efectivo: true,
     },
-    productos: { ver: true, crear: true, editar: true, modificar_precio: true, importar: true },
+    productos: {
+      ver: true,
+      crear: true,
+      editar: true,
+      modificar_precio: true,
+      importar: true,
+      // Por default visibles — Agus puede destildar a este rol desde
+      // /admin/roles si quiere esconder costos a los encargados.
+      ver_costo: true,
+      ver_margen: true,
+      ver_precio_venta: true,
+    },
     categorias: { ver: true, crear: true, editar: true },
     clientes: {
       ver: true,
@@ -271,6 +292,10 @@ export const PERMISOS_PRESET: Record<RolPreset, PermisosConfig> = {
       importar: true,
       gestionar_atributos: true,
       publicar_ecommerce: true,
+      // Mismo criterio que encargado: por default visible, Agus elige.
+      ver_costo: true,
+      ver_margen: true,
+      ver_precio_venta: true,
     },
     categorias: { ver: true, crear: true, editar: true },
     proveedores: { ver: true, crear: true, editar: true },

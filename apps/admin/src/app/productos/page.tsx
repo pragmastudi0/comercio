@@ -390,6 +390,11 @@ function PanelProducto({
   const db = getDb();
   const qc = useQueryClient();
   const empleado = useSesion((s) => s.empleado);
+  // Visibilidad de finanzas — el dueño puede destildar por rol desde
+  // /admin/roles. Por default todos los roles los ven.
+  const verCosto = usePermiso('productos', 'ver_costo');
+  const verMargen = usePermiso('productos', 'ver_margen');
+  const verPrecioVenta = usePermiso('productos', 'ver_precio_venta');
   const productoQ = useQuery({
     queryKey: ['producto-detalle', productoId],
     queryFn: () => db.productos.get(productoId),
@@ -598,66 +603,75 @@ function PanelProducto({
               className="h-7 text-sm tabular-nums"
             />
           </div>
-          <div>
-            <Label className="mb-0 block text-[10px] uppercase text-slate-600">
-              Costo
-            </Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={costoTxt}
-              onChange={(e) => setCostoTxt(e.target.value)}
-              onFocus={(e) => e.currentTarget.select()}
-              disabled={!puedeEditar}
-              className="h-7 text-sm tabular-nums"
-            />
-          </div>
-        </div>
-
-        {/* Precio CF + Margen lado a lado, sincronizados */}
-        <div className="rounded border border-blue-200 bg-blue-50/50 p-1.5">
-          <div className="grid grid-cols-2 gap-2">
+          {verCosto && (
             <div>
-              <Label className="mb-0 block text-[10px] uppercase text-slate-700">
-                Precio público
+              <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                Costo
               </Label>
               <Input
                 type="number"
                 step="0.01"
-                value={precioCfTxt}
-                onChange={(e) => setPrecioCfTxt(e.target.value)}
+                value={costoTxt}
+                onChange={(e) => setCostoTxt(e.target.value)}
                 onFocus={(e) => e.currentTarget.select()}
                 disabled={!puedeEditar}
-                className="h-7 text-sm font-semibold tabular-nums"
+                className="h-7 text-sm tabular-nums"
               />
             </div>
-            <div>
-              <Label className="mb-0 block text-[10px] uppercase text-slate-700">
-                Margen %
-              </Label>
-              <div className="relative">
+          )}
+        </div>
+
+        {/* Precio CF + Margen lado a lado, sincronizados. Si el rol no
+            tiene ver_precio_venta NI ver_margen, escondemos toda la caja. */}
+        {(verPrecioVenta || verMargen) && (
+        <div className="rounded border border-blue-200 bg-blue-50/50 p-1.5">
+          <div className={`grid gap-2 ${verPrecioVenta && verMargen ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {verPrecioVenta && (
+              <div>
+                <Label className="mb-0 block text-[10px] uppercase text-slate-700">
+                  Precio público
+                </Label>
                 <Input
                   type="number"
-                  step="0.1"
-                  value={costo > 0 ? Number(margen.toFixed(2)) : ''}
-                  onChange={(e) => setMargenAmano(parseFloat(e.target.value) || 0)}
+                  step="0.01"
+                  value={precioCfTxt}
+                  onChange={(e) => setPrecioCfTxt(e.target.value)}
                   onFocus={(e) => e.currentTarget.select()}
-                  disabled={!puedeEditar || costo <= 0}
-                  placeholder={costo <= 0 ? 'sin costo' : ''}
-                  className="h-7 pr-6 text-sm font-semibold tabular-nums"
+                  disabled={!puedeEditar}
+                  className="h-7 text-sm font-semibold tabular-nums"
                 />
-                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">
-                  %
-                </span>
               </div>
-            </div>
+            )}
+            {verMargen && (
+              <div>
+                <Label className="mb-0 block text-[10px] uppercase text-slate-700">
+                  Margen %
+                </Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={costo > 0 ? Number(margen.toFixed(2)) : ''}
+                    onChange={(e) => setMargenAmano(parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => e.currentTarget.select()}
+                    disabled={!puedeEditar || costo <= 0}
+                    placeholder={costo <= 0 ? 'sin costo' : ''}
+                    className="h-7 pr-6 text-sm font-semibold tabular-nums"
+                  />
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">
+                    %
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
-          {costo > 0 && precioCf > 0 && (
+          {verCosto && verPrecioVenta && costo > 0 && precioCf > 0 && (
             <div className="mt-0.5 text-[10px] text-slate-600">
               Ganás <b>{formatCurrency(precioCf - costo)}</b> por unidad.
             </div>
           )}
         </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -908,6 +922,11 @@ function PanelNuevoProducto({
   const db = getDb();
   const qc = useQueryClient();
   const empleado = useSesion((s) => s.empleado);
+  // Mismas reglas que el panel de detalle: el dueño puede esconderle
+  // costo / margen / precio a los roles que carga catálogo.
+  const verCosto = usePermiso('productos', 'ver_costo');
+  const verMargen = usePermiso('productos', 'ver_margen');
+  const verPrecioVenta = usePermiso('productos', 'ver_precio_venta');
 
   const [nombre, setNombre] = useState('');
   const [codigo, setCodigo] = useState('');
@@ -1012,7 +1031,7 @@ function PanelNuevoProducto({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className={`grid gap-2 ${verCosto ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <div>
             <Label className="mb-0 block text-[10px] uppercase text-slate-600">
               Código <span className="text-red-600">*</span>
@@ -1025,54 +1044,62 @@ function PanelNuevoProducto({
               className="h-7 text-sm tabular-nums"
             />
           </div>
-          <div>
-            <Label className="mb-0 block text-[10px] uppercase text-slate-600">Costo</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={costoTxt}
-              onChange={(e) => setCostoTxt(e.target.value)}
-              onFocus={(e) => e.currentTarget.select()}
-              className="h-7 text-sm tabular-nums"
-            />
-          </div>
-        </div>
-
-        <div className="rounded border border-blue-200 bg-blue-50/50 p-1.5">
-          <div className="grid grid-cols-2 gap-2">
+          {verCosto && (
             <div>
-              <Label className="mb-0 block text-[10px] uppercase text-slate-700">
-                Precio público
-              </Label>
+              <Label className="mb-0 block text-[10px] uppercase text-slate-600">Costo</Label>
               <Input
                 type="number"
                 step="0.01"
-                value={precioCfTxt}
-                onChange={(e) => setPrecioCfTxt(e.target.value)}
+                value={costoTxt}
+                onChange={(e) => setCostoTxt(e.target.value)}
                 onFocus={(e) => e.currentTarget.select()}
-                className="h-7 text-sm font-semibold tabular-nums"
+                className="h-7 text-sm tabular-nums"
               />
             </div>
-            <div>
-              <Label className="mb-0 block text-[10px] uppercase text-slate-700">Margen %</Label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={costo > 0 ? Number(margen.toFixed(2)) : ''}
-                  onChange={(e) => setMargenAmano(parseFloat(e.target.value) || 0)}
-                  onFocus={(e) => e.currentTarget.select()}
-                  disabled={costo <= 0}
-                  placeholder={costo <= 0 ? 'sin costo' : ''}
-                  className="h-7 pr-6 text-sm font-semibold tabular-nums"
-                />
-                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">
-                  %
-                </span>
-              </div>
+          )}
+        </div>
+
+        {(verPrecioVenta || verMargen) && (
+          <div className="rounded border border-blue-200 bg-blue-50/50 p-1.5">
+            <div className={`grid gap-2 ${verPrecioVenta && verMargen ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {verPrecioVenta && (
+                <div>
+                  <Label className="mb-0 block text-[10px] uppercase text-slate-700">
+                    Precio público
+                  </Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={precioCfTxt}
+                    onChange={(e) => setPrecioCfTxt(e.target.value)}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="h-7 text-sm font-semibold tabular-nums"
+                  />
+                </div>
+              )}
+              {verMargen && (
+                <div>
+                  <Label className="mb-0 block text-[10px] uppercase text-slate-700">Margen %</Label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={costo > 0 ? Number(margen.toFixed(2)) : ''}
+                      onChange={(e) => setMargenAmano(parseFloat(e.target.value) || 0)}
+                      onFocus={(e) => e.currentTarget.select()}
+                      disabled={costo <= 0}
+                      placeholder={costo <= 0 ? 'sin costo' : ''}
+                      className="h-7 pr-6 text-sm font-semibold tabular-nums"
+                    />
+                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">
+                      %
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <div>

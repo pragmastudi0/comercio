@@ -38,17 +38,36 @@ export function usePermisos() {
   });
 
   // Base de permisos:
-  // - Roles preset (admin/encargado/cajero/catalogo): SIEMPRE usamos el
-  //   preset hardcodeado de @comercio/business, ignorando lo que diga la
-  //   BD. Esto garantiza que los cambios al código se apliquen al
-  //   instante en producción sin necesidad de re-grabar el rol. Si Agus
-  //   quiere permisos custom, debe CREAR un rol nuevo en /roles, no
-  //   editar los 4 preset.
+  // - Roles preset (admin/encargado/cajero/catalogo): usamos el preset
+  //   hardcodeado de @comercio/business como base. Esto garantiza que los
+  //   cambios al código se aplican al instante sin tener que re-grabar el
+  //   rol en la BD.
   // - Roles custom: usamos los permisos guardados en BD. Mientras carga,
   //   undefined (que se interpreta como "todo en false" arriba).
+  // - EXCEPCIÓN: para 3 permisos puntuales (ver_costo / ver_margen /
+  //   ver_precio_venta de productos), si el rol preset tiene una versión
+  //   guardada en BD, esa pisa al hardcoded. Así Agus puede destildar
+  //   esos campos desde /admin/roles para encargado/catálogo sin perder
+  //   el resto del preset hardcoded. Es la única finura editable de los
+  //   roles preset; lo demás sigue mandando el código.
   const presetKey = empleado?.rol_id ? ROL_PRESET_POR_ID[empleado.rol_id] : undefined;
-  const base = presetKey
-    ? PERMISOS_PRESET[presetKey]
+  const preset = presetKey ? PERMISOS_PRESET[presetKey] : undefined;
+  const bdProductos = rolQ.data?.permisos?.productos;
+  const overridesVisibilidad: Record<string, boolean> = {};
+  if (bdProductos) {
+    for (const k of ['ver_costo', 'ver_margen', 'ver_precio_venta'] as const) {
+      if (k in bdProductos && typeof bdProductos[k] === 'boolean') {
+        overridesVisibilidad[k] = bdProductos[k]!;
+      }
+    }
+  }
+  const base = preset
+    ? Object.keys(overridesVisibilidad).length > 0
+      ? {
+          ...preset,
+          productos: { ...preset.productos, ...overridesVisibilidad },
+        }
+      : preset
     : rolQ.data?.permisos;
 
   const efectivos = base

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { PackagePlus, Search } from 'lucide-react';
 import { getDb } from '@/lib/db';
+import { usePermiso } from '@/lib/permisos';
 import { useSesion } from '@/stores/sesion';
 import { Dialog, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
 import { Input } from '@comercio/ui/input';
@@ -32,6 +33,7 @@ export function ModalCargarStock({
   const db = getDb();
   const qc = useQueryClient();
   const empleado = useSesion((s) => s.empleado);
+  const verCosto = usePermiso('productos', 'ver_costo');
 
   const [codigo, setCodigo] = useState('');
   const [producto, setProducto] = useState<Producto | null>(null);
@@ -180,9 +182,11 @@ export function ModalCargarStock({
             <div className="rounded-md border bg-muted/30 p-3">
               <div className="text-xs uppercase text-muted-foreground">Producto</div>
               <div className="font-semibold">{producto.nombre}</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                Costo {formatCurrency(producto.costo)}
-              </div>
+              {verCosto && (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Costo {formatCurrency(producto.costo)}
+                </div>
+              )}
               {/* Stock actual por local */}
               {stocksQ.data && depositosQ.data && (
                 <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs">
