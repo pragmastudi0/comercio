@@ -114,10 +114,10 @@ const TOOLBAR: ToolbarAction[] = [
   { type: 'modal', key: 'ganancias', label: 'Ganancias', icon: TrendingUp, color: 'bg-blue-100 text-blue-700', requiere: req('reportes', 'ver_ganancia') },
   { type: 'link', href: '/ventas', label: 'Ventas', icon: ShoppingCart, color: 'bg-indigo-100 text-indigo-700', requiere: req('reportes', 'ver_local_propio') },
   { type: 'modal', key: 'cargar-stock', label: 'Cargar stock', icon: PackagePlus, color: 'bg-amber-100 text-amber-700', requiere: req('stock', 'ajustar') },
-  // "Productos" abre /productos con el panel de creación inline ya
-  // activado (?nuevo=1). Es la misma vista que "Faltantes" pero con
-  // foco en agregar/editar en lugar de listar lo que falta.
-  { type: 'link', href: '/productos?nuevo=1', label: 'Productos', icon: PlusCircle, color: 'bg-purple-100 text-purple-700', requiere: req('productos', 'crear') },
+  // "Productos" abre /productos en su vista normal — el panel a la
+  // derecha muestra el primer producto seleccionado. Para crear uno
+  // nuevo Agus tiene el botón "Nuevo" dentro de la página.
+  { type: 'link', href: '/productos', label: 'Productos', icon: PlusCircle, color: 'bg-purple-100 text-purple-700', requiere: req('productos', 'crear') },
   { type: 'link', href: '/productos?stock=bajo', label: 'Faltantes', icon: AlertTriangle, color: 'bg-red-100 text-red-700', requiere: req('productos', 'ver') },
   // Cobrar → abre el PoS en pestaña nueva CON LA SESIÓN YA INICIADA.
   // El handler pasa el access/refresh token de Supabase en el hash

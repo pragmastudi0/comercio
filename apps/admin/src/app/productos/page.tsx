@@ -597,10 +597,15 @@ function PanelProducto({
             </Label>
             <Input
               value={codigo}
-              onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ''))}
-              disabled={!puedeEditar}
+              // Código read-only al editar: una vez creado, no se cambia
+              // (es la referencia que usan tickets viejos, importadores,
+              // etc.). Si hay que renombrarlo, se borra el producto y se
+              // crea otro con el código correcto.
+              readOnly
+              disabled
+              title="El código no se puede modificar después de crear el producto"
               maxLength={5}
-              className="h-7 text-sm tabular-nums"
+              className="h-7 cursor-not-allowed text-sm tabular-nums opacity-70"
             />
           </div>
           {verCosto && (

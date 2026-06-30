@@ -194,8 +194,12 @@ function DashboardInner() {
     }
     let bruto = 0; // suma de subtotales (precio lista × cantidad)
     let ganancia = 0; // suma de (precio_unitario − costo) × cantidad
-    let efectivo = 0;
-    let otros = 0;
+    // Agrupación de cobros pedida por Agus: el efectivo viene con
+    // transferencia (plata "real" que entra), y la tarjeta con QR (cobros
+    // electrónicos). Cta cte queda fuera de la división porque no es
+    // efectivamente cobrado todavía.
+    let efectivoTransf = 0;
+    let tarjetaQr = 0;
     for (const v of ventasRango) {
       bruto += v.subtotal;
       for (const it of v.items) {
@@ -203,11 +207,15 @@ function DashboardInner() {
         ganancia += (it.precio_unitario - costo) * it.cantidad;
       }
       for (const p of v.pagos) {
-        if (p.metodo === 'efectivo') efectivo += p.monto;
-        else otros += p.monto;
+        if (p.metodo === 'efectivo' || p.metodo === 'transferencia') {
+          efectivoTransf += p.monto;
+        } else if (p.metodo === 'debito' || p.metodo === 'credito' || p.metodo === 'qr') {
+          tarjetaQr += p.monto;
+        }
+        // cta_cte se excluye intencionalmente.
       }
     }
-    return { bruto, ganancia, efectivo, otros };
+    return { bruto, ganancia, efectivoTransf, tarjetaQr };
   }, [ventasRango, productosLookupQ.data]);
 
   // Top productos del día
@@ -246,8 +254,8 @@ function DashboardInner() {
   // cargó en /configuracion.
   const totalRangoAnim = useCountUp(totalRango);
   const gananciaAnim = useCountUp(indicadores.ganancia + arranqueGanancia);
-  const efectivoAnim = useCountUp(indicadores.efectivo + arranqueEfectivo);
-  const otrosAnim = useCountUp(indicadores.otros + arranqueOtros);
+  const efectivoAnim = useCountUp(indicadores.efectivoTransf + arranqueEfectivo);
+  const otrosAnim = useCountUp(indicadores.tarjetaQr + arranqueOtros);
   const valuacionCostoAnim = useCountUp(valuacion.totalCosto);
   const valuacionPrecioAnim = useCountUp(valuacion.totalPrecio);
 
@@ -332,23 +340,23 @@ function DashboardInner() {
           loading={ventasQ.isLoading || productosLookupQ.isLoading}
         />
         <KpiCard
-          titulo="Cobrado en efectivo"
+          titulo="Efectivo + transferencia"
           valor={formatCurrency(Math.round(efectivoAnim))}
           sub={
             arranqueEfectivo > 0
               ? `Incluye ${formatCurrency(arranqueEfectivo)} previo al sistema`
-              : `${pctTexto(indicadores.efectivo + arranqueEfectivo, totalRango)} del total`
+              : `${pctTexto(indicadores.efectivoTransf + arranqueEfectivo, totalRango)} del total`
           }
           icon={Banknote}
           loading={ventasQ.isLoading}
         />
         <KpiCard
-          titulo="Otros cobros"
+          titulo="Tarjeta + QR"
           valor={formatCurrency(Math.round(otrosAnim))}
           sub={
             arranqueOtros > 0
               ? `Incluye ${formatCurrency(arranqueOtros)} previo al sistema`
-              : 'Tarjeta · QR · Transf.'
+              : 'Débito · Crédito · QR'
           }
           icon={CreditCard}
           loading={ventasQ.isLoading}
@@ -361,8 +369,8 @@ function DashboardInner() {
           ni acumulado del arranque, muestra vacío. */}
       <div className="mb-4">
         <DonutCobros
-          efectivo={indicadores.efectivo + arranqueEfectivo}
-          otros={indicadores.otros + arranqueOtros}
+          efectivo={indicadores.efectivoTransf + arranqueEfectivo}
+          otros={indicadores.tarjetaQr + arranqueOtros}
           loading={ventasQ.isLoading}
         />
       </div>
@@ -580,8 +588,8 @@ function DonutCobros({
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Cobros por método</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Distribución del período seleccionado · efectivo vs el resto
-          (tarjeta · QR · transferencia · cta. cte.).
+          Distribución del período seleccionado · efectivo y transferencia
+          de un lado, tarjeta y QR del otro.
         </p>
       </CardHeader>
       <CardContent>
@@ -658,14 +666,14 @@ function DonutCobros({
             <div className="flex-1 space-y-3 text-sm">
               <LeyendaSlice
                 color={COLOR_EFECTIVO}
-                etiqueta="Efectivo"
+                etiqueta="Efectivo + transferencia"
                 montoAnim={efectivoAnim}
                 pctAnim={pctEfectivoAnim}
                 total={total}
               />
               <LeyendaSlice
                 color={COLOR_OTROS}
-                etiqueta="Otros (tarjeta · QR · transf. · cta. cte.)"
+                etiqueta="Tarjeta + QR"
                 montoAnim={otrosAnim}
                 pctAnim={pctOtrosAnim}
                 total={total}
