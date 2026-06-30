@@ -250,3 +250,30 @@ comercio/
 - **Reset transaccional ejecutado** (`scripts/reset-transacciones-go-live.sql`): borrados todos los movimientos/ventas/sesiones de caja/NC/transferencias/logs de transacciones de prueba. Contadores ventas y NC reseteados a 0 → primera venta del martes va a ser 0001-00000001. Catálogo, stock real, empleados, roles, cajas, locales y configuración intactos.
 
 **Estado al cierre**: producción lista para go-live mañana martes 2026-07-01. Cliente entra con catálogo + stock real + sistema limpio.
+
+### 2026-06-30 — Iteración 1 post go-live (rama `feat/post-go-live-iteracion-1`, mergeada a main)
+
+**PoS:**
+- **Enter en buscador suma cantidad** sin borrar (texto queda seleccionado para reemplazar al tipear). El segundo Enter sigue agregando porque el store hace upsert.
+- **Tecla `+` (y numpad +) global = Cobrar efectivo** (antes era Enter). Enter pasa a ser exclusivo de "sumar producto" en el buscador.
+- **Historial agrupado por turno** mañana (7-15) / tarde (15-23). Separador visual con fecha. Madrugada cae en "tarde" del día anterior.
+- **Botón Cambiar usuario** en header de Caja: hace `setEmpleado(null)` pero MANTIENE caja+sesionCaja vivas. Login redirige a `/caja` si hay sesionCaja activa (no solo si es el mismo empleado).
+- **Botón Anular** al lado de Historial (ícono Ban). Mismo destino — réplica visual del sistema anterior del cliente.
+- **Fix saldo inicial**: si el cajero entra a `/abrir-caja` con sesión activa y edita el monto, se persiste. Nuevo método `sesionesCaja.actualizarSaldoInicial(id, monto)` (mock + supabase).
+
+**Admin:**
+- **Permisos ocultables costo/margen/precio**: `productos.ver_costo / ver_margen / ver_precio_venta`. Default true en todos los presets (sin romper). Excepción puntual en `usePermisos`: para esos 3 permisos, la BD pisa al preset (los demás siguen hardcoded). Editables desde `/admin/roles`. Aplica en `/admin/productos` (panel + form crear) y modal cargar-stock.
+- **Código read-only al editar**: input Código del panel detalle queda `readOnly + disabled`.
+- **Default abre primer producto** en `/productos`: botón "Productos" del toolbar admin ahora linkea a `/productos` (sin `?nuevo=1`). El useEffect existente auto-selecciona el primer producto.
+- **Dashboard reagrupado**: cobros divididos en `efectivo+transferencia` vs `tarjeta+QR`. Cta cte excluida de la división. KPIs y donut renombrados.
+- **Ganancias por local separado + total**: modal Ganancias suma selector Todos/B12/C11. Cuando "Todos", debajo del KPI principal aparecen 2 cajas (ganancia/tickets/bruto por local).
+- **Filtro por turno** en `/admin/ventas` y `/admin/caja`: select Todos/Mañana/Tarde. Filtra client-side por hora del campo fecha (ventas) o `abierta_en` (cajas).
+- **Promo/descuento por producto**: nuevas columnas `productos.promo_texto + promo_pct` (SQL en `scripts/migrations-iteracion-1.sql`). En PoS ItemCarritoRow aparece la pill morada con el texto y, si hay `promo_pct > 0`, un botón "Aplicar X%" que setea `descuento_pct` de la línea de un click.
+- **Sección colapsable e-commerce** en panel detalle de producto: checkbox publicado_web + textarea descripción larga. Fotos/escalas siguen en `/web`.
+- **Backup incluye snapshot de stock**: nueva hoja "Stock al momento" en el XLSX, una fila por (producto × local) con Cantidad + Mínimo + flags Bajo mínimo / Sin stock. Resumen suma 3 contadores.
+
+**Lecciones de la sesión**:
+- "preset hardcoded gana" tiene excepciones puntuales editables — implementado vía merge selectivo en `usePermisos`. Mantener cualquier nueva excepción explícita y minimal para no perder predictibilidad.
+- Vercel preview branch deploys son el camino correcto cuando producción ya está viva: rama nueva → preview → testeo del cliente → merge a main. La rama `feat/post-go-live-iteracion-1` cubrió 14 features en un solo ciclo sin tocar producción.
+
+**Migración SQL aplicada**: `scripts/migrations-iteracion-1.sql` (columnas promo_texto + promo_pct + check constraint 0-100).
