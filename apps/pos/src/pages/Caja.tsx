@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
-import { LogOut, History, Wallet, Ban, UserCog } from 'lucide-react';
+import { LogOut, Wallet, Ban, UserCog } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { useSesion } from '@/stores/sesion';
 import { useVenta } from '@/stores/venta';
@@ -101,11 +101,12 @@ export function Caja() {
   useHotkeys(SHORTCUTS.pagoMixto, (e) => { e.preventDefault(); abrirCobro(); }, { enableOnFormTags: true });
   useHotkeys(SHORTCUTS.cancelar, () => cancelarVenta(), { enableOnFormTags: true });
 
-  // Tecla "+" global = abrir Cobrar efectivo. Funciona desde cualquier
-  // parte de la pantalla EXCEPTO cuando el foco está en un input (en
-  // ese caso, "+" entra al campo si tiene sentido). Antes era Enter,
-  // pero Enter ahora se usa para sumar cantidad del mismo producto en
-  // el buscador, así que separamos: Enter = sumar, "+" = cobrar.
+  // Tecla "+" global = abrir Cobrar efectivo. enableOnFormTags: true
+  // porque el buscador SIEMPRE tiene el foco (re-foco automático), así
+  // que sin esto el atajo no dispararía nunca. El preventDefault evita
+  // que el "+" se inserte en el texto del input. Códigos de producto son
+  // numéricos y los nombres no llevan "+", así que reservar esa tecla
+  // para el cobro no rompe el flujo de búsqueda.
   useHotkeys(
     '+, numpadadd',
     (e) => {
@@ -113,7 +114,7 @@ export function Caja() {
       e.preventDefault();
       abrirCobro('efectivo');
     },
-    { enableOnFormTags: false },
+    { enableOnFormTags: true },
     [items],
   );
 
@@ -148,20 +149,14 @@ export function Caja() {
             </span>
           </div>
           <div className="flex items-center gap-1">
+            {/* "Anular" reemplaza al botón "Historial" — los cajeros
+                lo usaban así en el sistema anterior. Misma destino, abre
+                el historial donde pueden ver/anular/cambiar ventas. */}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigate('/historial')}
-              title="Historial 48hs · cambios"
-            >
-              <History className="mr-1 h-3 w-3" />
-              Historial
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate('/historial')}
-              title="Anular venta — abre el historial"
+              title="Anular venta · ver historial 48hs · cambios"
             >
               <Ban className="mr-1 h-3 w-3" />
               Anular
