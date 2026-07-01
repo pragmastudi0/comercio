@@ -52,6 +52,16 @@ export function CerrarCaja() {
   }
   const totalEfectivoEsperado = (sesion?.saldo_inicial ?? 0) + totales.efectivo;
   const diferencia = parseFloat(saldoFinal || '0') - totalEfectivoEsperado;
+  // "Sobrante para retirar": el cajero al cierre se lleva el efectivo que
+  // cobró en el turno y deja SOLO el saldo inicial en caja como cambio
+  // para el próximo turno. Fórmula: saldo declarado - saldo inicial.
+  //   Ej.: abrió con $15.000, cierra declarando $18.000 → sobró $3.000
+  //   que se retiran; en caja quedan los $15.000 iniciales limpios.
+  // Distinto de "diferencia" (arqueo: declarado vs esperado). Podés
+  // tener diferencia = 0 y sobrante > 0 al mismo tiempo — es lo normal
+  // cuando cobraste efectivo en el turno.
+  const sobranteRetiro =
+    parseFloat(saldoFinal || '0') - (sesion?.saldo_inicial ?? 0);
   // Total facturado del turno: suma de todos los métodos (efectivo,
   // transferencia, débito, crédito, QR, cta cte). Distinto del "efectivo
   // esperado" que sólo mira caja física + saldo inicial. Sirve para que
@@ -332,21 +342,54 @@ export function CerrarCaja() {
             />
           </div>
           {saldoFinal && (
-            <div
-              className={`rounded p-3 text-sm ${
-                Math.abs(diferencia) < 0.01
-                  ? 'bg-green-50 text-green-700'
+            <div className="space-y-2">
+              {/* Arqueo: diferencia entre lo contado y lo esperado. Si es
+                  0 la caja cierra bien; si sobra o falta hay que investigar. */}
+              <div
+                className={`rounded p-3 text-sm ${
+                  Math.abs(diferencia) < 0.01
+                    ? 'bg-green-50 text-green-700'
+                    : diferencia < 0
+                      ? 'bg-destructive/10 text-destructive'
+                      : 'bg-orange-50 text-orange-700'
+                }`}
+              >
+                Arqueo: {formatCurrency(diferencia)}{' '}
+                {Math.abs(diferencia) < 0.01
+                  ? '· cuadra con lo esperado'
                   : diferencia < 0
-                    ? 'bg-destructive/10 text-destructive'
-                    : 'bg-orange-50 text-orange-700'
-              }`}
-            >
-              Diferencia: {formatCurrency(diferencia)}{' '}
-              {Math.abs(diferencia) < 0.01
-                ? '· OK'
-                : diferencia < 0
-                  ? '· Falta efectivo'
-                  : '· Sobra efectivo'}
+                    ? '· falta efectivo respecto al esperado'
+                    : '· sobra efectivo respecto al esperado'}
+              </div>
+
+              {/* Sobrante para retirar: el cajero se lleva la diferencia
+                  entre lo declarado y el saldo inicial, así en la caja
+                  quedan sólo los billetes de cambio para el próximo turno.
+                  Distinto del arqueo — puede sobrar $3.000 acá aunque el
+                  arqueo cuadre en cero. */}
+              {sobranteRetiro > 0.01 ? (
+                <div className="rounded border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
+                  <div className="font-semibold">
+                    Sobró para retirar: {formatCurrency(sobranteRetiro)}
+                  </div>
+                  <div className="mt-0.5 text-xs">
+                    Retirá esos {formatCurrency(sobranteRetiro)} para el
+                    próximo turno. Quedan {formatCurrency(sesion?.saldo_inicial ?? 0)}{' '}
+                    en caja como cambio.
+                  </div>
+                </div>
+              ) : sobranteRetiro < -0.01 ? (
+                <div className="rounded border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">
+                  <div className="font-semibold">
+                    Falta para completar el saldo inicial:{' '}
+                    {formatCurrency(Math.abs(sobranteRetiro))}
+                  </div>
+                  <div className="mt-0.5 text-xs">
+                    Estás cerrando con menos de lo que abriste. Revisá antes
+                    de confirmar.
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
           <Button
