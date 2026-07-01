@@ -124,6 +124,11 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
               {item.producto.promo_texto}
             </span>
           )}
+          {item.producto.cuotas_sin_recargo && (
+            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-800">
+              Cuotas sin recargo
+            </span>
+          )}
           {!!item.producto.promo_pct &&
             item.producto.promo_pct > 0 &&
             item.descuento_pct !== item.producto.promo_pct && (

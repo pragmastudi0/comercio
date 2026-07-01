@@ -139,6 +139,12 @@ export type Producto = {
   /** Porcentaje sugerido para la promo (0-100). Si está definido y > 0,
    *  el cajero puede aplicarlo con un click sobre la línea del carrito. */
   promo_pct?: number;
+  /** Producto con cuotas sin recargo (ej. valijas, electrodomésticos con
+   *  promo del cliente). Cuando true, el modal Cobrar NO aplica el recargo
+   *  por cuotas a este ítem — el recargo sigue aplicando al resto del
+   *  carrito que no tenga la marca. Se ve un pill "Sin recargo cuotas"
+   *  en la línea del PoS. */
+  cuotas_sin_recargo?: boolean;
   activo: boolean;
   creado_en: ISODate;
 };

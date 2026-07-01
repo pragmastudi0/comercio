@@ -41,6 +41,12 @@ export type PermisosConfig = {
     ver_costo?: boolean;
     ver_margen?: boolean;
     ver_precio_venta?: boolean;
+    /** Editar codigo_interno de un producto existente. Peligroso: si un
+     * cajero memorizó el código viejo, deja de encontrar el producto. Default
+     * true SÓLO en admin. Se puede otorgar puntualmente a un empleado desde
+     * /admin/empleados (permisos override) — típicamente Pragma Soporte para
+     * arreglar errores de importación. */
+    modificar_codigo?: boolean;
   };
   categorias?: {
     ver?: boolean;
@@ -154,6 +160,7 @@ const PERMISO_ADMIN: PermisosConfig = {
     eliminar: true,
     modificar_precio: true,
     modificar_costo: true,
+    modificar_codigo: true,
     aumento_masivo: true,
     importar: true,
     gestionar_atributos: true,
