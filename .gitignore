@@ -50,3 +50,8 @@ Snapshot-turisteando-*/
 entrega-cliente/
 pendientes.md
 usuarios-contra.png
+
+# Archivos de trabajo local — nunca al repo (precios, exports, dumps)
+backups/
+*.xlsx
+!scripts/*.xlsx
