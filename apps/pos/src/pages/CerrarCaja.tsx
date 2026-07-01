@@ -52,6 +52,17 @@ export function CerrarCaja() {
   }
   const totalEfectivoEsperado = (sesion?.saldo_inicial ?? 0) + totales.efectivo;
   const diferencia = parseFloat(saldoFinal || '0') - totalEfectivoEsperado;
+  // Total facturado del turno: suma de todos los métodos (efectivo,
+  // transferencia, débito, crédito, QR, cta cte). Distinto del "efectivo
+  // esperado" que sólo mira caja física + saldo inicial. Sirve para que
+  // el cajero vea de un vistazo cuánto se vendió en total.
+  const totalFacturado =
+    totales.efectivo +
+    totales.transferencia +
+    totales.debito +
+    totales.credito +
+    totales.qr +
+    totales.cta_cte;
 
   // Ventas y anulaciones del turno (para detalle)
   // Catálogo en memoria para resolver código/nombre de cada ítem
@@ -148,7 +159,13 @@ export function CerrarCaja() {
                   <span className="font-medium tabular-nums">{formatCurrency(totales[m.key])}</span>
                 </div>
               ))}
-              <div className="flex justify-between border-t pt-2 text-sm font-semibold">
+              <div className="mt-1 flex justify-between border-t-2 pt-2 text-base font-bold">
+                <span>Total facturado (todos los métodos)</span>
+                <span className="tabular-nums text-primary">
+                  {formatCurrency(totalFacturado)}
+                </span>
+              </div>
+              <div className="flex justify-between pt-1 text-sm font-semibold">
                 <span>Efectivo esperado (saldo inicial + ventas - retiros)</span>
                 <span className="tabular-nums">{formatCurrency(totalEfectivoEsperado)}</span>
               </div>

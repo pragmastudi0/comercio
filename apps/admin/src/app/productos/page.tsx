@@ -395,6 +395,9 @@ function PanelProducto({
   const verCosto = usePermiso('productos', 'ver_costo');
   const verMargen = usePermiso('productos', 'ver_margen');
   const verPrecioVenta = usePermiso('productos', 'ver_precio_venta');
+  // Editar código: peligroso (tickets viejos, cajeros que lo memorizaron).
+  // Solo admin y empleados con override puntual pueden. Default off.
+  const puedeModificarCodigo = usePermiso('productos', 'modificar_codigo');
   const productoQ = useQuery({
     queryKey: ['producto-detalle', productoId],
     queryFn: () => db.productos.get(productoId),
@@ -436,6 +439,7 @@ function PanelProducto({
   // Promo/descuento que ve el cajero en el PoS.
   const [promoTexto, setPromoTexto] = useState('');
   const [promoPctTxt, setPromoPctTxt] = useState('');
+  const [cuotasSinRecargo, setCuotasSinRecargo] = useState(false);
   // Sección colapsable de e-commerce (fotos / descripción larga /
   // publicado web / config de bulto). Colapsada por default — el cliente
   // pidió tener todo en un solo lugar sin tener que navegar a otra ruta.
@@ -456,6 +460,7 @@ function PanelProducto({
       setProveedorId(productoQ.data.proveedor_id ?? '');
       setActivo(productoQ.data.activo ?? true);
       setPromoTexto(productoQ.data.promo_texto ?? '');
+      setCuotasSinRecargo(productoQ.data.cuotas_sin_recargo ?? false);
       setPromoPctTxt(productoQ.data.promo_pct != null ? String(productoQ.data.promo_pct) : '');
       setPublicadoWeb(productoQ.data.publicado_web ?? false);
       setDescripcionLarga(productoQ.data.descripcion_larga ?? '');
@@ -492,6 +497,7 @@ function PanelProducto({
         proveedor_id: proveedorId || undefined,
         activo,
         promo_texto: promoTexto.trim() || undefined,
+        cuotas_sin_recargo: cuotasSinRecargo,
         promo_pct: promoPctNum != null && isFinite(promoPctNum) ? promoPctNum : undefined,
         publicado_web: publicadoWeb,
         descripcion_larga: descripcionLarga.trim() || undefined,
@@ -615,16 +621,33 @@ function PanelProducto({
             </Label>
             <Input
               value={codigo}
-              // Código read-only al editar: una vez creado, no se cambia
-              // (es la referencia que usan tickets viejos, importadores,
-              // etc.). Si hay que renombrarlo, se borra el producto y se
-              // crea otro con el código correcto.
-              readOnly
-              disabled
-              title="El código no se puede modificar después de crear el producto"
+              onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ''))}
+              // Habilitado sólo si el empleado tiene el permiso extra
+              // productos.modificar_codigo — típicamente Pragma Soporte
+              // para corregir errores de importación. Al resto le queda
+              // como antes (read-only, sin sorpresas).
+              readOnly={!puedeModificarCodigo || !puedeEditar}
+              disabled={!puedeModificarCodigo || !puedeEditar}
+              title={
+                puedeModificarCodigo
+                  ? 'Cambiar el código puede confundir a los cajeros que memorizaron el anterior'
+                  : 'El código no se puede modificar después de crear el producto'
+              }
               maxLength={5}
-              className="h-7 cursor-not-allowed text-sm tabular-nums opacity-70"
+              className={`h-7 text-sm tabular-nums ${
+                puedeModificarCodigo && puedeEditar
+                  ? 'border-amber-300 bg-amber-50/40'
+                  : 'cursor-not-allowed opacity-70'
+              }`}
             />
+            {puedeModificarCodigo && codigo !== productoQ.data?.codigo_interno && (
+              <p className="mt-0.5 text-[10px] text-amber-800">
+                ⚠ Vas a cambiar el código de{' '}
+                <b>{productoQ.data?.codigo_interno}</b> a <b>{codigo}</b>. Los
+                tickets viejos siguen mostrando el anterior; los cajeros van a
+                tener que buscar por el nuevo.
+              </p>
+            )}
           </div>
           {verCosto && (
             <div>
@@ -770,6 +793,20 @@ function PanelProducto({
               />
             </div>
           </div>
+          {/* Cuotas sin recargo — para valijas, electros, etc. Cuando está
+              tildado, en el modal Cobrar no se aplica el recargo por cuotas
+              a este ítem (el resto del carrito sigue con recargo normal). */}
+          <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={cuotasSinRecargo}
+              onChange={(e) => setCuotasSinRecargo(e.target.checked)}
+              disabled={!puedeEditar}
+              className="h-3.5 w-3.5"
+            />
+            Cuotas sin recargo (promo especial — no se cobra el %
+            de cuotas sobre este ítem)
+          </label>
         </div>
 
         {/* Stock por local: deltas controlados desde el padre. Los
@@ -849,7 +886,20 @@ function PanelProducto({
         )}
         <Button
           size="sm"
-          onClick={() => guardarMut.mutate()}
+          onClick={() => {
+            // Segunda confirmación explícita si se está cambiando el código —
+            // es un cambio con impacto (tickets, memoria de cajeros).
+            if (
+              productoQ.data &&
+              codigo !== productoQ.data.codigo_interno &&
+              !confirm(
+                `Vas a cambiar el código de "${productoQ.data.nombre}" de ${productoQ.data.codigo_interno} a ${codigo}. ¿Confirmás?`,
+              )
+            ) {
+              return;
+            }
+            guardarMut.mutate();
+          }}
           disabled={!puedeEditar || guardarMut.isPending}
           className="ml-auto"
         >

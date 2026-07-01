@@ -78,6 +78,32 @@ export function ModalCobro({
     [items, descuentoModo, descuentoValor],
   );
 
+  // Fracción del carrito que va SIN recargo por cuotas (productos con
+  // promo "cuotas sin interés" del cliente). Cuando el cajero elige
+  // crédito con cuotas, el % de recargo se aplica solo sobre la porción
+  // "con recargo" — la otra pasa a valor nominal.
+  //
+  // Ej.: carrito $10.000 con $3.000 en valijas (sin recargo).
+  //   pctSinRecargo = 30%. Si recargo cuotas = 20%:
+  //   total con cuotas = 3000 + 7000*1.20 = $11.400 (en vez de $12.000).
+  const pctSinRecargo = useMemo(() => {
+    if (items.length === 0) return 0;
+    let subtotalSinRecargo = 0;
+    let subtotalTotal = 0;
+    for (const it of items) {
+      const bruto = it.cantidad * it.precio_unitario;
+      const dtoLinea = it.descuento_pct ? bruto * (it.descuento_pct / 100) : 0;
+      const neto = bruto - dtoLinea;
+      subtotalTotal += neto;
+      if (it.producto.cuotas_sin_recargo) subtotalSinRecargo += neto;
+    }
+    return subtotalTotal > 0 ? subtotalSinRecargo / subtotalTotal : 0;
+  }, [items]);
+
+  // Y el pill informativo — total del carrito que sí tiene la marca,
+  // para mostrarlo debajo del método crédito.
+  const totalSinRecargo = useMemo(() => baseACubrir * pctSinRecargo, [baseACubrir, pctSinRecargo]);
+
   const [pagos, setPagos] = useState<PagoVenta[]>([]);
   const [metodo, setMetodo] = useState<MetodoPago | null>(null);
   const [cuotas, setCuotas] = useState(1);
@@ -155,12 +181,19 @@ export function ModalCobro({
     cuo: number,
     dtoEfectivoPct: number,
     cuotasConf: { cuotas: number; recargo_pct: number }[],
+    pctSinRec = 0,
   ): number {
     if (!met || base <= 0) return 0;
     if (met === 'efectivo') return base * (1 - dtoEfectivoPct / 100);
     if (met === 'credito') {
       const c = cuotasConf.find((x) => x.cuotas === cuo);
-      return base * (1 + (c?.recargo_pct ?? 0) / 100);
+      const recPct = c?.recargo_pct ?? 0;
+      // Aplica recargo solo sobre la porción "con recargo" del carrito.
+      // La parte sin recargo (valijas, electros con promo) va a valor
+      // nominal, sin sumar el % de cuotas.
+      const parteSinRec = base * pctSinRec;
+      const parteConRec = base * (1 - pctSinRec);
+      return parteSinRec + parteConRec * (1 + recPct / 100);
     }
     return base;
   }
@@ -184,6 +217,7 @@ export function ModalCobro({
     cuotas,
     configQ.data?.descuento_efectivo_pct ?? 0,
     configQ.data?.cuotas ?? [],
+    pctSinRecargo,
   );
 
   // Cálculo de vuelto si la transacción es 100% efectivo y el cliente da más de lo que paga
@@ -215,7 +249,7 @@ export function ModalCobro({
 
     const pago: PagoVenta = {
       metodo,
-      monto: calcularPagoFinal(montoCubrir, metodo, cuotas, dtoEfectivo, configQ.data?.cuotas ?? []),
+      monto: calcularPagoFinal(montoCubrir, metodo, cuotas, dtoEfectivo, configQ.data?.cuotas ?? [], pctSinRecargo),
       ...(metodo === 'credito' ? { cuotas, recargo_pct: recargoPct } : {}),
     };
 
@@ -244,7 +278,7 @@ export function ModalCobro({
     const recargoPct = metodo === 'credito' ? cuotaConf?.recargo_pct ?? 0 : 0;
     const pago: PagoVenta = {
       metodo,
-      monto: calcularPagoFinal(montoCubrir, metodo, cuotas, dtoEfectivo, configQ.data?.cuotas ?? []),
+      monto: calcularPagoFinal(montoCubrir, metodo, cuotas, dtoEfectivo, configQ.data?.cuotas ?? [], pctSinRecargo),
       ...(metodo === 'credito' ? { cuotas, recargo_pct: recargoPct } : {}),
     };
     // Pasamos los pagos directamente a la mutación (override) para no
@@ -611,6 +645,14 @@ export function ModalCobro({
                 </button>
               ))}
             </div>
+            {/* Aviso cuando hay items del carrito con "cuotas sin recargo".
+                El % de cuotas se aplica sólo al resto. */}
+            {pctSinRecargo > 0 && (
+              <div className="mt-1.5 rounded border border-purple-300 bg-purple-50 px-2 py-1 text-[11px] text-purple-900">
+                Hay <b>{formatCurrency(totalSinRecargo)}</b> ({Math.round(pctSinRecargo * 100)}%) en
+                items con <b>cuotas sin recargo</b> — el % de cuotas se aplica solo al resto.
+              </div>
+            )}
           </div>
         )}
 
