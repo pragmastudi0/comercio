@@ -33,6 +33,7 @@ export function ModalAjustarCaja({ open, onOpenChange }: Props) {
   const qc = useQueryClient();
   const sesion = useSesion((s) => s.sesionCaja);
   const empleado = useSesion((s) => s.empleado);
+  const setSesionCaja = useSesion((s) => s.setSesionCaja);
 
   const [modo, setModo] = useState<Modo>('ingreso');
   const [monto, setMonto] = useState('');
@@ -81,40 +82,82 @@ export function ModalAjustarCaja({ open, onOpenChange }: Props) {
       if (!sesion || !empleado) throw new Error('Sin sesión activa');
       if (!motivo.trim()) throw new Error('Indicá un motivo');
 
-      let tipo: 'ingreso' | 'egreso';
-      let montoAbsoluto: number;
-
       if (modo === 'corregir') {
+        // "Corregir total" ahora ACTUALIZA saldo_inicial en vez de
+        // registrar un movimiento compensatorio.
+        //   - Antes: si abría con $10k (mal) y corregía a $15k, se
+        //     registraba un ingreso de $5k. El saldo_inicial quedaba
+        //     con $10k mal, y al cerrar el "sobrante para retirar"
+        //     (calculado como saldo_final - saldo_inicial) daba mal.
+        //   - Ahora: subimos el saldo_inicial de $10k → $15k. El
+        //     efectivo esperado se recalcula solo (saldo_inicial +
+        //     ventas efectivo - retiros) y da igual que antes, pero
+        //     sin dejar el saldo_inicial desactualizado.
+        //
+        // Los modos 'ingreso' / 'egreso' siguen registrando movimiento
+        // como antes — esos SÍ son entradas/salidas de plata reales
+        // durante el turno, no correcciones de la carga inicial.
         const real = parseFloat(montoReal);
         if (!Number.isFinite(real) || real < 0) throw new Error('Monto real inválido');
         const delta = real - efectivoEsperado;
         if (Math.abs(delta) < 0.01) {
           throw new Error('El monto coincide con el esperado, no hace falta ajustar');
         }
-        tipo = delta > 0 ? 'ingreso' : 'egreso';
-        montoAbsoluto = Math.abs(delta);
-      } else {
-        const n = parseFloat(monto);
-        if (!Number.isFinite(n) || n <= 0) throw new Error('Monto inválido');
-        tipo = modo;
-        montoAbsoluto = n;
+        if (!db.sesionesCaja.actualizarSaldoInicial) {
+          throw new Error('No se puede corregir el saldo en este modo');
+        }
+        const nuevoSaldoInicial = sesion.saldo_inicial + delta;
+        const sesionActualizada = await db.sesionesCaja.actualizarSaldoInicial(
+          sesion.id,
+          nuevoSaldoInicial,
+        );
+        // Refrescar el store para que el cierre calcule bien.
+        setSesionCaja(sesionActualizada);
+        // Auditoría — queda registro de quién corrigió qué (motivo).
+        await db.auditoria
+          .log({
+            accion: 'ajuste_saldo_inicial',
+            entidad: 'sesion_caja',
+            entidad_id: sesion.id,
+            empleado_id: empleado.id,
+            detalle: {
+              saldo_anterior: sesion.saldo_inicial,
+              saldo_nuevo: nuevoSaldoInicial,
+              delta,
+              motivo: motivo.trim(),
+              esperado_previo: efectivoEsperado,
+              real_declarado: real,
+            },
+          })
+          .catch(() => {});
+        return { modo: 'corregir' as const, delta };
       }
 
+      // Modo ingreso / egreso — movimiento real de efectivo del turno.
+      const n = parseFloat(monto);
+      if (!Number.isFinite(n) || n <= 0) throw new Error('Monto inválido');
       await db.sesionesCaja.registrarMovimiento({
         sesion_caja_id: sesion.id,
-        tipo,
+        tipo: modo,
         metodo: 'efectivo',
-        monto: montoAbsoluto,
+        monto: n,
         empleado_id: empleado.id,
         motivo: motivo.trim(),
       });
-      return { tipo, montoAbsoluto };
+      return { modo, montoAbsoluto: n };
     },
     onSuccess: (r) => {
-      const signo = r.tipo === 'ingreso' ? '+' : '−';
-      toast.success(
-        `Caja ajustada: ${signo}$${r.montoAbsoluto.toLocaleString('es-AR')}`,
-      );
+      if (r.modo === 'corregir') {
+        const signo = r.delta > 0 ? '+' : '−';
+        toast.success(
+          `Saldo inicial corregido (${signo}$${Math.abs(r.delta).toLocaleString('es-AR')})`,
+        );
+      } else {
+        const signo = r.modo === 'ingreso' ? '+' : '−';
+        toast.success(
+          `Caja ajustada: ${signo}$${r.montoAbsoluto!.toLocaleString('es-AR')}`,
+        );
+      }
       qc.invalidateQueries({ queryKey: ['movimientos-sesion', sesion?.id] });
       setMonto('');
       setMontoReal('');
@@ -251,9 +294,12 @@ export function ModalAjustarCaja({ open, onOpenChange }: Props) {
                       : 'bg-orange-50 text-orange-800'
                   }`}
                 >
-                  Se registrará un{' '}
-                  <b>{deltaPreview > 0 ? 'ingreso' : 'egreso'}</b> de{' '}
-                  <b>{formatCurrency(Math.abs(deltaPreview))}</b>.
+                  El saldo inicial pasa de{' '}
+                  <b>{formatCurrency(sesion?.saldo_inicial ?? 0)}</b> a{' '}
+                  <b>{formatCurrency((sesion?.saldo_inicial ?? 0) + deltaPreview)}</b>{' '}
+                  ({deltaPreview > 0 ? '+' : '−'}
+                  {formatCurrency(Math.abs(deltaPreview))}). Queda como
+                  saldo inicial de la sesión.
                 </div>
               )}
             </div>
