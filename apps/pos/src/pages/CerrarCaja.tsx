@@ -86,9 +86,13 @@ export function CerrarCaja() {
     queryKey: ['ventas-cierre', sesion?.id],
     queryFn: () =>
       sesion
-        ? db.ventas.list({
-            empleado_id: sesion.empleado_id,
-            desde: sesion.abierta_en,
+        ? // FILTRAR POR SESIÓN, NO POR EMPLEADO. Con multi-sesión (iter-2)
+          // varios empleados pueden usar una misma caja abierta; sus ventas
+          // apuntan a distintos empleado_id pero al MISMO sesion_caja_id.
+          // El filtro anterior (empleado_id + fecha) escondía las ventas
+          // del cajero del turno tarde cuando cerraba el del turno mañana.
+          db.ventas.list({
+            sesion_caja_id: sesion.id,
           })
         : Promise.resolve([]),
     enabled: !!sesion,
