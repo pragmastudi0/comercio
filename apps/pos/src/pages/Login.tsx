@@ -21,6 +21,7 @@ export function Login() {
   // mandamos directo a /caja, no a /abrir-caja (no debe abrir una nueva).
   // Si entra con otro email (cambio de turno) → /abrir-caja como siempre.
   const sesionCaja = useSesion((s) => s.sesionCaja);
+  const setSesionCaja = useSesion((s) => s.setSesionCaja);
   // Cuando el SSO desde admin falla y caemos al login manual, el admin
   // nos pasa ?email=... para que el dueño/encargado no tenga que tipear
   // el email también — sólo la contraseña.
@@ -37,13 +38,48 @@ export function Login() {
       if (!emp) throw new Error('Email o contraseña incorrectos');
       return emp;
     },
-    onSuccess: (emp) => {
+    onSuccess: async (emp) => {
       setEmpleado(emp);
       toast.success(`Hola ${emp.nombre}`);
       // Si hay una caja activa en el store (la dejó abierta el usuario
-      // anterior via "Cambiar usuario"), el nuevo empleado entra a /caja
-      // y sigue desde donde quedó. RequireSesionAbierta poolea contra BD
-      // y si la sesión ya fue cerrada desde otro lado, kickea a /abrir-caja.
+      // anterior via "Cambiar usuario") y el que entra ES OTRO empleado,
+      // marcamos el traspaso: actualizamos empleado_actual_id de la sesión
+      // y logueamos el cambio en auditoría para que el admin lo vea después.
+      // Cada venta sigue teniendo su propio empleado_id (quien la cobró),
+      // pero la sesión refleja quién es el responsable AHORA.
+      if (sesionCaja && sesionCaja.estado === 'abierta') {
+        const responsableAnterior =
+          sesionCaja.empleado_actual_id ?? sesionCaja.empleado_id;
+        if (responsableAnterior !== emp.id && db.sesionesCaja.cambiarResponsable) {
+          try {
+            const actualizada = await db.sesionesCaja.cambiarResponsable(
+              sesionCaja.id,
+              emp.id,
+            );
+            setSesionCaja(actualizada);
+            db.auditoria
+              .log({
+                accion: 'cambio_responsable_caja',
+                entidad: 'sesion_caja',
+                entidad_id: sesionCaja.id,
+                empleado_id: emp.id,
+                detalle: {
+                  empleado_anterior_id: responsableAnterior,
+                  empleado_nuevo_id: emp.id,
+                  empleado_nuevo_nombre: `${emp.nombre} ${emp.apellido ?? ''}`.trim(),
+                },
+              })
+              .catch(() => {});
+          } catch (e) {
+            // No bloquear el login si falla el traspaso — la sesión sigue
+            // funcionando, solo queda con el responsable anterior en admin.
+            // eslint-disable-next-line no-console
+            console.error('No se pudo cambiar responsable de la caja:', e);
+          }
+        }
+      }
+      // RequireSesionAbierta poolea contra BD y si la sesión ya fue cerrada
+      // desde otro lado, kickea a /abrir-caja.
       navigate(sesionCaja ? '/caja' : '/abrir-caja');
     },
     onError: (e: Error) => toast.error(e.message),
