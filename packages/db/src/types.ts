@@ -136,9 +136,21 @@ export type Producto = {
    *  si promo_pct está vacío. Si hay promo_pct > 0, aparece un botón
    *  "Aplicar X%" en el carrito que setea descuento_pct de la línea. */
   promo_texto?: string;
-  /** Porcentaje sugerido para la promo (0-100). Si está definido y > 0,
-   *  el cajero puede aplicarlo con un click sobre la línea del carrito. */
+  /** Porcentaje sugerido para la promo (0-100). Si está definido y > 0
+   *  Y promo_tipo === 'pct', el cajero puede aplicarlo con un click sobre
+   *  la línea del carrito. */
   promo_pct?: number;
+  /** Tipo de promo activa:
+   *   - undefined/'pct' → usa promo_pct como % de descuento
+   *   - 'nxm'           → promo tipo 2x1, 3x2, etc. Usa promo_nxm_lleva/paga.
+   *  El PoS decide qué mostrar y cómo aplicar en base a este flag. */
+  promo_tipo?: 'pct' | 'nxm';
+  /** SOLO cuando promo_tipo === 'nxm'. Cantidad de unidades por "pack".
+   *  Ej. 2x1 → lleva=2, paga=1. 3x2 → lleva=3, paga=2. */
+  promo_nxm_lleva?: number;
+  /** SOLO cuando promo_tipo === 'nxm'. Cantidad de unidades que efectivamente
+   *  cobra el cajero por cada pack. Regla: paga < lleva. */
+  promo_nxm_paga?: number;
   /** Producto con cuotas sin recargo (ej. valijas, electrodomésticos con
    *  promo del cliente). Cuando true, el modal Cobrar NO aplica el recargo
    *  por cuotas a este ítem — el recargo sigue aplicando al resto del

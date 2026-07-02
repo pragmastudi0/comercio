@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { unidadesCobradasNxM } from '@comercio/business';
 import type { Producto } from '@comercio/db';
 
 /** Precio mínimo permitido por línea. Evita ventas accidentales a $0 o
@@ -349,11 +350,28 @@ export const useVenta = create<VentaState>()(
 );
 
 export function calcularSubtotal(items: ItemCarrito[]): number {
-  return items.reduce((acc, i) => {
-    const linea = i.cantidad * i.precio_unitario;
-    const dto = i.descuento_pct ? linea * (i.descuento_pct / 100) : 0;
-    return acc + linea - dto;
-  }, 0);
+  return items.reduce((acc, i) => acc + calcularSubtotalLinea(i), 0);
+}
+
+/**
+ * Subtotal de UNA línea del carrito, aplicando (en orden):
+ *   1. Promo NxM del producto (2x1, 3x2…) → reduce las unidades cobradas.
+ *   2. Descuento por línea (%) sobre el bruto ya reducido.
+ * Si el producto no tiene NxM válido, se cobra la cantidad completa.
+ */
+export function calcularSubtotalLinea(i: ItemCarrito): number {
+  const promoNxm =
+    i.producto.promo_tipo === 'nxm' &&
+    i.producto.promo_nxm_lleva != null &&
+    i.producto.promo_nxm_paga != null
+      ? { lleva: i.producto.promo_nxm_lleva, paga: i.producto.promo_nxm_paga }
+      : null;
+  const unidadesCobradas = promoNxm
+    ? unidadesCobradasNxM(i.cantidad, promoNxm.lleva, promoNxm.paga)
+    : i.cantidad;
+  const bruto = unidadesCobradas * i.precio_unitario;
+  const dto = i.descuento_pct ? bruto * (i.descuento_pct / 100) : 0;
+  return bruto - dto;
 }
 
 export function calcularDescuentoGlobal(

@@ -12,6 +12,8 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Package,
   LineChart,
 } from 'lucide-react';
@@ -437,9 +439,16 @@ function PanelProducto({
   const [categoriaId, setCategoriaId] = useState('');
   const [proveedorId, setProveedorId] = useState('');
   const [activo, setActivo] = useState(true);
-  // Promo/descuento que ve el cajero en el PoS.
+  // Promo/descuento que ve el cajero en el PoS. Bloque colapsable —
+  // lo pidió Agus para no ocupar tanto espacio en la vista lateral.
+  // Arranca abierto solo si el producto YA tiene promo cargada.
+  const [promoAbierto, setPromoAbierto] = useState(false);
   const [promoTexto, setPromoTexto] = useState('');
+  // 'none' = sin promo | 'pct' = % descuento | 'nxm' = 2x1, 3x2, etc.
+  const [promoTipo, setPromoTipo] = useState<'none' | 'pct' | 'nxm'>('none');
   const [promoPctTxt, setPromoPctTxt] = useState('');
+  const [promoNxmLlevaTxt, setPromoNxmLlevaTxt] = useState('');
+  const [promoNxmPagaTxt, setPromoNxmPagaTxt] = useState('');
   const [cuotasSinRecargo, setCuotasSinRecargo] = useState(false);
   // Sección colapsable de e-commerce (fotos / descripción larga /
   // publicado web / config de bulto). Colapsada por default — el cliente
@@ -463,6 +472,27 @@ function PanelProducto({
       setPromoTexto(productoQ.data.promo_texto ?? '');
       setCuotasSinRecargo(productoQ.data.cuotas_sin_recargo ?? false);
       setPromoPctTxt(productoQ.data.promo_pct != null ? String(productoQ.data.promo_pct) : '');
+      const nxmLleva = productoQ.data.promo_nxm_lleva;
+      const nxmPaga = productoQ.data.promo_nxm_paga;
+      const tipoGuardado = productoQ.data.promo_tipo;
+      // Deducir el tipo activo: si hay nxm válido usar 'nxm', si hay
+      // promo_pct > 0 usar 'pct', sino 'none'. tipoGuardado tiene
+      // prioridad cuando existe.
+      const tipoResuelto: 'none' | 'pct' | 'nxm' =
+        tipoGuardado === 'nxm' && nxmLleva && nxmPaga
+          ? 'nxm'
+          : tipoGuardado === 'pct' || (productoQ.data.promo_pct ?? 0) > 0
+            ? 'pct'
+            : 'none';
+      setPromoTipo(tipoResuelto);
+      setPromoNxmLlevaTxt(nxmLleva != null ? String(nxmLleva) : '');
+      setPromoNxmPagaTxt(nxmPaga != null ? String(nxmPaga) : '');
+      // Auto-expandir si hay algo cargado (o si querés cuotas sin recargo).
+      setPromoAbierto(
+        tipoResuelto !== 'none' ||
+          !!productoQ.data.promo_texto ||
+          !!productoQ.data.cuotas_sin_recargo,
+      );
       setPublicadoWeb(productoQ.data.publicado_web ?? false);
       setDescripcionLarga(productoQ.data.descripcion_larga ?? '');
     }
@@ -495,8 +525,36 @@ function PanelProducto({
       if (!productoQ.data) throw new Error('Producto no cargado');
       if (!empleado) throw new Error('Sin sesión');
       // Update del producto (campos básicos + promo + e-commerce).
+      // Promo: según el tipo elegido se limpian los otros campos, así
+      // no quedan restos raros (ej: tenía nxm, pasó a pct → nxm null).
       const promoPctNum = promoPctTxt.trim() === '' ? null : parseFloat(promoPctTxt);
-      const patch: Partial<Producto> = {
+      const nxmLleva = parseInt(promoNxmLlevaTxt, 10);
+      const nxmPaga = parseInt(promoNxmPagaTxt, 10);
+      const nxmValido =
+        promoTipo === 'nxm' &&
+        Number.isFinite(nxmLleva) &&
+        Number.isFinite(nxmPaga) &&
+        nxmLleva >= 2 &&
+        nxmPaga >= 1 &&
+        nxmLleva > nxmPaga;
+      if (promoTipo === 'nxm' && !nxmValido) {
+        throw new Error(
+          'Promo NxM inválida: "Lleva" debe ser >= 2 y mayor que "Paga" (>= 1).',
+        );
+      }
+      // Campos de promo — usamos null explícito para LIMPIAR en Supabase
+      // cuando el usuario cambia de tipo. undefined no actualizaría nada
+      // y quedarían restos (ej: pasás de nxm → pct y el nxm queda vivo).
+      const patchPromo = {
+        promo_tipo: promoTipo === 'none' ? null : promoTipo,
+        promo_pct:
+          promoTipo === 'pct' && promoPctNum != null && isFinite(promoPctNum)
+            ? promoPctNum
+            : null,
+        promo_nxm_lleva: nxmValido ? nxmLleva : null,
+        promo_nxm_paga: nxmValido ? nxmPaga : null,
+      };
+      const patch = {
         nombre,
         codigo_interno: codigo,
         costo,
@@ -505,10 +563,10 @@ function PanelProducto({
         activo,
         promo_texto: promoTexto.trim() || undefined,
         cuotas_sin_recargo: cuotasSinRecargo,
-        promo_pct: promoPctNum != null && isFinite(promoPctNum) ? promoPctNum : undefined,
+        ...patchPromo,
         publicado_web: publicadoWeb,
         descripcion_larga: descripcionLarga.trim() || undefined,
-      };
+      } as unknown as Partial<Producto>;
       await db.productos.update(productoId, patch);
       // Update del precio CF si cambió.
       if (precioCf !== precioCfInicial) {
@@ -761,59 +819,191 @@ function PanelProducto({
           </div>
         </div>
 
-        {/* Promo/descuento del producto — se ve en el PoS. El texto es
-            descriptivo (lo que lee el cajero) y el % es opcional. Si hay
-            %, el cajero ve un botón "Aplicar X%" en el carrito que setea
-            el descuento de esa línea automático. */}
-        <div className="rounded border border-purple-200 bg-purple-50/40 p-1.5">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-purple-800">
-            Promo / descuento (visible en el PoS)
-          </div>
-          <div className="grid grid-cols-[1fr_70px] gap-2">
-            <div>
-              <Label className="mb-0 block text-[10px] uppercase text-slate-600">
-                Texto
-              </Label>
-              <Input
-                value={promoTexto}
-                onChange={(e) => setPromoTexto(e.target.value)}
-                disabled={!puedeEditar}
-                placeholder='Ej: "10% efectivo", "2x1 los sábados"'
-                maxLength={80}
-                className="h-7 text-sm"
-              />
+        {/* Promo / descuento del producto — se ve en el PoS.
+            Bloque colapsable: por defecto arranca cerrado (mostrando solo
+            un resumen chico) para no ocupar tanto espacio en la vista
+            lateral. Se auto-expande si el producto YA tiene promo.
+            Adentro: radio con 3 tipos (Ninguna / % descuento / NxM). */}
+        <div className="rounded border border-purple-200 bg-purple-50/40">
+          <button
+            type="button"
+            onClick={() => setPromoAbierto((v) => !v)}
+            className="flex w-full items-center justify-between px-2 py-1.5 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-purple-800">
+                Promo / descuento
+              </span>
+              {/* Resumen chico cuando está cerrado, para no perder de vista
+                  qué promo tiene cargada. */}
+              {!promoAbierto && (
+                <span className="text-[11px] text-purple-800/80">
+                  {promoTipo === 'nxm' && promoNxmLlevaTxt && promoNxmPagaTxt
+                    ? `${promoNxmLlevaTxt}x${promoNxmPagaTxt}`
+                    : promoTipo === 'pct' && promoPctTxt
+                      ? `${promoPctTxt}%`
+                      : 'sin promo'}
+                  {cuotasSinRecargo ? ' · cuotas s/recargo' : ''}
+                </span>
+              )}
             </div>
-            <div>
-              <Label className="mb-0 block text-[10px] uppercase text-slate-600">
-                % aplicar
-              </Label>
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-                value={promoPctTxt}
-                onChange={(e) => setPromoPctTxt(e.target.value)}
-                disabled={!puedeEditar}
-                placeholder="Opt."
-                className="h-7 text-sm tabular-nums"
-              />
+            {promoAbierto ? (
+              <ChevronUp className="h-3.5 w-3.5 text-purple-800" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5 text-purple-800" />
+            )}
+          </button>
+          {promoAbierto && (
+            <div className="space-y-2 border-t border-purple-200 p-2">
+              {/* Texto libre siempre visible — es lo que ve el cajero en
+                  el PoS como pill morada. Opcional, hace de aclaración
+                  por sobre el %/NxM (ej: "Solo sábados"). */}
+              <div>
+                <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                  Texto visible en el PoS
+                </Label>
+                <Input
+                  value={promoTexto}
+                  onChange={(e) => setPromoTexto(e.target.value)}
+                  disabled={!puedeEditar}
+                  placeholder='Ej: "2x1 sábados", "10% efectivo"'
+                  maxLength={80}
+                  className="h-7 text-sm"
+                />
+              </div>
+
+              {/* Tipo de promo — el radio decide qué inputs se muestran. */}
+              <div className="flex flex-wrap gap-1.5 text-[11px]">
+                {(
+                  [
+                    { v: 'none', label: 'Ninguna' },
+                    { v: 'pct', label: '% descuento' },
+                    { v: 'nxm', label: 'NxM (2x1, 3x2…)' },
+                  ] as const
+                ).map((opt) => (
+                  <label
+                    key={opt.v}
+                    className={`flex cursor-pointer items-center gap-1 rounded border px-1.5 py-0.5 ${
+                      promoTipo === opt.v
+                        ? 'border-purple-500 bg-purple-100 text-purple-900'
+                        : 'border-slate-300 bg-white text-slate-700 hover:border-purple-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="promo-tipo"
+                      value={opt.v}
+                      checked={promoTipo === opt.v}
+                      onChange={() => setPromoTipo(opt.v)}
+                      disabled={!puedeEditar}
+                      className="h-3 w-3"
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+
+              {/* Input %: solo si tipo=pct. */}
+              {promoTipo === 'pct' && (
+                <div className="max-w-[120px]">
+                  <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                    % a aplicar
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={promoPctTxt}
+                    onChange={(e) => setPromoPctTxt(e.target.value)}
+                    disabled={!puedeEditar}
+                    placeholder="10"
+                    className="h-7 text-sm tabular-nums"
+                  />
+                </div>
+              )}
+
+              {/* Inputs NxM: solo si tipo=nxm. Con presets rápidos. */}
+              {promoTipo === 'nxm' && (
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap gap-1">
+                    {(
+                      [
+                        { l: 2, p: 1, label: '2x1' },
+                        { l: 3, p: 2, label: '3x2' },
+                        { l: 4, p: 3, label: '4x3' },
+                      ] as const
+                    ).map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => {
+                          setPromoNxmLlevaTxt(String(preset.l));
+                          setPromoNxmPagaTxt(String(preset.p));
+                        }}
+                        disabled={!puedeEditar}
+                        className="rounded border border-purple-300 bg-white px-2 py-0.5 text-[11px] text-purple-800 hover:bg-purple-50 disabled:opacity-50"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                        Lleva
+                      </Label>
+                      <Input
+                        type="number"
+                        min="2"
+                        step="1"
+                        value={promoNxmLlevaTxt}
+                        onChange={(e) => setPromoNxmLlevaTxt(e.target.value)}
+                        disabled={!puedeEditar}
+                        placeholder="2"
+                        className="h-7 text-sm tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                        Paga
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={promoNxmPagaTxt}
+                        onChange={(e) => setPromoNxmPagaTxt(e.target.value)}
+                        disabled={!puedeEditar}
+                        placeholder="1"
+                        className="h-7 text-sm tabular-nums"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] leading-tight text-slate-600">
+                    Se aplica solo en el PoS al facturar. Ej: 2x1 → 2 unidades
+                    salen al precio de 1. Con 5u lleva 3 pagas.
+                  </p>
+                </div>
+              )}
+
+              {/* Cuotas sin recargo — para valijas, electros, etc. Cuando
+                  está tildado, en el modal Cobrar no se aplica el recargo
+                  por cuotas a este ítem (el resto del carrito sigue con
+                  recargo normal). Independiente del tipo de promo. */}
+              <label className="flex items-center gap-1.5 text-[11px] text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={cuotasSinRecargo}
+                  onChange={(e) => setCuotasSinRecargo(e.target.checked)}
+                  disabled={!puedeEditar}
+                  className="h-3.5 w-3.5"
+                />
+                Cuotas sin recargo (no se cobra el % de cuotas sobre este
+                ítem)
+              </label>
             </div>
-          </div>
-          {/* Cuotas sin recargo — para valijas, electros, etc. Cuando está
-              tildado, en el modal Cobrar no se aplica el recargo por cuotas
-              a este ítem (el resto del carrito sigue con recargo normal). */}
-          <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-700">
-            <input
-              type="checkbox"
-              checked={cuotasSinRecargo}
-              onChange={(e) => setCuotasSinRecargo(e.target.checked)}
-              disabled={!puedeEditar}
-              className="h-3.5 w-3.5"
-            />
-            Cuotas sin recargo (promo especial — no se cobra el %
-            de cuotas sobre este ítem)
-          </label>
+          )}
         </div>
 
         {/* Stock por local: deltas controlados desde el padre. Los

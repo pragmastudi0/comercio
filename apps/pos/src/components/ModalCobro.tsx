@@ -14,8 +14,10 @@ import {
   calcularBaseVenta,
   calcularDescuentoGlobal,
   calcularSubtotal,
+  calcularSubtotalLinea,
   useVenta,
 } from '@/stores/venta';
+import { unidadesCobradasNxM } from '@comercio/business';
 import { useDepositoActivo } from '@/lib/deposito-activo';
 import { PRESET_IDS, type MetodoPago, type PagoVenta } from '@comercio/db';
 
@@ -91,9 +93,9 @@ export function ModalCobro({
     let subtotalSinRecargo = 0;
     let subtotalTotal = 0;
     for (const it of items) {
-      const bruto = it.cantidad * it.precio_unitario;
-      const dtoLinea = it.descuento_pct ? bruto * (it.descuento_pct / 100) : 0;
-      const neto = bruto - dtoLinea;
+      // Neto por línea = igual base que el cobro. calcularSubtotalLinea
+      // ya aplica NxM y descuento por línea.
+      const neto = calcularSubtotalLinea(it);
       subtotalTotal += neto;
       if (it.producto.cuotas_sin_recargo) subtotalSinRecargo += neto;
     }
@@ -338,19 +340,32 @@ export function ModalCobro({
           'Tu sesión quedó desincronizada. Te llevamos al login.',
         );
       }
+      // items_payload: subtotal delegado a calcularSubtotalLinea para que
+      // aplique NxM (2x1, 3x2…) y descuento_pct por línea de forma
+      // consistente con lo que ve el cajero y con calcularSubtotal.
       const items_payload = items.map((it) => ({
         producto_id: it.producto.id,
         cantidad: it.cantidad,
         precio_unitario: it.precio_unitario,
         descuento_pct: it.descuento_pct,
-        subtotal:
-          it.cantidad * it.precio_unitario * (1 - (it.descuento_pct ?? 0) / 100),
+        subtotal: calcularSubtotalLinea(it),
       }));
       const total = pagosUsar.reduce((acc, p) => acc + p.monto, 0);
-      // El descuento total combina: descuentos por línea + descuento global + descuento efectivo por método
+      // descuentoLineas: solo el % del cajero, aplicado sobre la base ya
+      // reducida por NxM (así no se "cobra doble" la promo NxM como
+      // descuento y a la vez como precio-menos).
       const descuentoLineas = items.reduce((acc, it) => {
         if (!it.descuento_pct) return acc;
-        return acc + it.cantidad * it.precio_unitario * (it.descuento_pct / 100);
+        const promoNxm =
+          it.producto.promo_tipo === 'nxm' &&
+          it.producto.promo_nxm_lleva != null &&
+          it.producto.promo_nxm_paga != null
+            ? { lleva: it.producto.promo_nxm_lleva, paga: it.producto.promo_nxm_paga }
+            : null;
+        const unidadesCobradas = promoNxm
+          ? unidadesCobradasNxM(it.cantidad, promoNxm.lleva, promoNxm.paga)
+          : it.cantidad;
+        return acc + unidadesCobradas * it.precio_unitario * (it.descuento_pct / 100);
       }, 0);
       const descuentoMetodo = pagosUsar
         .filter((p) => p.metodo === 'efectivo')
