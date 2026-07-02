@@ -297,16 +297,13 @@ export function ModalCobro({
       const pagosUsar = pagosOverride ?? pagos;
       if (pagosUsar.length === 0) throw new Error('No hay pagos');
 
-      // Validación: cada línea con precio editado o descuento debe tener
-      // motivo. Sin esto, ni se intenta la venta — el cajero ve el toast
-      // y corrige antes de seguir. Los motivos quedan en auditoría
-      // después de crear la venta (más abajo).
+      // Validación: cada línea con DESCUENTO por línea debe tener motivo
+      // (el descuento sí requiere justificación — es una decisión del
+      // cajero de qué % aplicar). Los cambios de PRECIO en cambio ya no
+      // piden motivo por pedido de Agus: solo queda auditado que hubo
+      // un cambio y cuánto, pero sin motivo. Los motivos que sí hay
+      // quedan en auditoría después de crear la venta (más abajo).
       for (const it of items) {
-        if (it.precio_unitario !== it.precio_base && !it.motivo_precio?.trim()) {
-          throw new Error(
-            `Falta motivo del cambio de precio para "${it.producto.nombre}"`,
-          );
-        }
         if (it.descuento_pct && it.descuento_pct > 0 && !it.motivo_descuento_linea?.trim()) {
           throw new Error(
             `Falta motivo del descuento aplicado a "${it.producto.nombre}"`,
