@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { PackagePlus, Search } from 'lucide-react';
+import {
+  MOTIVOS_INGRESO_STOCK,
+  MOTIVOS_EGRESO_STOCK,
+  MOTIVO_OTROS,
+} from '@comercio/business';
 import { getDb } from '@/lib/db';
 import { usePermiso } from '@/lib/permisos';
 import { useSesion } from '@/stores/sesion';
@@ -39,8 +44,27 @@ export function ModalCargarStock({
   const [producto, setProducto] = useState<Producto | null>(null);
   const [cantidad, setCantidad] = useState('');
   const [depositoId, setDepositoId] = useState('');
-  const [motivo, setMotivo] = useState('');
+  // motivoOpcion = valor del select (motivo preset o 'Otros')
+  // motivoOtros = texto libre que aparece cuando eligen 'Otros'
+  const [motivoOpcion, setMotivoOpcion] = useState('');
+  const [motivoOtros, setMotivoOtros] = useState('');
   const [buscando, setBuscando] = useState(false);
+
+  // Signo del delta que se está por cargar. Cambia las opciones del select:
+  // positivo (ingreso) → compra a proveedor, sobrante, etc.
+  // negativo (egreso)  → extravío, mercadería en mal estado, etc.
+  const cantidadNum = parseFloat(cantidad);
+  const esIngreso = Number.isFinite(cantidadNum) && cantidadNum > 0;
+  const esEgreso = Number.isFinite(cantidadNum) && cantidadNum < 0;
+  const opciones = esEgreso ? MOTIVOS_EGRESO_STOCK : MOTIVOS_INGRESO_STOCK;
+
+  // Al cambiar el signo (o al cambiar de producto), reseteamos el motivo
+  // elegido porque las opciones son distintas — evita que quede seleccionado
+  // "Compra a proveedor" para un egreso, por ejemplo.
+  useEffect(() => {
+    setMotivoOpcion('');
+    setMotivoOtros('');
+  }, [esIngreso, esEgreso, producto?.id]);
 
   const codigoRef = useRef<HTMLInputElement>(null);
   const cantidadRef = useRef<HTMLInputElement>(null);
@@ -65,7 +89,8 @@ export function ModalCargarStock({
       setCodigo('');
       setProducto(null);
       setCantidad('');
-      setMotivo('');
+      setMotivoOpcion('');
+      setMotivoOtros('');
       // Auto-foco al input de código.
       setTimeout(() => codigoRef.current?.focus(), 50);
     }
@@ -106,11 +131,20 @@ export function ModalCargarStock({
       if (!depositoId) throw new Error('Elegí un local');
       const n = parseFloat(cantidad);
       if (!Number.isFinite(n) || n === 0) throw new Error('Cantidad inválida');
+      // Motivo obligatorio: o eligió una opción preset, o tipeó texto libre
+      // bajo "Otros". Nunca dejamos guardar sin motivo — el historial de
+      // producto queda auditando qué pasó con el stock.
+      if (!motivoOpcion) throw new Error('Elegí un motivo del ajuste');
+      const motivoFinal =
+        motivoOpcion === MOTIVO_OTROS ? motivoOtros.trim() : motivoOpcion;
+      if (!motivoFinal) {
+        throw new Error('Escribí el motivo cuando elegís "Otros"');
+      }
       await db.stock.ajustar({
         producto_id: producto.id,
         deposito_id: depositoId,
         cantidad: n, // delta — positivo carga, negativo descuenta
-        motivo: motivo.trim() || 'Carga manual desde admin',
+        motivo: motivoFinal,
         empleado_id: empleado.id,
       });
     },
@@ -124,7 +158,8 @@ export function ModalCargarStock({
       setCodigo('');
       setProducto(null);
       setCantidad('');
-      setMotivo('');
+      setMotivoOpcion('');
+      setMotivoOtros('');
       setTimeout(() => codigoRef.current?.focus(), 50);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -244,19 +279,40 @@ export function ModalCargarStock({
 
             <div>
               <Label className="mb-1 block text-xs uppercase">
-                Motivo (opcional)
+                Motivo del ajuste{' '}
+                <span className="normal-case text-muted-foreground">
+                  ({esEgreso ? 'egreso' : esIngreso ? 'ingreso' : 'poné cantidad'})
+                </span>
               </Label>
-              <Input
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                placeholder="Ej: Recepción de mercadería, ajuste por conteo"
-                disabled={cargarMut.isPending}
-              />
+              <select
+                value={motivoOpcion}
+                onChange={(e) => setMotivoOpcion(e.target.value)}
+                disabled={cargarMut.isPending || !Number.isFinite(cantidadNum) || cantidadNum === 0}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">— Elegí un motivo —</option>
+                {opciones.map((op) => (
+                  <option key={op} value={op}>
+                    {op}
+                  </option>
+                ))}
+                <option value={MOTIVO_OTROS}>{MOTIVO_OTROS} (escribir)…</option>
+              </select>
+              {motivoOpcion === MOTIVO_OTROS && (
+                <Input
+                  value={motivoOtros}
+                  onChange={(e) => setMotivoOtros(e.target.value)}
+                  placeholder="Escribí el motivo"
+                  disabled={cargarMut.isPending}
+                  className="mt-2"
+                  autoFocus
+                />
+              )}
             </div>
 
             <p className="text-[11px] text-muted-foreground">
               Tip: cantidad positiva carga; negativa descuenta. Queda registrado
-              como movimiento con tu nombre y motivo.
+              como movimiento en el historial del producto con tu nombre y motivo.
             </p>
           </>
         )}

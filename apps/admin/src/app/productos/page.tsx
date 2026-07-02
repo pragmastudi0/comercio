@@ -16,6 +16,7 @@ import {
   LineChart,
 } from 'lucide-react';
 import { ModalEstadisticasProducto } from '@/components/modal-estadisticas-producto';
+import { MotivoAjusteDialog, type DeltaAjuste } from '@/components/motivo-ajuste-dialog';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
@@ -483,8 +484,14 @@ function PanelProducto({
     setPrecioCfTxt(String(Number(nuevoPrecio.toFixed(2))));
   }
 
+  // Dialog para pedir motivo cuando se aplican deltas de stock desde el
+  // botón "Guardar cambios". El array de motivos matchea 1:1 con
+  // `deltasParaMotivos` que se calcula al abrir.
+  const [motivosDialogOpen, setMotivosDialogOpen] = useState(false);
+  const [deltasParaMotivos, setDeltasParaMotivos] = useState<DeltaAjuste[]>([]);
+
   const guardarMut = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ motivosStock }: { motivosStock: string[] }) => {
       if (!productoQ.data) throw new Error('Producto no cargado');
       if (!empleado) throw new Error('Sin sesión');
       // Update del producto (campos básicos + promo + e-commerce).
@@ -510,19 +517,19 @@ function PanelProducto({
         ]);
       }
       // Aplicar los deltas de stock pendientes (los que el user tipeó
-      // en los inputs +/- por local pero no apretó el botón). Es lo que
-      // espera intuitivamente el dueño cuando aprieta "Guardar cambios":
-      // que se guarde TODO, incluido lo que tipeó en stock.
+      // en los inputs +/- por local pero no apretó el botón). El motivo
+      // viene del dialog que se abrió antes de esta mutación.
       const deltasAAplicar = Object.entries(stockDeltas).filter(([, txt]) => {
         const n = parseFloat(txt);
         return Number.isFinite(n) && n !== 0;
       });
-      for (const [depositoId, txt] of deltasAAplicar) {
+      for (let i = 0; i < deltasAAplicar.length; i++) {
+        const [depositoId, txt] = deltasAAplicar[i]!;
         await db.stock.ajustar({
           producto_id: productoId,
           deposito_id: depositoId,
           cantidad: parseFloat(txt),
-          motivo: 'Ajuste desde detalle de producto',
+          motivo: motivosStock[i] ?? 'Ajuste desde detalle de producto',
           empleado_id: empleado.id,
         });
       }
@@ -898,7 +905,26 @@ function PanelProducto({
             ) {
               return;
             }
-            guardarMut.mutate();
+            // Si hay deltas de stock pendientes, abrir dialog de motivos.
+            // El dialog llama guardarMut al confirmar con el array de motivos.
+            const deltasList: DeltaAjuste[] = Object.entries(stockDeltas)
+              .map(([depositoId, txt]) => {
+                const n = parseFloat(txt);
+                if (!Number.isFinite(n) || n === 0) return null;
+                const dep = depositosQ.data?.find((d) => d.id === depositoId);
+                return {
+                  key: depositoId,
+                  depositoNombre: dep?.nombre ?? 'Local desconocido',
+                  delta: n,
+                };
+              })
+              .filter((d): d is DeltaAjuste => d !== null);
+            if (deltasList.length > 0) {
+              setDeltasParaMotivos(deltasList);
+              setMotivosDialogOpen(true);
+            } else {
+              guardarMut.mutate({ motivosStock: [] });
+            }
           }}
           disabled={!puedeEditar || guardarMut.isPending}
           className="ml-auto"
@@ -907,6 +933,17 @@ function PanelProducto({
           {guardarMut.isPending ? 'Guardando…' : 'Guardar cambios'}
         </Button>
       </div>
+
+      <MotivoAjusteDialog
+        open={motivosDialogOpen}
+        onOpenChange={setMotivosDialogOpen}
+        deltas={deltasParaMotivos}
+        productoNombre={productoQ.data?.nombre}
+        onConfirm={(motivos) => {
+          setMotivosDialogOpen(false);
+          guardarMut.mutate({ motivosStock: motivos });
+        }}
+      />
 
       <ModalEstadisticasProducto
         open={estadOpen}
@@ -948,15 +985,33 @@ function StockPorLocal({
   const qc = useQueryClient();
   const empleado = useSesion((s) => s.empleado);
 
+  // Delta pendiente esperando que el dialog de motivo se confirme. Cuando
+  // el usuario aprieta Enter o el botón "Aplicar" de una fila, guardamos
+  // el delta acá y abrimos el dialog. Al confirmar, el mutate se dispara
+  // con el motivo elegido.
+  const [pendiente, setPendiente] = useState<{
+    depositoId: string;
+    depositoNombre: string;
+    delta: number;
+  } | null>(null);
+
   const ajustarMut = useMutation({
-    mutationFn: async ({ depositoId, delta }: { depositoId: string; delta: number }) => {
+    mutationFn: async ({
+      depositoId,
+      delta,
+      motivo,
+    }: {
+      depositoId: string;
+      delta: number;
+      motivo: string;
+    }) => {
       if (!empleado) throw new Error('Sin sesión');
       if (!Number.isFinite(delta) || delta === 0) throw new Error('Cantidad inválida');
       await db.stock.ajustar({
         producto_id: productoId,
         deposito_id: depositoId,
         cantidad: delta,
-        motivo: 'Ajuste rápido desde detalle de producto',
+        motivo,
         empleado_id: empleado.id,
       });
     },
@@ -1023,7 +1078,11 @@ function StockPorLocal({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && tieneDelta) {
                         e.preventDefault();
-                        ajustarMut.mutate({ depositoId: d.id, delta: deltaN });
+                        setPendiente({
+                          depositoId: d.id,
+                          depositoNombre: d.nombre,
+                          delta: deltaN,
+                        });
                       }
                     }}
                     className="h-6 w-14 text-right text-xs tabular-nums"
@@ -1033,7 +1092,11 @@ function StockPorLocal({
                     type="button"
                     onClick={() =>
                       tieneDelta &&
-                      ajustarMut.mutate({ depositoId: d.id, delta: deltaN })
+                      setPendiente({
+                        depositoId: d.id,
+                        depositoNombre: d.nombre,
+                        delta: deltaN,
+                      })
                     }
                     disabled={!tieneDelta || ajustarMut.isPending}
                     className="flex h-6 w-6 items-center justify-center rounded-sm border border-slate-300 bg-white hover:bg-emerald-50 disabled:opacity-40"
@@ -1059,6 +1122,36 @@ function StockPorLocal({
           <span className="font-bold tabular-nums text-blue-800">{totalStock}</span>
         </div>
       </div>
+
+      {/* Dialog de motivo — se abre cuando el usuario aprieta Enter o el
+          botón Aplicar en un delta pendiente. Al confirmar dispara el
+          ajuste con el motivo elegido. */}
+      <MotivoAjusteDialog
+        open={pendiente !== null}
+        onOpenChange={(v) => {
+          if (!v) setPendiente(null);
+        }}
+        deltas={
+          pendiente
+            ? [
+                {
+                  key: pendiente.depositoId,
+                  depositoNombre: pendiente.depositoNombre,
+                  delta: pendiente.delta,
+                },
+              ]
+            : []
+        }
+        onConfirm={(motivos) => {
+          if (!pendiente) return;
+          ajustarMut.mutate({
+            depositoId: pendiente.depositoId,
+            delta: pendiente.delta,
+            motivo: motivos[0] ?? 'Ajuste desde detalle de producto',
+          });
+          setPendiente(null);
+        }}
+      />
     </div>
   );
 }
