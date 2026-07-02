@@ -33,6 +33,8 @@ function MovimientosStockInner() {
   const [empleadoId, setEmpleadoId] = useState<string>('');
   const [depositoId, setDepositoId] = useState<string>('');
   const [texto, setTexto] = useState<string>('');
+  // Filtro por origen: '' todos, 'pos' solo PoS, 'admin' solo admin.
+  const [origenFiltro, setOrigenFiltro] = useState<'' | 'pos' | 'admin'>('');
   // Filtro de "solo activas" — esconde las transferencias que ya fueron
   // anuladas. Por default ON: lo más usual es ver lo que sigue vigente.
   const [soloActivas, setSoloActivas] = useState(true);
@@ -78,6 +80,37 @@ function MovimientosStockInner() {
     const m = new Map(empleadosQ.data?.map((e) => [e.id, e]) ?? []);
     return m;
   }, [empleadosQ.data]);
+
+  // Deduce el origen del movimiento a partir del motivo del movimiento_stock.
+  // No hay campo explícito en BD todavía — cuando el PoS crea una
+  // transferencia inmediata usa motivo="Transferencia PoS · {producto}" y
+  // cuando anula usa motivo="Anulación de transferencia {id}". El resto son
+  // transferencias hechas con el flujo del admin (borrador → emitida →
+  // recibida) que llevan motivos distintos o vacíos.
+  function origenDeMovimiento(motivo: string | undefined): 'pos' | 'admin' {
+    if (!motivo) return 'admin';
+    if (motivo.startsWith('Transferencia PoS ')) return 'pos';
+    if (motivo.startsWith('Anulación de transferencia')) return 'pos';
+    if (motivo.startsWith('Anulacion de transferencia')) return 'pos';
+    return 'admin';
+  }
+
+  // Formatea el motivo para mostrar en tabla. Los motivos "internos" del
+  // PoS quedan verbosos ("Transferencia PoS · Termo Stanley"); en la tabla
+  // ya hay columna del producto, así que los recortamos.
+  function motivoLegible(motivo: string | undefined): string {
+    if (!motivo) return '—';
+    if (motivo.startsWith('Transferencia PoS · ')) {
+      return 'Transferencia entre depósitos';
+    }
+    if (
+      motivo.startsWith('Anulación de transferencia') ||
+      motivo.startsWith('Anulacion de transferencia')
+    ) {
+      return 'Anulación de una transferencia previa';
+    }
+    return motivo;
+  }
 
   // Agrupamos las transferencias en pares (salida+entrada con misma
   // fecha+producto+cantidad) — cada par es UNA fila "De → A" en la tabla.
@@ -168,8 +201,11 @@ function MovimientosStockInner() {
         return p.nombre.toLowerCase().includes(q);
       });
     }
+    if (origenFiltro) {
+      lista = lista.filter((t) => origenDeMovimiento(t.motivo) === origenFiltro);
+    }
     return [...lista].sort((a, b) => b.fecha.localeCompare(a.fecha));
-  }, [transferencias, soloActivas, depositoId, empleadoId, texto, prodPorId]);
+  }, [transferencias, soloActivas, depositoId, empleadoId, texto, origenFiltro, prodPorId]);
 
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
@@ -240,6 +276,18 @@ function MovimientosStockInner() {
               </select>
             </div>
             <div>
+              <Label className="mb-1 block text-xs">Origen</Label>
+              <select
+                value={origenFiltro}
+                onChange={(e) => setOrigenFiltro(e.target.value as '' | 'pos' | 'admin')}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos</option>
+                <option value="pos">Desde el PoS (cajero)</option>
+                <option value="admin">Desde el admin (encargado/dueño)</option>
+              </select>
+            </div>
+            <div>
               <Label className="mb-1 block text-xs">Producto</Label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -293,6 +341,8 @@ function MovimientosStockInner() {
                       <th className="px-3 py-2 text-left">De</th>
                       <th className="px-3 py-2"></th>
                       <th className="px-3 py-2 text-left">A</th>
+                      <th className="px-3 py-2 text-left">Motivo</th>
+                      <th className="px-3 py-2 text-left">Origen</th>
                       <th className="px-3 py-2 text-left">Empleado</th>
                       <th className="px-3 py-2 text-left">Estado</th>
                     </tr>
@@ -332,6 +382,28 @@ function MovimientosStockInner() {
                             <ArrowRight className="inline h-3 w-3" />
                           </td>
                           <td className="px-3 py-2 text-xs">{destinoDep?.nombre ?? '—'}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">
+                            {motivoLegible(t.motivo)}
+                          </td>
+                          <td className="px-3 py-2 text-xs">
+                            {origenDeMovimiento(t.motivo) === 'pos' ? (
+                              <Badge
+                                variant="outline"
+                                className="border-blue-300 bg-blue-50 text-blue-800"
+                                title="Cargado por un cajero desde el botón Stock del PoS"
+                              >
+                                PoS
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="border-purple-300 bg-purple-50 text-purple-800"
+                                title="Cargado desde el panel admin (encargado o dueño)"
+                              >
+                                Admin
+                              </Badge>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-xs">{empNombre}</td>
                           <td className="px-3 py-2 text-xs">
                             {t.anulada ? (
