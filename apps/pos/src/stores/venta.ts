@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { unidadesCobradasNxM } from '@comercio/business';
+import { subtotalComboXPrecio, unidadesCobradasNxM } from '@comercio/business';
 import type { Producto } from '@comercio/db';
 
 /** Precio mínimo permitido por línea. Evita ventas accidentales a $0 o
@@ -355,21 +355,39 @@ export function calcularSubtotal(items: ItemCarrito[]): number {
 
 /**
  * Subtotal de UNA línea del carrito, aplicando (en orden):
- *   1. Promo NxM del producto (2x1, 3x2…) → reduce las unidades cobradas.
- *   2. Descuento por línea (%) sobre el bruto ya reducido.
- * Si el producto no tiene NxM válido, se cobra la cantidad completa.
+ *   1. Promo del producto (NxM o combo N x $) → base "bruta" reducida.
+ *      - NxM: reduce las unidades cobradas al precio unitario.
+ *      - Combo: packs a precio fijo + sueltas a precio unitario normal.
+ *   2. Descuento por línea (%) sobre esa base.
+ * Si el producto no tiene promo válida, se cobra cantidad × precio.
  */
 export function calcularSubtotalLinea(i: ItemCarrito): number {
-  const promoNxm =
+  let bruto: number;
+  if (
     i.producto.promo_tipo === 'nxm' &&
     i.producto.promo_nxm_lleva != null &&
     i.producto.promo_nxm_paga != null
-      ? { lleva: i.producto.promo_nxm_lleva, paga: i.producto.promo_nxm_paga }
-      : null;
-  const unidadesCobradas = promoNxm
-    ? unidadesCobradasNxM(i.cantidad, promoNxm.lleva, promoNxm.paga)
-    : i.cantidad;
-  const bruto = unidadesCobradas * i.precio_unitario;
+  ) {
+    const cobradas = unidadesCobradasNxM(
+      i.cantidad,
+      i.producto.promo_nxm_lleva,
+      i.producto.promo_nxm_paga,
+    );
+    bruto = cobradas * i.precio_unitario;
+  } else if (
+    i.producto.promo_tipo === 'combo' &&
+    i.producto.promo_combo_cantidad != null &&
+    i.producto.promo_combo_precio != null
+  ) {
+    bruto = subtotalComboXPrecio(
+      i.cantidad,
+      i.producto.promo_combo_cantidad,
+      i.producto.promo_combo_precio,
+      i.precio_unitario,
+    );
+  } else {
+    bruto = i.cantidad * i.precio_unitario;
+  }
   const dto = i.descuento_pct ? bruto * (i.descuento_pct / 100) : 0;
   return bruto - dto;
 }

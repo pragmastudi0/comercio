@@ -444,11 +444,16 @@ function PanelProducto({
   // Arranca abierto solo si el producto YA tiene promo cargada.
   const [promoAbierto, setPromoAbierto] = useState(false);
   const [promoTexto, setPromoTexto] = useState('');
-  // 'none' = sin promo | 'pct' = % descuento | 'nxm' = 2x1, 3x2, etc.
-  const [promoTipo, setPromoTipo] = useState<'none' | 'pct' | 'nxm'>('none');
+  // 'none' = sin promo | 'pct' = % descuento | 'nxm' = 2x1, 3x2, etc. |
+  // 'combo' = N unidades por $X fijo (ej: 3 x $1200).
+  const [promoTipo, setPromoTipo] = useState<'none' | 'pct' | 'nxm' | 'combo'>(
+    'none',
+  );
   const [promoPctTxt, setPromoPctTxt] = useState('');
   const [promoNxmLlevaTxt, setPromoNxmLlevaTxt] = useState('');
   const [promoNxmPagaTxt, setPromoNxmPagaTxt] = useState('');
+  const [promoComboCantidadTxt, setPromoComboCantidadTxt] = useState('');
+  const [promoComboPrecioTxt, setPromoComboPrecioTxt] = useState('');
   const [cuotasSinRecargo, setCuotasSinRecargo] = useState(false);
   // Sección colapsable de e-commerce (fotos / descripción larga /
   // publicado web / config de bulto). Colapsada por default — el cliente
@@ -474,19 +479,25 @@ function PanelProducto({
       setPromoPctTxt(productoQ.data.promo_pct != null ? String(productoQ.data.promo_pct) : '');
       const nxmLleva = productoQ.data.promo_nxm_lleva;
       const nxmPaga = productoQ.data.promo_nxm_paga;
+      const comboCant = productoQ.data.promo_combo_cantidad;
+      const comboPrecio = productoQ.data.promo_combo_precio;
       const tipoGuardado = productoQ.data.promo_tipo;
-      // Deducir el tipo activo: si hay nxm válido usar 'nxm', si hay
-      // promo_pct > 0 usar 'pct', sino 'none'. tipoGuardado tiene
-      // prioridad cuando existe.
-      const tipoResuelto: 'none' | 'pct' | 'nxm' =
-        tipoGuardado === 'nxm' && nxmLleva && nxmPaga
-          ? 'nxm'
-          : tipoGuardado === 'pct' || (productoQ.data.promo_pct ?? 0) > 0
-            ? 'pct'
-            : 'none';
+      // Deducir el tipo activo: prioridad al tipo guardado si tiene sus
+      // campos completos; sino promoción por % si hay promo_pct > 0; sino
+      // 'none'.
+      const tipoResuelto: 'none' | 'pct' | 'nxm' | 'combo' =
+        tipoGuardado === 'combo' && comboCant && comboPrecio
+          ? 'combo'
+          : tipoGuardado === 'nxm' && nxmLleva && nxmPaga
+            ? 'nxm'
+            : tipoGuardado === 'pct' || (productoQ.data.promo_pct ?? 0) > 0
+              ? 'pct'
+              : 'none';
       setPromoTipo(tipoResuelto);
       setPromoNxmLlevaTxt(nxmLleva != null ? String(nxmLleva) : '');
       setPromoNxmPagaTxt(nxmPaga != null ? String(nxmPaga) : '');
+      setPromoComboCantidadTxt(comboCant != null ? String(comboCant) : '');
+      setPromoComboPrecioTxt(comboPrecio != null ? String(comboPrecio) : '');
       // Auto-expandir si hay algo cargado (o si querés cuotas sin recargo).
       setPromoAbierto(
         tipoResuelto !== 'none' ||
@@ -542,6 +553,19 @@ function PanelProducto({
           'Promo NxM inválida: "Lleva" debe ser >= 2 y mayor que "Paga" (>= 1).',
         );
       }
+      const comboCantidad = parseInt(promoComboCantidadTxt, 10);
+      const comboPrecio = parseFloat(promoComboPrecioTxt);
+      const comboValido =
+        promoTipo === 'combo' &&
+        Number.isFinite(comboCantidad) &&
+        Number.isFinite(comboPrecio) &&
+        comboCantidad >= 2 &&
+        comboPrecio > 0;
+      if (promoTipo === 'combo' && !comboValido) {
+        throw new Error(
+          'Promo Combo inválida: "Cantidad" debe ser >= 2 y "Precio" > 0.',
+        );
+      }
       // Campos de promo — usamos null explícito para LIMPIAR en Supabase
       // cuando el usuario cambia de tipo. undefined no actualizaría nada
       // y quedarían restos (ej: pasás de nxm → pct y el nxm queda vivo).
@@ -553,6 +577,8 @@ function PanelProducto({
             : null,
         promo_nxm_lleva: nxmValido ? nxmLleva : null,
         promo_nxm_paga: nxmValido ? nxmPaga : null,
+        promo_combo_cantidad: comboValido ? comboCantidad : null,
+        promo_combo_precio: comboValido ? comboPrecio : null,
       };
       const patch = {
         nombre,
@@ -840,9 +866,13 @@ function PanelProducto({
                 <span className="text-[11px] text-purple-800/80">
                   {promoTipo === 'nxm' && promoNxmLlevaTxt && promoNxmPagaTxt
                     ? `${promoNxmLlevaTxt}x${promoNxmPagaTxt}`
-                    : promoTipo === 'pct' && promoPctTxt
-                      ? `${promoPctTxt}%`
-                      : 'sin promo'}
+                    : promoTipo === 'combo' &&
+                        promoComboCantidadTxt &&
+                        promoComboPrecioTxt
+                      ? `${promoComboCantidadTxt} x $${promoComboPrecioTxt}`
+                      : promoTipo === 'pct' && promoPctTxt
+                        ? `${promoPctTxt}%`
+                        : 'sin promo'}
                   {cuotasSinRecargo ? ' · cuotas s/recargo' : ''}
                 </span>
               )}
@@ -879,6 +909,7 @@ function PanelProducto({
                     { v: 'none', label: 'Ninguna' },
                     { v: 'pct', label: '% descuento' },
                     { v: 'nxm', label: 'NxM (2x1, 3x2…)' },
+                    { v: 'combo', label: 'Combo (N x $ fijo)' },
                   ] as const
                 ).map((opt) => (
                   <label
@@ -983,6 +1014,50 @@ function PanelProducto({
                   <p className="text-[10px] leading-tight text-slate-600">
                     Se aplica solo en el PoS al facturar. Ej: 2x1 → 2 unidades
                     salen al precio de 1. Con 5u lleva 3 pagas.
+                  </p>
+                </div>
+              )}
+
+              {/* Inputs Combo: solo si tipo=combo. N unidades por $X fijo.
+                  Sueltas se cobran a precio normal. */}
+              {promoTipo === 'combo' && (
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                        Cantidad del combo
+                      </Label>
+                      <Input
+                        type="number"
+                        min="2"
+                        step="1"
+                        value={promoComboCantidadTxt}
+                        onChange={(e) => setPromoComboCantidadTxt(e.target.value)}
+                        disabled={!puedeEditar}
+                        placeholder="3"
+                        className="h-7 text-sm tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                        Precio total ($)
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={promoComboPrecioTxt}
+                        onChange={(e) => setPromoComboPrecioTxt(e.target.value)}
+                        disabled={!puedeEditar}
+                        placeholder="1200"
+                        className="h-7 text-sm tabular-nums"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] leading-tight text-slate-600">
+                    Ej: 3 x $1200 → cada 3 unidades se cobran $1200. Si el
+                    cliente lleva 5, son 1 combo ($1200) + 2 sueltas a precio
+                    normal.
                   </p>
                 </div>
               )}

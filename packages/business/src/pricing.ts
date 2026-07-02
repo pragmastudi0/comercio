@@ -85,3 +85,44 @@ export function unidadesCobradasNxM(
   const sueltas = cantidad % lleva;
   return packs * paga + sueltas;
 }
+
+/**
+ * Aplica promo COMBO (N unidades por $X fijo) a una línea del carrito.
+ * Devuelve el subtotal FINAL de esa línea — a diferencia de NxM, acá el
+ * precio del pack NO depende del precio unitario del producto (viene
+ * cargado a mano por Agus desde /admin/productos).
+ *
+ * Regla:
+ *   packs   = floor(cantidad / comboCantidad)
+ *   sueltas = cantidad % comboCantidad
+ *   subtotal = packs * comboPrecio + sueltas * precioUnitario
+ *
+ * Ejemplos con combo (3 x $1200) y precio unitario $500:
+ *   1u  → $500          (1 suelta, aún no completa pack)
+ *   2u  → $1000         (2 sueltas)
+ *   3u  → $1200         (1 pack — el pack es más barato que 3 sueltas)
+ *   4u  → $1700         (1 pack + 1 suelta)
+ *   6u  → $2400         (2 packs completos)
+ *
+ * Si la config es inválida (cantidad < 2, precio <= 0, no-finito) devuelve
+ * el subtotal a precio normal sin aplicar combo.
+ */
+export function subtotalComboXPrecio(
+  cantidad: number,
+  comboCantidad: number,
+  comboPrecio: number,
+  precioUnitario: number,
+): number {
+  if (cantidad <= 0) return 0;
+  if (
+    !Number.isFinite(comboCantidad) ||
+    !Number.isFinite(comboPrecio) ||
+    comboCantidad < 2 ||
+    comboPrecio <= 0
+  ) {
+    return cantidad * precioUnitario;
+  }
+  const packs = Math.floor(cantidad / comboCantidad);
+  const sueltas = cantidad % comboCantidad;
+  return packs * comboPrecio + sueltas * precioUnitario;
+}
