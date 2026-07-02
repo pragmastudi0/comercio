@@ -690,6 +690,20 @@ function SesionCard({
     setCerrarOpen(true);
   }
 
+  // "Sobró para retirar" — usamos la misma lógica que el PoS al cerrar caja
+  // (iter-6). El cajero al cierre se lleva el efectivo cobrado y deja SOLO
+  // el saldo inicial como cambio para el próximo turno. Fórmula:
+  //   sobranteRetiro = declarado - saldo_inicial
+  //   - Positivo: retira ese monto, quedan saldo_inicial en caja. OK.
+  //   - Cero: dejó exactamente lo que abrió, retiró todo el efectivo. Perfecto.
+  //   - Negativo: cerró con menos que el inicial, algo raro (revisar).
+  // Se ignora el "efectivo esperado" a propósito — antes marcaba rojo
+  // cuando el cajero declaraba $15k con esperado $184k, pero era normal
+  // (se llevó los $169k cobrados). Info engañosa.
+  const sobranteRetiroPreview =
+    saldoFinal && !Number.isNaN(parseFloat(saldoFinal))
+      ? parseFloat(saldoFinal) - sesion.saldo_inicial
+      : 0;
   const diferenciaPreview =
     saldoFinal && !Number.isNaN(parseFloat(saldoFinal))
       ? parseFloat(saldoFinal) - efectivoEsperado
@@ -794,17 +808,45 @@ function SesionCard({
               className="mt-1"
               autoFocus
             />
-            <p
-              className={`mt-1 text-xs tabular-nums ${
-                diferenciaPreview < 0
-                  ? 'text-destructive'
-                  : diferenciaPreview > 0
-                  ? 'text-orange-600'
-                  : 'text-muted-foreground'
-              }`}
-            >
-              Diferencia con esperado: {formatCurrency(diferenciaPreview)}
-            </p>
+            {saldoFinal && !Number.isNaN(parseFloat(saldoFinal)) && (
+              <div className="mt-1 space-y-0.5 text-xs">
+                {/* KPI principal: sobró para retirar (declarado - saldo_inicial).
+                    Es lo que el cajero se lleva del turno; el saldo inicial
+                    queda como cambio para el próximo. */}
+                {sobranteRetiroPreview > 0.01 ? (
+                  <p className="tabular-nums text-blue-800">
+                    Sobró para retirar: {formatCurrency(sobranteRetiroPreview)}{' '}
+                    · quedan {formatCurrency(sesion.saldo_inicial)} como cambio.
+                  </p>
+                ) : sobranteRetiroPreview < -0.01 ? (
+                  <p className="tabular-nums text-destructive">
+                    Cierra con menos que el saldo inicial ({formatCurrency(
+                      Math.abs(sobranteRetiroPreview),
+                    )}
+                    ). Revisá antes de confirmar.
+                  </p>
+                ) : (
+                  <p className="tabular-nums text-emerald-700">
+                    Deja exactamente el saldo inicial. Perfecto.
+                  </p>
+                )}
+                {/* Arqueo: sólo mostramos si el declarado difiere del
+                    esperado (o sea, cobró efectivo que no se llevó, o sobró
+                    plata sin ventas). No es un error grave, solo aviso. */}
+                {Math.abs(diferenciaPreview) >= 0.01 &&
+                  Math.abs(diferenciaPreview - -totales.efectivo) >= 0.01 && (
+                    <p
+                      className={`tabular-nums ${
+                        diferenciaPreview > 0
+                          ? 'text-orange-600'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      Arqueo respecto al esperado: {formatCurrency(diferenciaPreview)}
+                    </p>
+                  )}
+              </div>
+            )}
           </div>
         </div>
 
