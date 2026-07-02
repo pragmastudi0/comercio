@@ -6,6 +6,10 @@ import { format } from 'date-fns';
 import { ArrowLeftRight, ArrowRight, RefreshCw, Search } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { PaginaProtegida } from '@/lib/permisos';
+import {
+  motivoLegible,
+  origenDeMovimiento,
+} from '@/lib/movimientos-stock-helpers';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
@@ -81,36 +85,9 @@ function MovimientosStockInner() {
     return m;
   }, [empleadosQ.data]);
 
-  // Deduce el origen del movimiento a partir del motivo del movimiento_stock.
-  // No hay campo explícito en BD todavía — cuando el PoS crea una
-  // transferencia inmediata usa motivo="Transferencia PoS · {producto}" y
-  // cuando anula usa motivo="Anulación de transferencia {id}". El resto son
-  // transferencias hechas con el flujo del admin (borrador → emitida →
-  // recibida) que llevan motivos distintos o vacíos.
-  function origenDeMovimiento(motivo: string | undefined): 'pos' | 'admin' {
-    if (!motivo) return 'admin';
-    if (motivo.startsWith('Transferencia PoS ')) return 'pos';
-    if (motivo.startsWith('Anulación de transferencia')) return 'pos';
-    if (motivo.startsWith('Anulacion de transferencia')) return 'pos';
-    return 'admin';
-  }
-
-  // Formatea el motivo para mostrar en tabla. Los motivos "internos" del
-  // PoS quedan verbosos ("Transferencia PoS · Termo Stanley"); en la tabla
-  // ya hay columna del producto, así que los recortamos.
-  function motivoLegible(motivo: string | undefined): string {
-    if (!motivo) return '—';
-    if (motivo.startsWith('Transferencia PoS · ')) {
-      return 'Transferencia entre depósitos';
-    }
-    if (
-      motivo.startsWith('Anulación de transferencia') ||
-      motivo.startsWith('Anulacion de transferencia')
-    ) {
-      return 'Anulación de una transferencia previa';
-    }
-    return motivo;
-  }
+  // Helpers extraídos a lib/movimientos-stock-helpers para reutilizarlos
+  // desde el modal Estadísticas del producto (misma lógica de origen +
+  // formato del motivo).
 
   // Agrupamos las transferencias en pares (salida+entrada con misma
   // fecha+producto+cantidad) — cada par es UNA fila "De → A" en la tabla.

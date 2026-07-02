@@ -2,11 +2,25 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { LineChart, RefreshCw } from 'lucide-react';
+import { LineChart, RefreshCw, ArrowRight } from 'lucide-react';
 import { getDb } from '@/lib/db';
+import {
+  motivoLegible,
+  origenDeMovimiento,
+} from '@/lib/movimientos-stock-helpers';
 import { Dialog, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
+import { Badge } from '@comercio/ui/badge';
 import { Skeleton } from '@comercio/ui/skeleton';
 import { formatCurrency } from '@comercio/ui/utils';
+
+const LABEL_TIPO_MOV: Record<string, string> = {
+  venta: 'Venta',
+  devolucion: 'Devolución',
+  ajuste: 'Ajuste',
+  merma: 'Merma',
+  transferencia_salida: 'Transferencia salida',
+  transferencia_entrada: 'Transferencia entrada',
+};
 
 /**
  * Modal con estadísticas básicas de un producto:
@@ -50,6 +64,19 @@ export function ModalEstadisticasProducto({
   const empleadosQ = useQuery({
     queryKey: ['empleados'],
     queryFn: () => db.empleados.list(),
+    enabled: open,
+  });
+  // Movimientos de stock del producto (últimos 90 días). Se pintan agrupados
+  // en la sección "Historial de movimientos" abajo, con motivo + origen para
+  // que se vea qué canal originó cada uno (PoS vs admin).
+  const movsQ = useQuery({
+    queryKey: ['estad-producto-movs', productoId, desde],
+    queryFn: () => db.stock.movimientos({ producto_id: productoId, desde }),
+    enabled: open,
+  });
+  const depositosQ = useQuery({
+    queryKey: ['depositos'],
+    queryFn: () => db.depositos.list(),
     enabled: open,
   });
 
@@ -212,6 +239,16 @@ export function ModalEstadisticasProducto({
         </div>
       )}
 
+      {/* Historial de movimientos de stock (últimos 90 días).
+          Se muestra siempre — incluso si no hubo ventas, puede haber
+          transferencias/ajustes que interesa auditar. */}
+      <HistorialMovimientos
+        movs={movsQ.data ?? []}
+        depositos={depositosQ.data ?? []}
+        empleados={empleadosQ.data ?? []}
+        cargando={movsQ.isLoading}
+      />
+
       <div className="mt-4 flex justify-end border-t pt-3">
         <button
           type="button"
@@ -232,5 +269,273 @@ function Stat({ label, valor, sub }: { label: string; valor: number; sub: string
       <div className="text-xl font-semibold tabular-nums">{valor}</div>
       <div className="text-[10px] text-muted-foreground">{sub}</div>
     </div>
+  );
+}
+
+/**
+ * Tabla compacta con los últimos movimientos de stock del producto.
+ * Muestra fecha, tipo, cantidad (con signo), local, motivo, origen (badge
+ * PoS o Admin) y empleado. Para transferencias también muestra el par
+ * "origen → destino" en la columna local.
+ *
+ * Se agrupan pares de transferencia (salida+entrada con misma fecha) en
+ * una sola fila estilo "De → A" — misma lógica que /admin/movimientos-stock,
+ * pero acá aparecen también ventas, ajustes y mermas (todo el historial
+ * de stock del producto).
+ */
+function HistorialMovimientos({
+  movs,
+  depositos,
+  empleados,
+  cargando,
+}: {
+  movs: Array<{
+    id: string;
+    tipo: string;
+    cantidad: number;
+    deposito_id: string;
+    empleado_id: string;
+    motivo?: string;
+    fecha: string;
+    producto_id: string;
+  }>;
+  depositos: Array<{ id: string; nombre: string }>;
+  empleados: Array<{ id: string; nombre: string; apellido: string }>;
+  cargando: boolean;
+}) {
+  const depPorId = useMemo(
+    () => new Map(depositos.map((d) => [d.id, d.nombre])),
+    [depositos],
+  );
+  const empPorId = useMemo(
+    () => new Map(empleados.map((e) => [e.id, `${e.nombre} ${e.apellido ?? ''}`.trim()])),
+    [empleados],
+  );
+
+  // Agrupar transferencias en pares (salida+entrada con misma fecha+cant).
+  // Cada par = 1 fila "De → A". El resto (ventas/ajustes/mermas) queda como
+  // filas individuales.
+  type Fila =
+    | {
+        kind: 'transferencia';
+        keyPar: string;
+        fecha: string;
+        cantidad: number;
+        origen_id: string;
+        destino_id: string;
+        empleado_id: string;
+        motivo?: string;
+        anulada: boolean;
+        esAnulacionDe?: string;
+      }
+    | {
+        kind: 'simple';
+        id: string;
+        fecha: string;
+        tipo: string;
+        cantidad: number;
+        deposito_id: string;
+        empleado_id: string;
+        motivo?: string;
+      };
+
+  const filas = useMemo<Fila[]>(() => {
+    const transf = movs.filter(
+      (m) => m.tipo === 'transferencia_salida' || m.tipo === 'transferencia_entrada',
+    );
+    const otras = movs.filter(
+      (m) => m.tipo !== 'transferencia_salida' && m.tipo !== 'transferencia_entrada',
+    );
+    // Pares por (cantidad + fecha exacta) — la transferencia inmediata del
+    // PoS inserta ambos movs con el mismo timestamp.
+    const grupos = new Map<string, { salida?: typeof movs[number]; entrada?: typeof movs[number] }>();
+    for (const m of transf) {
+      const key = `${m.cantidad}|${m.fecha}`;
+      const g = grupos.get(key) ?? {};
+      if (m.tipo === 'transferencia_salida') g.salida = m;
+      else g.entrada = m;
+      grupos.set(key, g);
+    }
+    const anuladasIds = new Set<string>();
+    const pares: Fila[] = [];
+    for (const [, g] of grupos) {
+      if (!g.salida || !g.entrada) continue;
+      const motivo = g.salida.motivo ?? '';
+      const matchAnul = /^Anulaci[óo]n de transferencia (\S+)/.exec(motivo);
+      pares.push({
+        kind: 'transferencia',
+        keyPar: g.salida.id,
+        fecha: g.salida.fecha,
+        cantidad: g.salida.cantidad,
+        origen_id: g.salida.deposito_id,
+        destino_id: g.entrada.deposito_id,
+        empleado_id: g.salida.empleado_id,
+        motivo: g.salida.motivo,
+        anulada: false,
+        esAnulacionDe: matchAnul?.[1],
+      });
+      if (matchAnul) anuladasIds.add(matchAnul[1]!);
+    }
+    for (const p of pares) {
+      if (p.kind === 'transferencia' && anuladasIds.has(p.keyPar)) p.anulada = true;
+    }
+    const simples: Fila[] = otras.map((m) => ({
+      kind: 'simple',
+      id: m.id,
+      fecha: m.fecha,
+      tipo: m.tipo,
+      cantidad: m.cantidad,
+      deposito_id: m.deposito_id,
+      empleado_id: m.empleado_id,
+      motivo: m.motivo,
+    }));
+    return [...pares, ...simples].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  }, [movs]);
+
+  function fmtFecha(iso: string): string {
+    return new Date(iso).toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  // Signo visual de la cantidad según tipo:
+  //   'venta' | 'merma' | 'transferencia_salida' → -N (rojo)
+  //   'devolucion' | 'transferencia_entrada'     → +N (verde)
+  //   'ajuste' → +N o -N según valor real (el signo se guarda perdido en
+  //             la BD: cantidad es siempre positivo, el "delta real" del
+  //             ajuste solo se conoce en el motivo). Marcamos como neutro.
+  function signoTipo(tipo: string): 'positivo' | 'negativo' | 'neutro' {
+    if (
+      tipo === 'venta' ||
+      tipo === 'merma' ||
+      tipo === 'transferencia_salida'
+    )
+      return 'negativo';
+    if (tipo === 'devolucion' || tipo === 'transferencia_entrada')
+      return 'positivo';
+    return 'neutro';
+  }
+
+  return (
+    <div className="mt-3">
+      <div className="mb-1 flex items-center justify-between">
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-700">
+          Historial de movimientos de stock (90 días)
+        </div>
+        <div className="text-[10px] text-muted-foreground">{filas.length} en total</div>
+      </div>
+      {cargando ? (
+        <Skeleton className="h-24" />
+      ) : filas.length === 0 ? (
+        <p className="rounded border border-dashed py-3 text-center text-xs text-muted-foreground">
+          No hubo movimientos de este producto en los últimos 90 días.
+        </p>
+      ) : (
+        <div className="max-h-80 overflow-y-auto rounded-md border">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-muted/60 text-[10px] uppercase text-muted-foreground">
+              <tr>
+                <th className="px-2 py-1 text-left">Fecha</th>
+                <th className="px-2 py-1 text-left">Tipo</th>
+                <th className="px-2 py-1 text-right">Cant.</th>
+                <th className="px-2 py-1 text-left">Local</th>
+                <th className="px-2 py-1 text-left">Motivo</th>
+                <th className="px-2 py-1 text-left">Origen</th>
+                <th className="px-2 py-1 text-left">Empleado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f) => {
+                const empNombre = empPorId.get(f.empleado_id) ?? '—';
+                if (f.kind === 'transferencia') {
+                  const opac = f.anulada || f.esAnulacionDe ? 'opacity-60' : '';
+                  return (
+                    <tr key={f.keyPar} className={`border-t border-border/50 ${opac}`}>
+                      <td className="whitespace-nowrap px-2 py-1 tabular-nums">
+                        {fmtFecha(f.fecha)}
+                      </td>
+                      <td className="px-2 py-1">Transferencia</td>
+                      <td className="px-2 py-1 text-right font-medium tabular-nums">
+                        {f.cantidad}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1">
+                        <span>{depPorId.get(f.origen_id) ?? '—'}</span>
+                        <ArrowRight className="mx-0.5 inline h-3 w-3 text-muted-foreground" />
+                        <span>{depPorId.get(f.destino_id) ?? '—'}</span>
+                      </td>
+                      <td className="px-2 py-1 text-muted-foreground">
+                        {motivoLegible(f.motivo)}
+                      </td>
+                      <td className="px-2 py-1">
+                        <OrigenBadge origen={origenDeMovimiento(f.motivo)} />
+                      </td>
+                      <td className="px-2 py-1">{empNombre}</td>
+                    </tr>
+                  );
+                }
+                const signo = signoTipo(f.tipo);
+                return (
+                  <tr key={f.id} className="border-t border-border/50">
+                    <td className="whitespace-nowrap px-2 py-1 tabular-nums">
+                      {fmtFecha(f.fecha)}
+                    </td>
+                    <td className="px-2 py-1">{LABEL_TIPO_MOV[f.tipo] ?? f.tipo}</td>
+                    <td
+                      className={`px-2 py-1 text-right font-medium tabular-nums ${
+                        signo === 'positivo'
+                          ? 'text-emerald-700'
+                          : signo === 'negativo'
+                            ? 'text-destructive'
+                            : ''
+                      }`}
+                    >
+                      {signo === 'positivo' ? '+' : signo === 'negativo' ? '−' : ''}
+                      {f.cantidad}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-1">
+                      {depPorId.get(f.deposito_id) ?? '—'}
+                    </td>
+                    <td className="px-2 py-1 text-muted-foreground">
+                      {motivoLegible(f.motivo)}
+                    </td>
+                    <td className="px-2 py-1">
+                      <OrigenBadge origen={origenDeMovimiento(f.motivo)} />
+                    </td>
+                    <td className="px-2 py-1">{empNombre}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrigenBadge({ origen }: { origen: 'pos' | 'admin' }) {
+  if (origen === 'pos') {
+    return (
+      <Badge
+        variant="outline"
+        className="border-blue-300 bg-blue-50 text-blue-800"
+        title="Cargado por un cajero desde el botón Stock del PoS"
+      >
+        PoS
+      </Badge>
+    );
+  }
+  return (
+    <Badge
+      variant="outline"
+      className="border-purple-300 bg-purple-50 text-purple-800"
+      title="Cargado desde el admin (encargado o dueño)"
+    >
+      Admin
+    </Badge>
   );
 }
