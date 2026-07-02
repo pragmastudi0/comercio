@@ -22,10 +22,12 @@ export function TabsCarritos() {
   const totalCarritos = idsParalelos.length + 1;
   const llegoAlMax = totalCarritos >= MAX_CARRITOS;
 
-  // No mostrar el componente si hay un solo carrito Y está vacío. La
-  // cajera nueva no necesita "tabs" todavía. Aparece apenas haya un
-  // carrito en paralelo o al menos un ítem en el actual.
-  if (totalCarritos === 1 && items.length === 0) return null;
+  // El botón "Nueva venta paralela" está SIEMPRE disponible — la cajera
+  // puede querer arrancar un segundo carrito antes de haber cargado nada
+  // en el primero (ej: cliente pidió mostrar dos combos distintos).
+  // Las tabs solo aparecen cuando hay ≥2 carritos, así una sola venta
+  // no se ve "tabificada".
+  const mostrarTabs = totalCarritos > 1;
 
   // Lista ordenada para render: activo primero, después los paralelos
   // en el orden en que están guardados (insertion order del Object).
@@ -46,55 +48,56 @@ export function TabsCarritos() {
 
   return (
     <div className="flex items-center gap-1 border-b bg-muted/30 px-2 py-1.5">
-      {tabs.map((t) => (
-        <div
-          key={t.id}
-          className={`flex items-center gap-0.5 rounded-md border ${
-            t.activo
-              ? 'border-primary bg-background'
-              : 'border-input bg-card hover:bg-accent'
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => cambiarCarrito(t.id)}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium"
-            title={t.activo ? 'Carrito activo' : 'Cambiar a este carrito'}
+      {mostrarTabs &&
+        tabs.map((t) => (
+          <div
+            key={t.id}
+            className={`flex items-center gap-0.5 rounded-md border ${
+              t.activo
+                ? 'border-primary bg-background'
+                : 'border-input bg-card hover:bg-accent'
+            }`}
           >
-            <span>{t.label}</span>
-            {t.itemCount > 0 && (
-              <span
-                className={`rounded-full px-1.5 text-[10px] ${
-                  t.activo ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
-                }`}
-              >
-                {t.itemCount}
-              </span>
-            )}
-          </button>
-          {/* Cerrar disponible en ambos: si es el activo, salta al paralelo
-              o queda vacío; si es paralelo, lo borra. */}
-          <button
-            type="button"
-            onClick={() => {
-              if (t.itemCount === 0 || confirm(`¿Descartar "${t.label}" con ${t.itemCount} ítem(s)?`)) {
-                cerrarCarrito(t.id);
-              }
-            }}
-            className="px-1 py-1 text-muted-foreground hover:text-destructive"
-            title="Cerrar carrito"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-      ))}
+            <button
+              type="button"
+              onClick={() => cambiarCarrito(t.id)}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium"
+              title={t.activo ? 'Carrito activo' : 'Cambiar a este carrito'}
+            >
+              <span>{t.label}</span>
+              {t.itemCount > 0 && (
+                <span
+                  className={`rounded-full px-1.5 text-[10px] ${
+                    t.activo ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
+                  }`}
+                >
+                  {t.itemCount}
+                </span>
+              )}
+            </button>
+            {/* Cerrar disponible en ambos: si es el activo, salta al paralelo
+                o queda vacío; si es paralelo, lo borra. */}
+            <button
+              type="button"
+              onClick={() => {
+                if (t.itemCount === 0 || confirm(`¿Descartar "${t.label}" con ${t.itemCount} ítem(s)?`)) {
+                  cerrarCarrito(t.id);
+                }
+              }}
+              className="px-1 py-1 text-muted-foreground hover:text-destructive"
+              title="Cerrar carrito"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
       <Button
         type="button"
         variant="ghost"
         size="sm"
         disabled={llegoAlMax}
         onClick={() => nuevoCarrito()}
-        className="ml-1 h-7 px-2 text-xs"
+        className={`${mostrarTabs ? 'ml-1' : ''} h-7 px-2 text-xs`}
         title={llegoAlMax ? `Máximo ${MAX_CARRITOS} carritos a la vez` : 'Abrir un carrito nuevo en paralelo'}
       >
         <Plus className="mr-1 h-3 w-3" />
