@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Minus, Plus, Trash2, AlertTriangle, Tag } from 'lucide-react';
+import { Minus, Plus, Trash2, AlertTriangle, Tag, Gift } from 'lucide-react';
+import { unidadesCobradasNxM } from '@comercio/business';
 import { getDb } from '@/lib/db';
 import { useDepositoActivo } from '@/lib/deposito-activo';
-import { useVenta, type ItemCarrito } from '@/stores/venta';
+import { useVenta, type ItemCarrito, calcularSubtotalLinea } from '@/stores/venta';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { formatCurrency } from '@comercio/ui/utils';
@@ -31,9 +32,26 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
     queryFn: () => db.depositos.list(),
   });
 
-  const subtotalBruto = item.cantidad * item.precio_unitario;
-  const dto = item.descuento_pct ? subtotalBruto * (item.descuento_pct / 100) : 0;
-  const subtotal = subtotalBruto - dto;
+  // Promo NxM (2x1, 3x2…) — se aplica ANTES del descuento por línea.
+  // Calcula cuántas unidades efectivamente se cobran; si no hay promo
+  // válida devuelve la cantidad completa.
+  const promoNxm =
+    item.producto.promo_tipo === 'nxm' &&
+    item.producto.promo_nxm_lleva != null &&
+    item.producto.promo_nxm_paga != null
+      ? {
+          lleva: item.producto.promo_nxm_lleva,
+          paga: item.producto.promo_nxm_paga,
+        }
+      : null;
+  const unidadesCobradas = promoNxm
+    ? unidadesCobradasNxM(item.cantidad, promoNxm.lleva, promoNxm.paga)
+    : item.cantidad;
+  const unidadesGratis = item.cantidad - unidadesCobradas;
+  // Subtotal delegado al store para tener UNA sola fuente de verdad —
+  // el ModalCobro suma con el mismo calcularSubtotal, así visual y cobro
+  // no pueden desalinearse.
+  const subtotal = calcularSubtotalLinea(item);
   const precioEditado = item.precio_unitario !== item.precio_base;
 
   // Input de precio: buffer local de string para que el cajero pueda
@@ -115,6 +133,21 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
               <Tag className="h-3 w-3" /> -{item.descuento_pct}%
             </span>
           ) : null}
+          {promoNxm && unidadesGratis > 0 && (
+            <span className="flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 font-medium text-purple-800">
+              <Gift className="h-3 w-3" /> {promoNxm.lleva}x{promoNxm.paga}
+              {' · pagás '}
+              {unidadesCobradas} de {item.cantidad}
+              {' ('}
+              {unidadesGratis} gratis{')'}
+            </span>
+          )}
+          {promoNxm && unidadesGratis === 0 && item.cantidad > 0 && (
+            <span className="rounded bg-purple-50 px-1.5 py-0.5 text-purple-700 ring-1 ring-inset ring-purple-200">
+              {promoNxm.lleva}x{promoNxm.paga} — sumá{' '}
+              {promoNxm.lleva - (item.cantidad % promoNxm.lleva)} para la promo
+            </span>
+          )}
           {/* Promo cargada por Agus desde /admin/productos. Texto siempre
               visible; si hay promo_pct > 0 y no está aplicado, botón
               "Aplicar X%" que setea descuento de esta línea con un click. */}

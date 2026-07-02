@@ -50,3 +50,38 @@ export function aplicarRecargoCuotas(
 export function redondear2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+/**
+ * Aplica promo NxM (2x1, 3x2, etc.) a la cantidad de una línea del carrito.
+ * Devuelve cuántas unidades EFECTIVAMENTE se cobran.
+ *
+ * Regla:
+ *   packs   = floor(cantidad / lleva)   // packs completos que entran
+ *   sueltas = cantidad % lleva          // unidades del último pack incompleto
+ *   cobradas = packs * paga + sueltas
+ *
+ * Ejemplos con 2x1 (lleva=2, paga=1):
+ *   1u  → 1u cobrada (aún no completa pack)
+ *   2u  → 1u cobrada (1 gratis)
+ *   3u  → 2u cobradas (1 gratis)
+ *   5u  → 3u cobradas (2 gratis)
+ *
+ * Ejemplos con 3x2 (lleva=3, paga=2):
+ *   3u  → 2u cobradas (1 gratis)
+ *   6u  → 4u cobradas (2 gratis)
+ *
+ * Si la config es inválida (lleva <= paga, etc.) devuelve `cantidad` sin
+ * aplicar promo.
+ */
+export function unidadesCobradasNxM(
+  cantidad: number,
+  lleva: number,
+  paga: number,
+): number {
+  if (cantidad <= 0) return 0;
+  if (!Number.isFinite(lleva) || !Number.isFinite(paga)) return cantidad;
+  if (lleva <= paga || paga < 1) return cantidad;
+  const packs = Math.floor(cantidad / lleva);
+  const sueltas = cantidad % lleva;
+  return packs * paga + sueltas;
+}
