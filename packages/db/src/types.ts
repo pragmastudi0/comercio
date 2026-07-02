@@ -143,14 +143,22 @@ export type Producto = {
   /** Tipo de promo activa:
    *   - undefined/'pct' → usa promo_pct como % de descuento
    *   - 'nxm'           → promo tipo 2x1, 3x2, etc. Usa promo_nxm_lleva/paga.
+   *   - 'combo'         → N unidades por precio fijo (ej: 3 x $1200).
+   *                       Usa promo_combo_cantidad/precio.
    *  El PoS decide qué mostrar y cómo aplicar en base a este flag. */
-  promo_tipo?: 'pct' | 'nxm';
+  promo_tipo?: 'pct' | 'nxm' | 'combo';
   /** SOLO cuando promo_tipo === 'nxm'. Cantidad de unidades por "pack".
    *  Ej. 2x1 → lleva=2, paga=1. 3x2 → lleva=3, paga=2. */
   promo_nxm_lleva?: number;
   /** SOLO cuando promo_tipo === 'nxm'. Cantidad de unidades que efectivamente
    *  cobra el cajero por cada pack. Regla: paga < lleva. */
   promo_nxm_paga?: number;
+  /** SOLO cuando promo_tipo === 'combo'. Cantidad de unidades que forma
+   *  un "pack" al precio combo. Ej: 3 x $1200 → cantidad=3, precio=1200. */
+  promo_combo_cantidad?: number;
+  /** SOLO cuando promo_tipo === 'combo'. Precio TOTAL del pack (no
+   *  unitario). Sueltas que sobran se cobran a precio normal. */
+  promo_combo_precio?: number;
   /** Producto con cuotas sin recargo (ej. valijas, electrodomésticos con
    *  promo del cliente). Cuando true, el modal Cobrar NO aplica el recargo
    *  por cuotas a este ítem — el recargo sigue aplicando al resto del

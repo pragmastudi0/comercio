@@ -32,9 +32,8 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
     queryFn: () => db.depositos.list(),
   });
 
-  // Promo NxM (2x1, 3x2…) — se aplica ANTES del descuento por línea.
-  // Calcula cuántas unidades efectivamente se cobran; si no hay promo
-  // válida devuelve la cantidad completa.
+  // Promos del producto — se aplican ANTES del descuento por línea.
+  // Solo una activa a la vez (NxM o combo N x $).
   const promoNxm =
     item.producto.promo_tipo === 'nxm' &&
     item.producto.promo_nxm_lleva != null &&
@@ -44,10 +43,27 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
           paga: item.producto.promo_nxm_paga,
         }
       : null;
+  const promoCombo =
+    item.producto.promo_tipo === 'combo' &&
+    item.producto.promo_combo_cantidad != null &&
+    item.producto.promo_combo_precio != null
+      ? {
+          cantidad: item.producto.promo_combo_cantidad,
+          precio: item.producto.promo_combo_precio,
+        }
+      : null;
   const unidadesCobradas = promoNxm
     ? unidadesCobradasNxM(item.cantidad, promoNxm.lleva, promoNxm.paga)
     : item.cantidad;
   const unidadesGratis = item.cantidad - unidadesCobradas;
+  // Para el pill de combo: cuántos packs completos entran y cuántas sueltas.
+  const comboPacks = promoCombo
+    ? Math.floor(item.cantidad / promoCombo.cantidad)
+    : 0;
+  const comboSueltas = promoCombo ? item.cantidad % promoCombo.cantidad : 0;
+  const faltanParaCombo = promoCombo
+    ? promoCombo.cantidad - (item.cantidad % promoCombo.cantidad)
+    : 0;
   // Subtotal delegado al store para tener UNA sola fuente de verdad —
   // el ModalCobro suma con el mismo calcularSubtotal, así visual y cobro
   // no pueden desalinearse.
@@ -146,6 +162,19 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
             <span className="rounded bg-purple-50 px-1.5 py-0.5 text-purple-700 ring-1 ring-inset ring-purple-200">
               {promoNxm.lleva}x{promoNxm.paga} — sumá{' '}
               {promoNxm.lleva - (item.cantidad % promoNxm.lleva)} para la promo
+            </span>
+          )}
+          {promoCombo && comboPacks > 0 && (
+            <span className="flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 font-medium text-purple-800">
+              <Gift className="h-3 w-3" /> {comboPacks}× combo {promoCombo.cantidad}×
+              {formatCurrency(promoCombo.precio)}
+              {comboSueltas > 0 && ` + ${comboSueltas} suelta${comboSueltas > 1 ? 's' : ''}`}
+            </span>
+          )}
+          {promoCombo && comboPacks === 0 && item.cantidad > 0 && (
+            <span className="rounded bg-purple-50 px-1.5 py-0.5 text-purple-700 ring-1 ring-inset ring-purple-200">
+              Combo {promoCombo.cantidad}×{formatCurrency(promoCombo.precio)} — sumá{' '}
+              {faltanParaCombo} para armar el combo
             </span>
           )}
           {/* Promo cargada por Agus desde /admin/productos. Texto siempre

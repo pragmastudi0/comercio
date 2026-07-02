@@ -17,7 +17,7 @@ import {
   calcularSubtotalLinea,
   useVenta,
 } from '@/stores/venta';
-import { unidadesCobradasNxM } from '@comercio/business';
+import { subtotalComboXPrecio, unidadesCobradasNxM } from '@comercio/business';
 import { useDepositoActivo } from '@/lib/deposito-activo';
 import { PRESET_IDS, type MetodoPago, type PagoVenta } from '@comercio/db';
 
@@ -343,20 +343,37 @@ export function ModalCobro({
       }));
       const total = pagosUsar.reduce((acc, p) => acc + p.monto, 0);
       // descuentoLineas: solo el % del cajero, aplicado sobre la base ya
-      // reducida por NxM (así no se "cobra doble" la promo NxM como
+      // reducida por NxM/combo (así no se "cobra doble" la promo como
       // descuento y a la vez como precio-menos).
       const descuentoLineas = items.reduce((acc, it) => {
         if (!it.descuento_pct) return acc;
-        const promoNxm =
+        let baseLinea: number;
+        if (
           it.producto.promo_tipo === 'nxm' &&
           it.producto.promo_nxm_lleva != null &&
           it.producto.promo_nxm_paga != null
-            ? { lleva: it.producto.promo_nxm_lleva, paga: it.producto.promo_nxm_paga }
-            : null;
-        const unidadesCobradas = promoNxm
-          ? unidadesCobradasNxM(it.cantidad, promoNxm.lleva, promoNxm.paga)
-          : it.cantidad;
-        return acc + unidadesCobradas * it.precio_unitario * (it.descuento_pct / 100);
+        ) {
+          const cobradas = unidadesCobradasNxM(
+            it.cantidad,
+            it.producto.promo_nxm_lleva,
+            it.producto.promo_nxm_paga,
+          );
+          baseLinea = cobradas * it.precio_unitario;
+        } else if (
+          it.producto.promo_tipo === 'combo' &&
+          it.producto.promo_combo_cantidad != null &&
+          it.producto.promo_combo_precio != null
+        ) {
+          baseLinea = subtotalComboXPrecio(
+            it.cantidad,
+            it.producto.promo_combo_cantidad,
+            it.producto.promo_combo_precio,
+            it.precio_unitario,
+          );
+        } else {
+          baseLinea = it.cantidad * it.precio_unitario;
+        }
+        return acc + baseLinea * (it.descuento_pct / 100);
       }, 0);
       const descuentoMetodo = pagosUsar
         .filter((p) => p.metodo === 'efectivo')
