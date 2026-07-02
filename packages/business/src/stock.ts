@@ -31,3 +31,27 @@ export function puedeDescontar(
   if (permiteSinStock) return true;
   return stockActual >= cantidad;
 }
+
+// Motivos preset para ajustes de stock — evitan que el dueño tenga que
+// escribir cada vez. Los usa el modal "Cargar stock" del admin y el panel
+// de detalle de producto. Se muestran según el signo del delta:
+//   +N → MOTIVOS_INGRESO
+//   -N → MOTIVOS_EGRESO
+// Además de las opciones fijas, hay "Otros" que abre un textarea libre.
+export const MOTIVOS_INGRESO_STOCK = [
+  'Corrección de inventario',
+  'Compra a proveedor',
+  'Sobrante de mercadería',
+] as const;
+
+export const MOTIVOS_EGRESO_STOCK = [
+  'Venta no registrada',
+  'Extravío de mercadería',
+  'Mercadería en mal estado',
+  'Devolución al proveedor',
+] as const;
+
+export const MOTIVO_OTROS = 'Otros';
+
+export type MotivoIngresoStock = (typeof MOTIVOS_INGRESO_STOCK)[number] | typeof MOTIVO_OTROS;
+export type MotivoEgresoStock = (typeof MOTIVOS_EGRESO_STOCK)[number] | typeof MOTIVO_OTROS;
