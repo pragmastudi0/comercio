@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
-import { LogOut, Wallet, Ban, UserCog, ArrowLeftRight } from 'lucide-react';
+import { LogOut, Wallet, Ban, UserCog, ArrowLeftRight, Settings } from 'lucide-react';
 import { BRAND } from '@comercio/business';
+import { PRESET_IDS } from '@comercio/db';
 import { useSesion } from '@/stores/sesion';
 import { useVenta } from '@/stores/venta';
 import { useDepositoActivo } from '@/lib/deposito-activo';
@@ -181,6 +182,27 @@ export function Caja() {
               <ArrowLeftRight className="mr-1 h-3 w-3" />
               Stock
             </Button>
+            {/* Botón Admin: sólo para admin y encargado. Abre el panel
+                admin en pestaña nueva. Los cajeros no lo ven (no tienen
+                acceso a /admin, se los kickea al login con toast).
+                Catálogo tampoco (no es un rol que trabaje en el PoS). */}
+            {(empleado.rol_id === PRESET_IDS.roles.admin ||
+              empleado.rol_id === PRESET_IDS.roles.encargado) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const url =
+                    import.meta.env.VITE_ADMIN_URL ??
+                    'https://turisteando-admin.vercel.app';
+                  window.open(url, '_blank', 'noopener');
+                }}
+                title="Abrir el panel de administración en una pestaña nueva"
+              >
+                <Settings className="mr-1 h-3 w-3" />
+                Admin
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={() => navigate('/cerrar-caja')}>
               Cerrar caja
             </Button>

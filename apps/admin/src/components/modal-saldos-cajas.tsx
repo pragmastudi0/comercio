@@ -115,6 +115,15 @@ function SaldoCajaRow({
     queryFn: () => db.sesionesCaja.movimientos(sesion.id),
     refetchInterval: 10_000,
   });
+  // Tickets del turno: cantidad de ventas completadas de esta sesión.
+  const ventasQ = useQuery({
+    queryKey: ['admin-saldos-ventas-count', sesion.id],
+    queryFn: () => db.ventas.list({ sesion_caja_id: sesion.id }),
+    refetchInterval: 10_000,
+  });
+  const ticketsCompletados = (ventasQ.data ?? []).filter(
+    (v) => v.estado === 'completada',
+  ).length;
 
   // Sumar por método: signo positivo en ingresos/ventas, negativo en
   // egresos/retiros/anulaciones.
@@ -141,6 +150,12 @@ function SaldoCajaRow({
         <div>
           <div className="font-semibold">{cajaNombre}</div>
           <div className="text-xs text-muted-foreground">{empleadoNombre}</div>
+          <div className="mt-0.5 text-xs">
+            <span className="rounded bg-blue-100 px-1.5 py-0.5 font-medium text-blue-800">
+              {ticketsCompletados}{' '}
+              {ticketsCompletados === 1 ? 'ticket' : 'tickets'}
+            </span>
+          </div>
         </div>
         <div className="text-right">
           <div className="text-[10px] uppercase text-muted-foreground">Total en caja</div>

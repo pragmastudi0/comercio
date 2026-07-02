@@ -696,6 +696,20 @@ function SesionCard({
     queryFn: () => db.sesionesCaja.movimientos(sesion.id),
     refetchInterval: 5_000,
   });
+  // Otras sesiones abiertas en la misma caja física (multi-sesión iter-2).
+  // Se muestran como aviso en el modal de cierre para que el admin sepa
+  // que al confirmar va a cerrar TODAS de una.
+  const otrasEnCajaQ = useQuery({
+    queryKey: ['otras-sesiones-caja', sesion.caja_id, sesion.id],
+    queryFn: async () => {
+      const todas = await db.sesionesCaja.list({ caja_id: sesion.caja_id });
+      return todas.filter(
+        (s) => s.estado === 'abierta' && s.id !== sesion.id,
+      );
+    },
+    refetchInterval: 10_000,
+  });
+  const otrasCount = otrasEnCajaQ.data?.length ?? 0;
 
   const totales = METODOS.reduce(
     (acc, m) => ({ ...acc, [m]: 0 }),
@@ -720,10 +734,29 @@ function SesionCard({
       if (Number.isNaN(monto) || monto < 0) {
         throw new Error('Ingresá un monto válido para el efectivo declarado.');
       }
-      return db.sesionesCaja.cerrar(sesion.id, monto);
+      const cerrada = await db.sesionesCaja.cerrar(sesion.id, monto);
+      // Multi-sesión: cerrar TODAS las otras sesiones abiertas en la
+      // misma caja física (mismo criterio que en el PoS). La caja física
+      // es una, el efectivo declarado es uno solo; las otras sesiones
+      // quedan con saldo_final_declarado=null.
+      let otrasCerradas = 0;
+      if (db.sesionesCaja.cerrarOtrasSesionesEnCaja) {
+        otrasCerradas = await db.sesionesCaja
+          .cerrarOtrasSesionesEnCaja(sesion.caja_id, sesion.id)
+          .catch(() => 0);
+      }
+      return { cerrada, otrasCerradas };
     },
-    onSuccess: () => {
-      toast.success(`Caja "${cajaNombre}" cerrada`);
+    onSuccess: (r) => {
+      if (r.otrasCerradas > 0) {
+        toast.success(
+          `Caja "${cajaNombre}" cerrada. Además ${r.otrasCerradas} ${
+            r.otrasCerradas === 1 ? 'sesión' : 'sesiones'
+          } de otros cajeros en la misma caja.`,
+        );
+      } else {
+        toast.success(`Caja "${cajaNombre}" cerrada`);
+      }
       setCerrarOpen(false);
       qc.invalidateQueries({ queryKey: ['sesiones-caja-todas'] });
     },
@@ -745,6 +778,20 @@ function SesionCard({
     setCerrarOpen(true);
   }
 
+  // "Sobró para retirar" — usamos la misma lógica que el PoS al cerrar caja
+  // (iter-6). El cajero al cierre se lleva el efectivo cobrado y deja SOLO
+  // el saldo inicial como cambio para el próximo turno. Fórmula:
+  //   sobranteRetiro = declarado - saldo_inicial
+  //   - Positivo: retira ese monto, quedan saldo_inicial en caja. OK.
+  //   - Cero: dejó exactamente lo que abrió, retiró todo el efectivo. Perfecto.
+  //   - Negativo: cerró con menos que el inicial, algo raro (revisar).
+  // Se ignora el "efectivo esperado" a propósito — antes marcaba rojo
+  // cuando el cajero declaraba $15k con esperado $184k, pero era normal
+  // (se llevó los $169k cobrados). Info engañosa.
+  const sobranteRetiroPreview =
+    saldoFinal && !Number.isNaN(parseFloat(saldoFinal))
+      ? parseFloat(saldoFinal) - sesion.saldo_inicial
+      : 0;
   const diferenciaPreview =
     saldoFinal && !Number.isNaN(parseFloat(saldoFinal))
       ? parseFloat(saldoFinal) - efectivoEsperado
@@ -825,6 +872,14 @@ function SesionCard({
             Esta acción cierra la sesión abierta de <b>{empleadoNombre}</b>. El
             cajero no podrá seguir vendiendo en esta caja hasta volver a abrirla.
           </p>
+          {otrasCount > 0 && (
+            <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+              ⚠ También se van a cerrar <b>{otrasCount}</b>{' '}
+              {otrasCount === 1 ? 'sesión' : 'sesiones'} de{' '}
+              otros cajeros en esta misma caja (multi-sesión). El efectivo
+              declarado que ingreses cuenta para el arqueo consolidado.
+            </div>
+          )}
         </DialogHeader>
 
         <div className="space-y-3 text-sm">
@@ -856,17 +911,45 @@ function SesionCard({
               className="mt-1"
               autoFocus
             />
-            <p
-              className={`mt-1 text-xs tabular-nums ${
-                diferenciaPreview < 0
-                  ? 'text-destructive'
-                  : diferenciaPreview > 0
-                  ? 'text-orange-600'
-                  : 'text-muted-foreground'
-              }`}
-            >
-              Diferencia con esperado: {formatCurrency(diferenciaPreview)}
-            </p>
+            {saldoFinal && !Number.isNaN(parseFloat(saldoFinal)) && (
+              <div className="mt-1 space-y-0.5 text-xs">
+                {/* KPI principal: sobró para retirar (declarado - saldo_inicial).
+                    Es lo que el cajero se lleva del turno; el saldo inicial
+                    queda como cambio para el próximo. */}
+                {sobranteRetiroPreview > 0.01 ? (
+                  <p className="tabular-nums text-blue-800">
+                    Sobró para retirar: {formatCurrency(sobranteRetiroPreview)}{' '}
+                    · quedan {formatCurrency(sesion.saldo_inicial)} como cambio.
+                  </p>
+                ) : sobranteRetiroPreview < -0.01 ? (
+                  <p className="tabular-nums text-destructive">
+                    Cierra con menos que el saldo inicial ({formatCurrency(
+                      Math.abs(sobranteRetiroPreview),
+                    )}
+                    ). Revisá antes de confirmar.
+                  </p>
+                ) : (
+                  <p className="tabular-nums text-emerald-700">
+                    Deja exactamente el saldo inicial. Perfecto.
+                  </p>
+                )}
+                {/* Arqueo: sólo mostramos si el declarado difiere del
+                    esperado (o sea, cobró efectivo que no se llevó, o sobró
+                    plata sin ventas). No es un error grave, solo aviso. */}
+                {Math.abs(diferenciaPreview) >= 0.01 &&
+                  Math.abs(diferenciaPreview - -totales.efectivo) >= 0.01 && (
+                    <p
+                      className={`tabular-nums ${
+                        diferenciaPreview > 0
+                          ? 'text-orange-600'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      Arqueo respecto al esperado: {formatCurrency(diferenciaPreview)}
+                    </p>
+                  )}
+              </div>
+            )}
           </div>
         </div>
 

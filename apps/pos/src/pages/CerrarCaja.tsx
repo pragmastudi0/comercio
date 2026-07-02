@@ -28,6 +28,7 @@ export function CerrarCaja() {
   const db = getDb();
   const navigate = useNavigate();
   const sesion = useSesion((s) => s.sesionCaja);
+  const caja = useSesion((s) => s.caja);
   const setSesionCaja = useSesion((s) => s.setSesionCaja);
   const setCaja = useSesion((s) => s.setCaja);
   const [saldoFinal, setSaldoFinal] = useState('');
@@ -112,6 +113,7 @@ export function CerrarCaja() {
   const cerrarMut = useMutation({
     mutationFn: async () => {
       if (!sesion) throw new Error('No hay sesión activa');
+      if (!caja) throw new Error('No hay caja activa');
       const monto = parseFloat(saldoFinal);
       if (Number.isNaN(monto)) throw new Error('Saldo final inválido');
       // Bloqueamos negativo: el saldo declarado es el efectivo físico en
@@ -119,10 +121,29 @@ export function CerrarCaja() {
       if (monto < 0) {
         throw new Error('El saldo declarado no puede ser negativo.');
       }
-      return db.sesionesCaja.cerrar(sesion.id, monto);
+      const cerrada = await db.sesionesCaja.cerrar(sesion.id, monto);
+      // Multi-sesión: si otros cajeros abrieron sesión en la MISMA caja
+      // (feature iter-2), las cerramos también. La caja física es una,
+      // el efectivo declarado también — no tiene sentido dejar sesiones
+      // fantasma. Las otras quedan con saldo_final_declarado=null.
+      let otrasCerradas = 0;
+      if (db.sesionesCaja.cerrarOtrasSesionesEnCaja) {
+        otrasCerradas = await db.sesionesCaja
+          .cerrarOtrasSesionesEnCaja(caja.id, sesion.id)
+          .catch(() => 0);
+      }
+      return { cerrada, otrasCerradas };
     },
-    onSuccess: () => {
-      toast.success('Caja cerrada');
+    onSuccess: (r) => {
+      if (r.otrasCerradas > 0) {
+        toast.success(
+          `Caja cerrada. Además se cerraron ${r.otrasCerradas} ${
+            r.otrasCerradas === 1 ? 'sesión' : 'sesiones'
+          } de otros cajeros en la misma caja.`,
+        );
+      } else {
+        toast.success('Caja cerrada');
+      }
       setSesionCaja(null);
       setCaja(null);
       navigate('/abrir-caja');
