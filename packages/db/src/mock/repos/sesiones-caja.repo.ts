@@ -82,5 +82,15 @@ export function makeSesionesCajaRepo(store: Store): SesionesCajaRepo {
       store.sesionesCaja[idx] = { ...ses, saldo_inicial: nuevoSaldoInicial };
       return clone(store.sesionesCaja[idx]!);
     },
+    async cambiarResponsable(id, nuevoEmpleadoId) {
+      const idx = store.sesionesCaja.findIndex((x) => x.id === id);
+      if (idx === -1) throw notFound('Sesión de caja', id);
+      const ses = store.sesionesCaja[idx]!;
+      if (ses.estado === 'cerrada') {
+        throw new Error('No se puede cambiar el responsable de una sesión cerrada');
+      }
+      store.sesionesCaja[idx] = { ...ses, empleado_actual_id: nuevoEmpleadoId };
+      return clone(store.sesionesCaja[idx]!);
+    },
   };
 }

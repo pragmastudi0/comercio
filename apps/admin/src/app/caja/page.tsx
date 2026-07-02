@@ -108,7 +108,12 @@ function CajasPageInner() {
                   key={s.id}
                   sesion={s}
                   cajaNombre={cajaNombre(s.caja_id)}
-                  empleadoNombre={empleadoNombre(s.empleado_id)}
+                  empleadoNombre={empleadoNombre(s.empleado_actual_id ?? s.empleado_id)}
+                  empleadoOriginalNombre={
+                    s.empleado_actual_id && s.empleado_actual_id !== s.empleado_id
+                      ? empleadoNombre(s.empleado_id)
+                      : undefined
+                  }
                   onVerDetalle={() => setSesionDetalle(s)}
                 />
               ))}
@@ -210,7 +215,12 @@ function CajasPageInner() {
                     key={s.id}
                     sesion={s}
                     cajaNombre={cajaNombre(s.caja_id)}
-                    empleadoNombre={empleadoNombre(s.empleado_id)}
+                    empleadoNombre={empleadoNombre(s.empleado_actual_id ?? s.empleado_id)}
+                  empleadoOriginalNombre={
+                    s.empleado_actual_id && s.empleado_actual_id !== s.empleado_id
+                      ? empleadoNombre(s.empleado_id)
+                      : undefined
+                  }
                     onVerDetalle={() => setSesionDetalle(s)}
                   />
                 ))}
@@ -231,7 +241,9 @@ function CajasPageInner() {
           <DetalleSesion
             sesion={sesionDetalle}
             cajaNombre={cajaNombre(sesionDetalle.caja_id)}
-            empleadoNombre={empleadoNombre(sesionDetalle.empleado_id)}
+            empleadoNombre={empleadoNombre(
+              sesionDetalle.empleado_actual_id ?? sesionDetalle.empleado_id,
+            )}
           />
         )}
         <DialogFooter>
@@ -427,53 +439,12 @@ function DetalleSesion({
         </div>
       )}
 
-      {/* Movimientos extras de caja (ingresos/egresos manuales) */}
-      <div className="mt-3">
-        <div className="mb-2 text-sm font-medium">
-          Movimientos de caja ({(movsQ.data ?? []).length})
-        </div>
-        {movsQ.isLoading ? (
-          <Skeleton className="h-16" />
-        ) : (movsQ.data ?? []).length === 0 ? (
-          <p className="rounded border border-dashed py-3 text-center text-xs text-muted-foreground">
-            Sin movimientos manuales (solo ventas).
-          </p>
-        ) : (
-          <div className="max-h-40 overflow-y-auto rounded-md border">
-            <table className="w-full text-sm">
-              <tbody>
-                {(movsQ.data as MovimientoCaja[]).map((m) => {
-                  const negativo =
-                    m.tipo === 'egreso' ||
-                    m.tipo === 'retiro' ||
-                    m.tipo === 'anulacion';
-                  return (
-                    <tr key={m.id} className="border-t first:border-0">
-                      <td className="px-2 py-1.5 text-xs capitalize">
-                        {m.tipo}
-                      </td>
-                      <td className="px-2 py-1.5 text-xs text-muted-foreground">
-                        {m.metodo}
-                      </td>
-                      <td className="max-w-xs px-2 py-1.5 text-xs">
-                        {m.motivo ?? '—'}
-                      </td>
-                      <td
-                        className={`px-2 py-1.5 text-right tabular-nums ${
-                          negativo ? 'text-destructive' : 'text-green-700'
-                        }`}
-                      >
-                        {negativo ? '−' : '+'}
-                        {formatCurrency(m.monto)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Cambios de responsable durante el turno (feature "Cambiar usuario"
+          del PoS). Solo se lista si hubo al menos uno. Antes esta sección
+          era el listado de movimientos manuales de caja — se sacó porque
+          Agus lo consideraba ruido: los ingresos/egresos ya se reflejan
+          en el arqueo, no hace falta verlos línea por línea. */}
+      <CambiosResponsable sesionId={sesion.id} />
 
       {/* Arqueo final */}
       <div className="mt-3 rounded-md bg-muted/40 p-3 text-sm">
@@ -537,11 +508,13 @@ function FilaSesionCerrada({
   sesion,
   cajaNombre,
   empleadoNombre,
+  empleadoOriginalNombre,
   onVerDetalle,
 }: {
   sesion: SesionCaja;
   cajaNombre: string;
   empleadoNombre: string;
+  empleadoOriginalNombre?: string;
   onVerDetalle: () => void;
 }) {
   const db = getDb();
@@ -590,7 +563,14 @@ function FilaSesionCerrada({
       onClick={onVerDetalle}
     >
       <td className="whitespace-nowrap px-3 py-2">{cajaNombre}</td>
-      <td className="whitespace-nowrap px-3 py-2">{empleadoNombre}</td>
+      <td className="whitespace-nowrap px-3 py-2">
+        {empleadoNombre}
+        {empleadoOriginalNombre && (
+          <span className="ml-1 text-[10px] text-muted-foreground">
+            (abrió {empleadoOriginalNombre})
+          </span>
+        )}
+      </td>
       <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
         {formatDate(sesion.abierta_en)}
       </td>
@@ -623,15 +603,90 @@ function FilaSesionCerrada({
   );
 }
 
+/**
+ * Lista de cambios de responsable durante la sesión (logs de auditoría
+ * con accion='cambio_responsable_caja'). Muestra hora + empleado que tomó
+ * la posta. Si no hubo cambios, no renderiza nada (el turno lo llevó una
+ * sola persona).
+ */
+function CambiosResponsable({ sesionId }: { sesionId: string }) {
+  const db = getDb();
+  // El filtro del repo solo acepta entidad (no accion ni entidad_id),
+  // así que traemos todos los logs de sesion_caja y filtramos en cliente.
+  const cambiosQ = useQuery({
+    queryKey: ['cambios-responsable', sesionId],
+    queryFn: async () => {
+      const todos = await db.auditoria.list({ entidad: 'sesion_caja' });
+      return todos.filter(
+        (l) => l.accion === 'cambio_responsable_caja' && l.entidad_id === sesionId,
+      );
+    },
+  });
+  const empleadosQ = useQuery({
+    queryKey: ['empleados-cambios'],
+    queryFn: () => db.empleados.list(),
+  });
+  const cambios = cambiosQ.data ?? [];
+  if (cambios.length === 0) return null;
+  function nombre(id: string | undefined) {
+    if (!id) return '—';
+    const e = empleadosQ.data?.find((x) => x.id === id);
+    return e ? `${e.nombre} ${e.apellido ?? ''}`.trim() : '—';
+  }
+  return (
+    <div className="mt-3">
+      <div className="mb-2 text-sm font-medium">
+        Cambios de responsable ({cambios.length})
+      </div>
+      <div className="rounded-md border">
+        {cambios
+          .slice()
+          .sort((a, b) => a.fecha.localeCompare(b.fecha))
+          .map((c) => {
+            const d = (c.detalle ?? {}) as Record<string, unknown>;
+            const anteriorId = typeof d.empleado_anterior_id === 'string'
+              ? d.empleado_anterior_id
+              : undefined;
+            const nuevoId = typeof d.empleado_nuevo_id === 'string'
+              ? d.empleado_nuevo_id
+              : undefined;
+            return (
+              <div
+                key={c.id}
+                className="flex items-center justify-between border-t px-3 py-1.5 text-xs first:border-t-0"
+              >
+                <span>
+                  <span className="text-muted-foreground">{nombre(anteriorId)}</span>
+                  <span className="mx-1.5 text-muted-foreground">→</span>
+                  <span className="font-medium">{nombre(nuevoId)}</span>
+                </span>
+                <span className="text-muted-foreground tabular-nums">
+                  {new Date(c.fecha).toLocaleTimeString('es-AR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+}
+
 function SesionCard({
   sesion,
   cajaNombre,
   empleadoNombre,
+  empleadoOriginalNombre,
   onVerDetalle,
 }: {
   sesion: SesionCaja;
   cajaNombre: string;
   empleadoNombre: string;
+  /** Si hubo cambio de responsable, quién había abierto originalmente.
+   *  Se muestra como aclaración chica al lado del responsable actual. */
+  empleadoOriginalNombre?: string;
   onVerDetalle: () => void;
 }) {
   const db = getDb();
@@ -704,7 +759,14 @@ function SesionCard({
             <span className="font-medium">{cajaNombre}</span>
             <Badge variant="secondary">abierta</Badge>
           </div>
-          <div className="mt-1 text-sm">{empleadoNombre}</div>
+          <div className="mt-1 text-sm">
+            {empleadoNombre}
+            {empleadoOriginalNombre && (
+              <span className="ml-1 text-xs text-muted-foreground">
+                (abrió {empleadoOriginalNombre})
+              </span>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground">
             Abierta: {formatDate(sesion.abierta_en)}
           </div>

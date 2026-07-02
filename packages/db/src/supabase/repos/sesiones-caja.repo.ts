@@ -130,5 +130,17 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
         'sesiones_caja.actualizarSaldoInicial',
       );
     },
+    async cambiarResponsable(id, nuevoEmpleadoId) {
+      return ok<SesionCaja>(
+        await sb
+          .from('sesiones_caja')
+          .update({ empleado_actual_id: nuevoEmpleadoId })
+          .eq('id', id)
+          .eq('estado', 'abierta')
+          .select('*')
+          .single(),
+        'sesiones_caja.cambiarResponsable',
+      );
+    },
   };
 }

@@ -276,7 +276,12 @@ export type NotaCredito = {
 export type SesionCaja = {
   id: ID;
   caja_id: ID;
+  /** Empleado que ABRIÓ la caja (histórico, no cambia con "cambiar usuario"). */
   empleado_id: ID;
+  /** Empleado responsable AHORA de la caja. Se actualiza cuando se hace
+   *  "cambiar usuario" del PoS. Si es null/undefined, usar empleado_id
+   *  como fallback (para sesiones viejas anteriores a esta funcionalidad). */
+  empleado_actual_id?: ID;
   saldo_inicial: number;
   saldo_final_declarado?: number;
   abierta_en: ISODate;
