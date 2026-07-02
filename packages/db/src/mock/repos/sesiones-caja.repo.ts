@@ -82,5 +82,21 @@ export function makeSesionesCajaRepo(store: Store): SesionesCajaRepo {
       store.sesionesCaja[idx] = { ...ses, saldo_inicial: nuevoSaldoInicial };
       return clone(store.sesionesCaja[idx]!);
     },
+    async cerrarOtrasSesionesEnCaja(cajaId, exceptoSesionId) {
+      const ahora = now();
+      let cerradas = 0;
+      for (let i = 0; i < store.sesionesCaja.length; i++) {
+        const s = store.sesionesCaja[i]!;
+        if (
+          s.caja_id === cajaId &&
+          s.estado === 'abierta' &&
+          s.id !== exceptoSesionId
+        ) {
+          store.sesionesCaja[i] = { ...s, estado: 'cerrada', cerrada_en: ahora };
+          cerradas++;
+        }
+      }
+      return cerradas;
+    },
   };
 }

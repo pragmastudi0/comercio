@@ -14,4 +14,16 @@ export type SesionesCajaRepo = {
    * cerrar/reabrir la caja. Devuelve la sesión actualizada.
    */
   actualizarSaldoInicial?(id: ID, nuevoSaldoInicial: number): Promise<SesionCaja>;
+  /**
+   * Cierra todas las OTRAS sesiones abiertas en la misma caja física,
+   * excepto la especificada. Se usa después de cerrar la sesión activa
+   * para consolidar el cierre cuando había multi-sesión (feature iter-2):
+   * si dos cajeros compartieron una caja durante un cambio de turno,
+   * cerrar UNA no cerraba las otras y quedaban sesiones fantasma.
+   *
+   * Las otras sesiones se cierran con saldo_final_declarado = null
+   * (nadie declaró explícitamente su cierre — quedó implícito). Devuelve
+   * la cantidad de sesiones que efectivamente se cerraron.
+   */
+  cerrarOtrasSesionesEnCaja?(cajaId: ID, exceptoSesionId: ID): Promise<number>;
 };

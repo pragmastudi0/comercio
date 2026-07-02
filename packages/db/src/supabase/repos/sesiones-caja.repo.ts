@@ -130,5 +130,23 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
         'sesiones_caja.actualizarSaldoInicial',
       );
     },
+    async cerrarOtrasSesionesEnCaja(cajaId, exceptoSesionId) {
+      const { data: filas, error } = await sb
+        .from('sesiones_caja')
+        .update({
+          estado: 'cerrada',
+          cerrada_en: new Date().toISOString(),
+        })
+        .eq('caja_id', cajaId)
+        .eq('estado', 'abierta')
+        .neq('id', exceptoSesionId)
+        .select('id');
+      if (error) {
+        throw new Error(
+          `sesiones_caja.cerrarOtrasSesionesEnCaja: ${error.message}`,
+        );
+      }
+      return filas?.length ?? 0;
+    },
   };
 }

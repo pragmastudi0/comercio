@@ -641,6 +641,20 @@ function SesionCard({
     queryFn: () => db.sesionesCaja.movimientos(sesion.id),
     refetchInterval: 5_000,
   });
+  // Otras sesiones abiertas en la misma caja física (multi-sesión iter-2).
+  // Se muestran como aviso en el modal de cierre para que el admin sepa
+  // que al confirmar va a cerrar TODAS de una.
+  const otrasEnCajaQ = useQuery({
+    queryKey: ['otras-sesiones-caja', sesion.caja_id, sesion.id],
+    queryFn: async () => {
+      const todas = await db.sesionesCaja.list({ caja_id: sesion.caja_id });
+      return todas.filter(
+        (s) => s.estado === 'abierta' && s.id !== sesion.id,
+      );
+    },
+    refetchInterval: 10_000,
+  });
+  const otrasCount = otrasEnCajaQ.data?.length ?? 0;
 
   const totales = METODOS.reduce(
     (acc, m) => ({ ...acc, [m]: 0 }),
@@ -665,10 +679,29 @@ function SesionCard({
       if (Number.isNaN(monto) || monto < 0) {
         throw new Error('Ingresá un monto válido para el efectivo declarado.');
       }
-      return db.sesionesCaja.cerrar(sesion.id, monto);
+      const cerrada = await db.sesionesCaja.cerrar(sesion.id, monto);
+      // Multi-sesión: cerrar TODAS las otras sesiones abiertas en la
+      // misma caja física (mismo criterio que en el PoS). La caja física
+      // es una, el efectivo declarado es uno solo; las otras sesiones
+      // quedan con saldo_final_declarado=null.
+      let otrasCerradas = 0;
+      if (db.sesionesCaja.cerrarOtrasSesionesEnCaja) {
+        otrasCerradas = await db.sesionesCaja
+          .cerrarOtrasSesionesEnCaja(sesion.caja_id, sesion.id)
+          .catch(() => 0);
+      }
+      return { cerrada, otrasCerradas };
     },
-    onSuccess: () => {
-      toast.success(`Caja "${cajaNombre}" cerrada`);
+    onSuccess: (r) => {
+      if (r.otrasCerradas > 0) {
+        toast.success(
+          `Caja "${cajaNombre}" cerrada. Además ${r.otrasCerradas} ${
+            r.otrasCerradas === 1 ? 'sesión' : 'sesiones'
+          } de otros cajeros en la misma caja.`,
+        );
+      } else {
+        toast.success(`Caja "${cajaNombre}" cerrada`);
+      }
       setCerrarOpen(false);
       qc.invalidateQueries({ queryKey: ['sesiones-caja-todas'] });
     },
@@ -777,6 +810,14 @@ function SesionCard({
             Esta acción cierra la sesión abierta de <b>{empleadoNombre}</b>. El
             cajero no podrá seguir vendiendo en esta caja hasta volver a abrirla.
           </p>
+          {otrasCount > 0 && (
+            <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+              ⚠ También se van a cerrar <b>{otrasCount}</b>{' '}
+              {otrasCount === 1 ? 'sesión' : 'sesiones'} de{' '}
+              otros cajeros en esta misma caja (multi-sesión). El efectivo
+              declarado que ingreses cuenta para el arqueo consolidado.
+            </div>
+          )}
         </DialogHeader>
 
         <div className="space-y-3 text-sm">
