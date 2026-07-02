@@ -12,7 +12,6 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
   const db = getDb();
   const setCantidad = useVenta((s) => s.setCantidad);
   const setPrecio = useVenta((s) => s.setPrecio);
-  const setMotivoPrecio = useVenta((s) => s.setMotivoPrecio);
   const setDescuento = useVenta((s) => s.setDescuentoLinea);
   const setMotivoDescuentoLinea = useVenta((s) => s.setMotivoDescuentoLinea);
   const quitar = useVenta((s) => s.quitar);
@@ -72,12 +71,12 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
     setDescuento(item.producto.id, pct > 0 ? pct : undefined);
   }
 
-  // Si hubo cambio de precio o descuento por línea, mostramos una
-  // sub-fila debajo con un input de motivo (obligatorio al cobrar).
-  // Queda guardado en auditoría y se ve después en el detalle de la venta.
-  const requiereMotivoPrecio = item.precio_unitario !== item.precio_base;
+  // Si hubo descuento por línea, mostramos una sub-fila con un input de
+  // motivo (obligatorio al cobrar). El cambio de precio en cambio ya no
+  // pide motivo por pedido de Agus: queda auditado que hubo cambio y
+  // cuánto, pero sin justificación explícita.
   const requiereMotivoDescuento = !!item.descuento_pct && item.descuento_pct > 0;
-  const mostrarMotivos = requiereMotivoPrecio || requiereMotivoDescuento;
+  const mostrarMotivos = requiereMotivoDescuento;
 
   return (
     <>
@@ -234,21 +233,6 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
       >
         <td colSpan={7} className="px-3 pb-2 pt-0">
           <div className="flex flex-wrap gap-2 text-[11px]">
-            {requiereMotivoPrecio && (
-              <div className="flex flex-1 items-center gap-1.5 rounded border border-orange-300 bg-orange-50/60 px-2 py-1">
-                <span className="font-medium text-orange-800 whitespace-nowrap">
-                  Motivo cambio de precio:
-                </span>
-                <Input
-                  type="text"
-                  value={item.motivo_precio ?? ''}
-                  onChange={(e) => setMotivoPrecio(item.producto.id, e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder="Ej: promo, cliente conocido, daño en la unidad"
-                  className="h-6 flex-1 border-orange-300 bg-white text-xs"
-                />
-              </div>
-            )}
             {requiereMotivoDescuento && (
               <div className="flex flex-1 items-center gap-1.5 rounded border border-green-300 bg-green-50/60 px-2 py-1">
                 <span className="font-medium text-green-800 whitespace-nowrap">
