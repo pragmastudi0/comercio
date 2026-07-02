@@ -110,7 +110,6 @@ export function ModalCobro({
   const [metodo, setMetodo] = useState<MetodoPago | null>(null);
   const [cuotas, setCuotas] = useState(1);
   const [montoInput, setMontoInput] = useState<string>('');
-  const [montoRecibido, setMontoRecibido] = useState<string>('');
   // Modo del flujo: 'rapido' = un solo método, Confirmar agrega y cobra
   // en un click. 'mixto' = la cajera arma varios pagos antes de confirmar.
   // Se setea según `metodoInicial`; podés cambiar de rápido a mixto desde
@@ -137,7 +136,6 @@ export function ModalCobro({
       setModo(metodoInicial ? 'rapido' : 'mixto');
       setCuotas(1);
       setMontoInput(metodoInicial ? String(baseACubrir.toFixed(2)) : '');
-      setMontoRecibido('');
     }
   }, [open, metodoInicial, baseACubrir]);
 
@@ -221,13 +219,6 @@ export function ModalCobro({
     configQ.data?.cuotas ?? [],
     pctSinRecargo,
   );
-
-  // Cálculo de vuelto si la transacción es 100% efectivo y el cliente da más de lo que paga
-  const esSoloEfectivo =
-    pagos.length === 1 && pagos[0]?.metodo === 'efectivo' && restante < 0.01;
-  const totalAPagar = totalCobrado;
-  const recibido = montoSeguro(montoRecibido, 0);
-  const vuelto = esSoloEfectivo ? Math.max(0, recibido - totalAPagar) : 0;
 
   function agregarPagoActual() {
     if (!metodo) return;
@@ -562,9 +553,6 @@ export function ModalCobro({
 
   // --- Cálculos para el render ---
   const aPagar = proximoPagoMonto;
-  const recibidoLive = montoSeguro(montoRecibido, 0);
-  const vueltoLive = Math.max(0, recibidoLive - aPagar);
-  const faltaLive = Math.max(0, aPagar - recibidoLive);
   // En modo rápido, "Confirmar venta" lleva el monto del efectivo a la
   // venta (con su descuento). En modo mixto, lleva la suma de pagos.
   const totalConfirmar = modo === 'rapido' ? aPagar : totalCobrado;
@@ -614,7 +602,6 @@ export function ModalCobro({
                   setMontoInput(
                     String((modo === 'rapido' ? baseACubrir : restante).toFixed(2)),
                   );
-                  setMontoRecibido('');
                   // Sacar foco del botón para que un Enter posterior
                   // no re-clickee este mismo botón (que el listener
                   // global de Enter pueda disparar confirmar).
@@ -740,83 +727,11 @@ export function ModalCobro({
           </div>
         )}
 
-        {/* Modo RÁPIDO + EFECTIVO: calculadora de vuelto con botones
-            grandes de billetes. El cajero toca el billete que recibe y
-            ve el vuelto al instante. No hay que tipear nada. */}
-        {modo === 'rapido' && metodo === 'efectivo' && (
-          <div className="rounded-md border bg-muted/30 p-2">
-            <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
-              Cliente entrega
-            </div>
-            {/* Grid 4 cols: 3 sugerencias + "Justo" en una sola fila para
-                ahorrar altura (antes "Justo" iba debajo en una 2da fila). */}
-            <div className="grid grid-cols-4 gap-1.5">
-              {sugerenciasVuelto(aPagar).map((b) => (
-                <button
-                  key={b}
-                  type="button"
-                  onClick={(e) => {
-                    setMontoRecibido(String(b));
-                    e.currentTarget.blur();
-                  }}
-                  className={`rounded-md border px-2 py-2 text-sm font-semibold tabular-nums transition ${
-                    recibidoLive === b
-                      ? 'border-primary bg-primary/10'
-                      : 'border-input bg-card hover:bg-accent'
-                  }`}
-                >
-                  {formatCurrency(b)}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={(e) => {
-                  setMontoRecibido(String(aPagar));
-                  e.currentTarget.blur();
-                }}
-                className={`rounded-md border px-2 py-2 text-sm font-semibold transition ${
-                  Math.abs(recibidoLive - aPagar) < 0.01
-                    ? 'border-primary bg-primary/10'
-                    : 'border-input bg-card hover:bg-accent'
-                }`}
-              >
-                Justo
-              </button>
-            </div>
-            <Input
-              type="number"
-              step="100"
-              value={montoRecibido}
-              onChange={(e) => setMontoRecibido(e.target.value)}
-              onFocus={(e) => e.currentTarget.select()}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && confirmarHabilitado) {
-                  e.preventDefault();
-                  confirmarRapido();
-                }
-              }}
-              placeholder="O escribí otro monto"
-              className="mt-1.5 h-8 text-right"
-            />
-            {recibidoLive > 0 && (
-              <div
-                className={`mt-1.5 rounded px-2 py-1 text-center text-sm font-semibold ${
-                  vueltoLive > 0
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : faltaLive > 0
-                      ? 'bg-destructive/10 text-destructive'
-                      : 'bg-green-100 text-green-700'
-                }`}
-              >
-                {vueltoLive > 0
-                  ? `Vuelto: ${formatCurrency(vueltoLive)}`
-                  : faltaLive > 0
-                    ? `Falta: ${formatCurrency(faltaLive)}`
-                    : 'Pago justo'}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Nota histórica: acá vivía la calculadora de vuelto para
+            efectivo (botones de billetes + input de monto recibido +
+            display de "Vuelto: $X"). Sacada por pedido de Agus:
+            los cajeros hacen el cálculo mental, no necesitan que el
+            sistema pida "con cuánto pagó" ni muestre el cambio. */}
 
       </div>
 
@@ -870,26 +785,3 @@ function labelMetodo(m: MetodoPago): string {
   return METODOS.find((x) => x.metodo === m)?.label ?? m;
 }
 
-/**
- * Sugerencias de billete típico que probablemente entrega un cliente para
- * un monto dado. Devuelve hasta 3 valores redondos POR ENCIMA del monto
- * para que el cajero los toque y se autocomplete la entrega.
- *
- * Heurística simple: redondea hacia arriba al siguiente billete de 1.000
- * y agrega los dos siguientes saltos típicos (2.000, 5.000, 10.000…).
- * Filtra duplicados y descarta los que igualen el monto exacto (esos
- * están cubiertos por el botón "Justo").
- */
-function sugerenciasVuelto(aPagar: number): number[] {
-  if (!aPagar || aPagar <= 0) return [];
-  // Denominaciones comunes en AR. Si el monto excede, escalamos.
-  const denoms = [1000, 2000, 5000, 10000, 20000];
-  const out = new Set<number>();
-  for (const d of denoms) {
-    // Múltiplo de `d` inmediatamente superior al monto a pagar.
-    const candidato = Math.ceil(aPagar / d) * d;
-    if (candidato > aPagar) out.add(candidato);
-    if (out.size >= 3) break;
-  }
-  return Array.from(out).slice(0, 3);
-}
