@@ -519,7 +519,7 @@ function VentasPageInner() {
                             {cancelada ? '—' : formatCurrency(subtotal)}
                           </TableCell>
                           <TableCell className="text-xs">
-                            {esPrimera ? (cancelada ? '—' : metodoTxt) : ''}
+                            {cancelada ? '—' : metodoTxt}
                           </TableCell>
                           <TableCell className="text-xs">
                             {esPrimera ? localNombre(v.local_id) : ''}

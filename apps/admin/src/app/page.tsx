@@ -458,7 +458,11 @@ function DashboardInner() {
               <p className="text-sm text-muted-foreground">Sin ventas todavía.</p>
             ) : (
               <div className="space-y-1">
-                {[...ventasRango].reverse().slice(0, 8).map((v) => {
+                {/* ventasQ.list ya viene ordenado fecha DESC del repo
+                    (más nueva primero), así que slice directo. Antes había
+                    un .reverse() que devolvía las 8 MÁS VIEJAS del rango
+                    en vez de las últimas. */}
+                {ventasRango.slice(0, 8).map((v) => {
                   // Texto resumen de los productos de la venta: si es 1
                   // solo, muestro el nombre; si son varios, primer nombre
                   // + "+N más". Más útil que el número de ticket para el

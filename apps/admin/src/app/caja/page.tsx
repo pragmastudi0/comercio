@@ -399,7 +399,7 @@ function DetalleSesion({
                         <td className="px-2 py-1 text-right font-medium tabular-nums">
                           {formatCurrency(subtotal)}
                         </td>
-                        <td className="px-2 py-1 text-xs">{esPrimera ? metodoLabel : ''}</td>
+                        <td className="px-2 py-1 text-xs">{metodoLabel}</td>
                         <td className="px-2 py-1 text-xs">{esPrimera ? horaTxt : ''}</td>
                       </tr>
                     );
