@@ -203,7 +203,7 @@ function CajasPageInner() {
                     </button>
                   </th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Inicial</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right">Esperado</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right">Cobrado efect.</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Declarado</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Diferencia</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right"></th>
@@ -305,8 +305,11 @@ function DetalleSesion({
     efectivoMovs += signo * m.monto;
   }
   const declarado = sesion.saldo_final_declarado ?? 0;
-  const esperado = sesion.saldo_inicial + efectivoMovs;
-  const dif = declarado - esperado;
+  // Turisteando: Agus retira el efectivo del turno y el cajero solo deja
+  // el saldo inicial. Ver comentario largo en FilaSesionCerrada. El
+  // arqueo se compara contra saldo_inicial, no contra
+  // (saldo_inicial + cobrado).
+  const dif = declarado - sesion.saldo_inicial;
   const cerrada = sesion.estado === 'cerrada';
 
   return (
@@ -460,9 +463,12 @@ function DetalleSesion({
           <span className="text-right tabular-nums">
             {(efectivoMovs >= 0 ? '+' : '') + formatCurrency(efectivoMovs)}
           </span>
-          <span className="font-medium">Esperado en caja</span>
+          {/* Info neta: cuánto efectivo pasó por la caja durante el
+              turno. NO es el "esperado" al cierre — Agus retira el
+              cobrado y el cajero deja solo el saldo inicial. */}
+          <span className="font-medium">Debería quedar en caja</span>
           <span className="text-right font-medium tabular-nums">
-            {formatCurrency(esperado)}
+            {formatCurrency(sesion.saldo_inicial)}
           </span>
           {cerrada && (
             <>
@@ -536,10 +542,22 @@ function FilaSesionCerrada({
     totalEfectivo += signo * m.monto;
   }
   const declarado = sesion.saldo_final_declarado ?? 0;
-  const esperado = sesion.saldo_inicial + totalEfectivo;
-  // Diferencia real de arqueo: lo que dijo el cajero menos lo que debería
-  // haber. Negativo = faltó plata, positivo = sobró.
-  const dif = declarado - esperado;
+  // Turisteando: Agus retira el efectivo cobrado durante el turno y el
+  // cajero deja SOLO el saldo inicial en la caja para el próximo turno.
+  // Entonces la comparación real es contra el saldo_inicial, NO contra
+  // (saldo_inicial + cobrado). Antes daba rojo "-$176.000 FALTÓ" cuando
+  // el cajero declaraba $14.500 y esperado era $190.500 — falso positivo.
+  //
+  // Nueva regla:
+  //   dif = declarado - saldo_inicial
+  //   dif = 0    → OK (dejó exactamente lo del inicial)
+  //   dif > 0    → SOBRÓ (dejó más de lo esperado)
+  //   dif < 0    → FALTÓ (dejó menos que el inicial, revisar)
+  //
+  // "Cobrado efect." queda como info neutra (útil para saber cuánto
+  // efectivo pasó por la caja) pero NO influye en el color / etiqueta.
+  const cobradoEfectivo = totalEfectivo;
+  const dif = declarado - sesion.saldo_inicial;
   const cargando = movsQ.isLoading;
 
   let claseFila = '';
@@ -581,7 +599,7 @@ function FilaSesionCerrada({
         {formatCurrency(sesion.saldo_inicial)}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">
-        {cargando ? '…' : formatCurrency(esperado)}
+        {cargando ? '…' : formatCurrency(cobradoEfectivo)}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
         {formatCurrency(declarado)}
