@@ -79,7 +79,11 @@ export function ModalSaldosCajas({
               sesion={s}
               cajaNombre={cajasQ.data?.find((c) => c.id === s.caja_id)?.nombre ?? '—'}
               empleadoNombre={(() => {
-                const e = empleadosQ.data?.find((x) => x.id === s.empleado_id);
+                // Preferir empleado_actual_id (se actualiza con "Cambiar
+                // usuario" del PoS). Si no está (sesión vieja), caer al
+                // empleado que abrió.
+                const idActual = s.empleado_actual_id ?? s.empleado_id;
+                const e = empleadosQ.data?.find((x) => x.id === idActual);
                 return e ? `${e.nombre} ${e.apellido}` : '—';
               })()}
             />
