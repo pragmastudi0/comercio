@@ -160,5 +160,39 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
       }
       return filas?.length ?? 0;
     },
+    async editarSesion(id, patch) {
+      // Solo incluir en el UPDATE las llaves que vinieron en el patch
+      // para no pisar nada por accidente.
+      const update: Record<string, unknown> = {};
+      if (patch.empleado_id !== undefined) update.empleado_id = patch.empleado_id;
+      if (patch.empleado_actual_id !== undefined) {
+        update.empleado_actual_id = patch.empleado_actual_id;
+      }
+      if (patch.caja_id !== undefined) update.caja_id = patch.caja_id;
+      return ok<SesionCaja>(
+        await sb
+          .from('sesiones_caja')
+          .update(update)
+          .eq('id', id)
+          .select('*')
+          .single(),
+        'sesiones_caja.editarSesion',
+      );
+    },
+    async forzarCierre(id, cerradaEn) {
+      return ok<SesionCaja>(
+        await sb
+          .from('sesiones_caja')
+          .update({
+            estado: 'cerrada',
+            cerrada_en: cerradaEn ?? new Date().toISOString(),
+          })
+          .eq('id', id)
+          .eq('estado', 'abierta')
+          .select('*')
+          .single(),
+        'sesiones_caja.forzarCierre',
+      );
+    },
   };
 }

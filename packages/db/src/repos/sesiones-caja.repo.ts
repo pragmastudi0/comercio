@@ -34,4 +34,22 @@ export type SesionesCajaRepo = {
    * la cantidad de sesiones que efectivamente se cerraron.
    */
   cerrarOtrasSesionesEnCaja?(cajaId: ID, exceptoSesionId: ID): Promise<number>;
+  /**
+   * Corrige metadata de una sesión — solo lo usa el dev de Pragma para
+   * arreglar sesiones que se abrieron con datos equivocados (empleado
+   * mal elegido, caja del local incorrecto). Los saldos y movimientos
+   * NO se tocan acá — para eso está actualizarSaldoInicial. Devuelve
+   * la sesión ya actualizada.
+   */
+  editarSesion?(
+    id: ID,
+    patch: { empleado_id?: ID; empleado_actual_id?: ID; caja_id?: ID },
+  ): Promise<SesionCaja>;
+  /**
+   * Cierra una sesión que quedó abierta sin arqueo (el cajero se fue
+   * sin apretar Cerrar). No exige saldo declarado — queda null y en el
+   * arqueo posterior se ve como "sin declarar". Solo lo usa el dev de
+   * Pragma. Devuelve la sesión ya cerrada.
+   */
+  forzarCierre?(id: ID, cerradaEn?: string): Promise<SesionCaja>;
 };

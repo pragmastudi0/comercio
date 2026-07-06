@@ -108,5 +108,31 @@ export function makeSesionesCajaRepo(store: Store): SesionesCajaRepo {
       }
       return cerradas;
     },
+    async editarSesion(id, patch) {
+      const idx = store.sesionesCaja.findIndex((x) => x.id === id);
+      if (idx === -1) throw notFound('Sesión de caja', id);
+      const ses = store.sesionesCaja[idx]!;
+      store.sesionesCaja[idx] = {
+        ...ses,
+        ...(patch.empleado_id !== undefined && { empleado_id: patch.empleado_id }),
+        ...(patch.empleado_actual_id !== undefined && {
+          empleado_actual_id: patch.empleado_actual_id,
+        }),
+        ...(patch.caja_id !== undefined && { caja_id: patch.caja_id }),
+      };
+      return clone(store.sesionesCaja[idx]!);
+    },
+    async forzarCierre(id, cerradaEn) {
+      const idx = store.sesionesCaja.findIndex((x) => x.id === id);
+      if (idx === -1) throw notFound('Sesión de caja', id);
+      const ses = store.sesionesCaja[idx]!;
+      if (ses.estado === 'cerrada') return clone(ses);
+      store.sesionesCaja[idx] = {
+        ...ses,
+        estado: 'cerrada',
+        cerrada_en: cerradaEn ?? now(),
+      };
+      return clone(store.sesionesCaja[idx]!);
+    },
   };
 }
