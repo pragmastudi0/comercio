@@ -643,9 +643,11 @@ function DetalleSesion({
             </table>
           </div>
         )}
-        <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-          <span>Total facturado del turno</span>
-          <span className="font-semibold tabular-nums">
+        <div className="mt-2 flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <span className="text-xs font-medium uppercase tracking-wider text-emerald-800">
+            Total facturado del turno
+          </span>
+          <span className="text-xl font-bold tabular-nums text-emerald-700">
             {formatCurrency(totalVentas)}
           </span>
         </div>
