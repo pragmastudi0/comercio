@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
-import { LogOut, Wallet, Ban, UserCog, ArrowLeftRight, Settings } from 'lucide-react';
+import { LogOut, Wallet, Ban, ArrowLeftRight, Settings } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { PRESET_IDS } from '@comercio/db';
 import { useSesion } from '@/stores/sesion';
@@ -16,6 +16,7 @@ import { ResumenVenta } from '@/components/ResumenVenta';
 import { ModalCobro } from '@/components/ModalCobro';
 import { ModalAjustarCaja } from '@/components/ModalAjustarCaja';
 import { ModalTransferenciaStock } from '@/components/ModalTransferenciaStock';
+import { ModalSalirCaja } from '@/components/ModalSalirCaja';
 import { SHORTCUTS, SHORTCUT_LABELS } from '@/lib/shortcuts';
 import { Button } from '@comercio/ui/button';
 import type { MetodoPago } from '@comercio/db';
@@ -26,7 +27,6 @@ export function Caja() {
   const empleado = useSesion((s) => s.empleado);
   const caja = useSesion((s) => s.caja);
   const sesion = useSesion((s) => s.sesionCaja);
-  const setEmpleado = useSesion((s) => s.setEmpleado);
   const { depositoId } = useDepositoActivo();
   const items = useVenta((s) => s.items);
   const limpiar = useVenta((s) => s.limpiar);
@@ -36,6 +36,10 @@ export function Caja() {
   });
   const [ajustarCajaOpen, setAjustarCajaOpen] = useState(false);
   const [transferenciaOpen, setTransferenciaOpen] = useState(false);
+  // Un solo modal para "estoy por irme": la caja queda abierta y le
+  // ofrezco al cajero cerrar-y-arqueo o solo-cambiar-usuario. Reemplaza
+  // los confirm() nativos que la gente terminaba clickeando sin leer.
+  const [salirOpen, setSalirOpen] = useState(false);
 
   function abrirCobro(metodo?: MetodoPago) {
     if (items.length === 0) {
@@ -203,35 +207,16 @@ export function Caja() {
                 Admin
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={() => navigate('/cerrar-caja')}>
-              Cerrar caja
-            </Button>
+            {/* Un solo botón "Salir" — abre ModalSalirCaja donde el
+                cajero elige entre Cerrar caja + arqueo o Solo cambiar
+                usuario (deja caja abierta para relevo). Antes eran 3
+                botones separados con confirm() y la gente terminaba
+                dejando la caja abierta sin querer. */}
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                if (confirm('¿Cambiar de usuario? La caja queda abierta y el próximo usuario sigue desde acá.')) {
-                  // Solo limpiamos el empleado; sesionCaja y caja siguen vivas
-                  // en el store y en BD. Login.tsx detecta la caja abierta y
-                  // lleva al nuevo empleado directo a /caja.
-                  setEmpleado(null);
-                  navigate('/login');
-                }
-              }}
-              title="Cambiar usuario sin cerrar caja (turno mañana → tarde)"
-            >
-              <UserCog className="mr-1 h-3 w-3" />
-              Cambiar usuario
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                if (confirm('¿Cerrar sesión sin cerrar la caja? Volverás al login.')) {
-                  navigate('/login');
-                }
-              }}
-              title="Salir sin cerrar caja"
+              onClick={() => setSalirOpen(true)}
+              title="Cerrar caja o cambiar de usuario"
             >
               <LogOut className="mr-1 h-3 w-3" />
               Salir
@@ -286,6 +271,7 @@ export function Caja() {
 
       <ModalAjustarCaja open={ajustarCajaOpen} onOpenChange={setAjustarCajaOpen} />
       <ModalTransferenciaStock open={transferenciaOpen} onOpenChange={setTransferenciaOpen} />
+      <ModalSalirCaja open={salirOpen} onOpenChange={setSalirOpen} />
 
       <ModalCobro
         open={modalCobro.open}
