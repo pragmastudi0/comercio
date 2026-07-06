@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Wallet, LockOpen, Lock, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { Wallet, LockOpen, Lock, Eye, ChevronDown, ChevronUp, Pencil, LockKeyhole } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { esPragmaDev } from '@comercio/business';
 import { getDb } from '@/lib/db';
 import { PaginaProtegida, RequierePermiso } from '@/lib/permisos';
+import { useSesion } from '@/stores/sesion';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
 import { Badge } from '@comercio/ui/badge';
 import { Skeleton } from '@comercio/ui/skeleton';
@@ -35,6 +37,13 @@ function CajasPageInner() {
   const cajasQ = useQuery({ queryKey: ['cajas'], queryFn: () => db.cajas.list() });
   // Sesión seleccionada para ver detalle (ventas + movs + arqueo).
   const [sesionDetalle, setSesionDetalle] = useState<SesionCaja | null>(null);
+  // Sesión seleccionada para EDITAR — solo el dev de Pragma tiene acceso
+  // a este botón (los admins normales no lo ven). Sirve para corregir
+  // datos de sesiones que se abrieron con el empleado o la caja
+  // equivocada, o cerrar cajas que quedaron abiertas por olvido.
+  const [sesionEditar, setSesionEditar] = useState<SesionCaja | null>(null);
+  const empleadoLogueado = useSesion((s) => s.empleado);
+  const puedeEditarSesiones = esPragmaDev(empleadoLogueado);
 
   // Filtros y orden del historial de sesiones cerradas.
   const hoy = format(new Date(), 'yyyy-MM-dd');
@@ -115,6 +124,7 @@ function CajasPageInner() {
                       : undefined
                   }
                   onVerDetalle={() => setSesionDetalle(s)}
+                  onEditar={puedeEditarSesiones ? () => setSesionEditar(s) : undefined}
                 />
               ))}
             </div>
@@ -222,6 +232,9 @@ function CajasPageInner() {
                       : undefined
                   }
                     onVerDetalle={() => setSesionDetalle(s)}
+                    onEditar={
+                      puedeEditarSesiones ? () => setSesionEditar(s) : undefined
+                    }
                   />
                 ))}
               </tbody>
@@ -252,7 +265,225 @@ function CajasPageInner() {
           </Button>
         </DialogFooter>
       </Dialog>
+
+      {/* Modal de edición reservado al dev de Pragma. Se monta solo
+          cuando puedeEditarSesiones=true, para que un admin normal ni
+          siquiera pueda instanciarlo desde devtools. */}
+      {puedeEditarSesiones && (
+        <Dialog
+          open={!!sesionEditar}
+          onOpenChange={(v) => !v && setSesionEditar(null)}
+          className="max-w-md"
+        >
+          {sesionEditar && (
+            <DialogEditarSesion
+              sesion={sesionEditar}
+              empleados={empleadosQ.data ?? []}
+              cajas={cajasQ.data ?? []}
+              empleadoLogueadoId={empleadoLogueado?.id ?? ''}
+              onCerrar={() => setSesionEditar(null)}
+            />
+          )}
+        </Dialog>
+      )}
     </div>
+  );
+}
+
+/**
+ * Modal reservado al dev de Pragma. Permite corregir el empleado que
+ * abrió, el empleado responsable actual, y la caja/local de una sesión;
+ * y forzar el cierre de sesiones que quedaron abiertas por olvido.
+ * Todo lo hecho acá se lo audita con accion='dev_editar_sesion' o
+ * 'dev_forzar_cierre_sesion' para que quede rastro.
+ */
+function DialogEditarSesion({
+  sesion,
+  empleados,
+  cajas,
+  empleadoLogueadoId,
+  onCerrar,
+}: {
+  sesion: SesionCaja;
+  empleados: { id: string; nombre: string; apellido: string; activo: boolean }[];
+  cajas: { id: string; nombre: string; local_id: string }[];
+  empleadoLogueadoId: string;
+  onCerrar: () => void;
+}) {
+  const db = getDb();
+  const qc = useQueryClient();
+  const [empleadoId, setEmpleadoId] = useState(sesion.empleado_id);
+  const [empleadoActualId, setEmpleadoActualId] = useState(
+    sesion.empleado_actual_id ?? sesion.empleado_id,
+  );
+  const [cajaId, setCajaId] = useState(sesion.caja_id);
+  const empleadosOrdenados = [...empleados]
+    .filter((e) => e.activo || e.id === sesion.empleado_id || e.id === sesion.empleado_actual_id)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+  const editarMut = useMutation({
+    mutationFn: async () => {
+      if (!db.sesionesCaja.editarSesion) {
+        throw new Error('El repo no soporta editarSesion');
+      }
+      const patch: {
+        empleado_id?: string;
+        empleado_actual_id?: string;
+        caja_id?: string;
+      } = {};
+      if (empleadoId !== sesion.empleado_id) patch.empleado_id = empleadoId;
+      const actualOriginal = sesion.empleado_actual_id ?? sesion.empleado_id;
+      if (empleadoActualId !== actualOriginal) {
+        patch.empleado_actual_id = empleadoActualId;
+      }
+      if (cajaId !== sesion.caja_id) patch.caja_id = cajaId;
+      if (Object.keys(patch).length === 0) return;
+      await db.sesionesCaja.editarSesion(sesion.id, patch);
+      await db.auditoria.log({
+        empleado_id: empleadoLogueadoId,
+        accion: 'dev_editar_sesion',
+        entidad: 'sesion_caja',
+        entidad_id: sesion.id,
+        detalle: { antes: sesion, patch },
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sesiones-caja-todas'] });
+      toast.success('Sesión corregida');
+      onCerrar();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const forzarMut = useMutation({
+    mutationFn: async () => {
+      if (!db.sesionesCaja.forzarCierre) {
+        throw new Error('El repo no soporta forzarCierre');
+      }
+      await db.sesionesCaja.forzarCierre(sesion.id);
+      await db.auditoria.log({
+        empleado_id: empleadoLogueadoId,
+        accion: 'dev_forzar_cierre_sesion',
+        entidad: 'sesion_caja',
+        entidad_id: sesion.id,
+        detalle: { sesion },
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sesiones-caja-todas'] });
+      toast.success('Sesión cerrada a la fuerza');
+      onCerrar();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const abierta = sesion.estado === 'abierta';
+  const cambios =
+    empleadoId !== sesion.empleado_id ||
+    empleadoActualId !== (sesion.empleado_actual_id ?? sesion.empleado_id) ||
+    cajaId !== sesion.caja_id;
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>
+          <span className="flex items-center gap-2">
+            <Pencil className="h-4 w-4 text-blue-700" />
+            Editar sesión (dev)
+          </span>
+        </DialogTitle>
+      </DialogHeader>
+      <div className="space-y-3 py-2 text-sm">
+        <p className="rounded-md bg-blue-50 p-2 text-xs text-blue-900">
+          Acción reservada al desarrollador. Todo lo que edites queda
+          registrado en auditoría con tu email.
+        </p>
+        <div>
+          <Label className="mb-1 block text-xs">Empleado que ABRIÓ</Label>
+          <select
+            value={empleadoId}
+            onChange={(e) => setEmpleadoId(e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {empleadosOrdenados.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nombre} {e.apellido}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label className="mb-1 block text-xs">
+            Empleado ACTUAL / que cerró
+          </Label>
+          <select
+            value={empleadoActualId}
+            onChange={(e) => setEmpleadoActualId(e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {empleadosOrdenados.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nombre} {e.apellido}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label className="mb-1 block text-xs">Caja / local</Label>
+          <select
+            value={cajaId}
+            onChange={(e) => setCajaId(e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {cajas.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+        {abierta && (
+          <div className="rounded-md border border-orange-200 bg-orange-50 p-2 text-xs">
+            <div className="mb-1 font-medium text-orange-900">
+              Sesión abierta
+            </div>
+            <p className="mb-2 text-orange-900/90">
+              Si el cajero se fue sin cerrar la caja, podés forzar el
+              cierre. Queda cerrada sin saldo declarado.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (
+                  confirm(
+                    '¿Forzar el cierre de esta sesión? No se pide arqueo — se cierra tal como está.',
+                  )
+                ) {
+                  forzarMut.mutate();
+                }
+              }}
+              disabled={forzarMut.isPending}
+              className="border-orange-300 text-orange-800 hover:bg-orange-100"
+            >
+              <LockKeyhole className="mr-2 h-4 w-4" />
+              {forzarMut.isPending ? 'Cerrando…' : 'Forzar cierre'}
+            </Button>
+          </div>
+        )}
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onCerrar}>
+          Cancelar
+        </Button>
+        <Button
+          onClick={() => editarMut.mutate()}
+          disabled={!cambios || editarMut.isPending}
+        >
+          {editarMut.isPending ? 'Guardando…' : 'Guardar cambios'}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
 
@@ -516,12 +747,14 @@ function FilaSesionCerrada({
   empleadoNombre,
   empleadoOriginalNombre,
   onVerDetalle,
+  onEditar,
 }: {
   sesion: SesionCaja;
   cajaNombre: string;
   empleadoNombre: string;
   empleadoOriginalNombre?: string;
   onVerDetalle: () => void;
+  onEditar?: () => void;
 }) {
   const db = getDb();
   // Traemos movimientos de la sesión para calcular el efectivo del turno.
@@ -615,7 +848,22 @@ function FilaSesionCerrada({
         )}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-right">
-        <Eye className="inline h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center justify-end gap-1">
+          <Eye className="inline h-4 w-4 text-muted-foreground" />
+          {onEditar && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditar();
+              }}
+              className="rounded p-1 text-blue-700 hover:bg-blue-50"
+              title="Editar sesión (dev Pragma)"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -698,6 +946,7 @@ function SesionCard({
   empleadoNombre,
   empleadoOriginalNombre,
   onVerDetalle,
+  onEditar,
 }: {
   sesion: SesionCaja;
   cajaNombre: string;
@@ -706,6 +955,7 @@ function SesionCard({
    *  Se muestra como aclaración chica al lado del responsable actual. */
   empleadoOriginalNombre?: string;
   onVerDetalle: () => void;
+  onEditar?: () => void;
 }) {
   const db = getDb();
   const qc = useQueryClient();
@@ -881,6 +1131,17 @@ function SesionCard({
             Cerrar caja
           </Button>
         </RequierePermiso>
+        {onEditar && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onEditar}
+            className="text-blue-700"
+            title="Corregir datos de la sesión o forzar cierre (dev Pragma)"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       <Dialog open={cerrarOpen} onOpenChange={setCerrarOpen}>
