@@ -24,6 +24,7 @@ import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { PRESET_IDS, type Producto } from '@comercio/db';
 import { Button } from '@comercio/ui/button';
+import { Dialog, DialogFooter, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
 import { Skeleton } from '@comercio/ui/skeleton';
@@ -530,6 +531,11 @@ function PanelProducto({
   // `deltasParaMotivos` que se calcula al abrir.
   const [motivosDialogOpen, setMotivosDialogOpen] = useState(false);
   const [deltasParaMotivos, setDeltasParaMotivos] = useState<DeltaAjuste[]>([]);
+  // Dialog de doble confirmación cuando se cambia el CÓDIGO del producto.
+  // Es un cambio con impacto (tickets viejos, cajeros que lo memorizaron)
+  // y queremos un click explícito, no un confirm() nativo que se cierra
+  // sin querer.
+  const [confirmarCodigoOpen, setConfirmarCodigoOpen] = useState(false);
 
   const guardarMut = useMutation({
     mutationFn: async ({ motivosStock }: { motivosStock: string[] }) => {
@@ -641,6 +647,31 @@ function PanelProducto({
       toast.error(`No se pudo guardar: ${e.message}`);
     },
   });
+
+  // Segundo paso del guardado: si hay deltas de stock pendientes, abre
+  // el dialog de motivos; sino dispara la mutación directo. Extraído
+  // porque lo llama el botón "Guardar cambios" (cuando no hay cambio de
+  // código) y el dialog de confirmación de código.
+  function continuarGuardado() {
+    const deltasList: DeltaAjuste[] = Object.entries(stockDeltas)
+      .map(([depositoId, txt]) => {
+        const n = parseFloat(txt);
+        if (!Number.isFinite(n) || n === 0) return null;
+        const dep = depositosQ.data?.find((d) => d.id === depositoId);
+        return {
+          key: depositoId,
+          depositoNombre: dep?.nombre ?? 'Local desconocido',
+          delta: n,
+        };
+      })
+      .filter((d): d is DeltaAjuste => d !== null);
+    if (deltasList.length > 0) {
+      setDeltasParaMotivos(deltasList);
+      setMotivosDialogOpen(true);
+    } else {
+      guardarMut.mutate({ motivosStock: [] });
+    }
+  }
 
   const eliminarMut = useMutation({
     mutationFn: () => db.productos.delete(productoId),
@@ -1159,37 +1190,18 @@ function PanelProducto({
         <Button
           size="sm"
           onClick={() => {
-            // Segunda confirmación explícita si se está cambiando el código —
-            // es un cambio con impacto (tickets, memoria de cajeros).
+            // Si cambia el código, primero abrimos el dialog de doble
+            // confirmación. Al confirmar del dialog se llama al flujo
+            // normal (deltas o guardar directo). Si el código no cambia,
+            // seguimos directo.
             if (
               productoQ.data &&
-              codigo !== productoQ.data.codigo_interno &&
-              !confirm(
-                `Vas a cambiar el código de "${productoQ.data.nombre}" de ${productoQ.data.codigo_interno} a ${codigo}. ¿Confirmás?`,
-              )
+              codigo !== productoQ.data.codigo_interno
             ) {
+              setConfirmarCodigoOpen(true);
               return;
             }
-            // Si hay deltas de stock pendientes, abrir dialog de motivos.
-            // El dialog llama guardarMut al confirmar con el array de motivos.
-            const deltasList: DeltaAjuste[] = Object.entries(stockDeltas)
-              .map(([depositoId, txt]) => {
-                const n = parseFloat(txt);
-                if (!Number.isFinite(n) || n === 0) return null;
-                const dep = depositosQ.data?.find((d) => d.id === depositoId);
-                return {
-                  key: depositoId,
-                  depositoNombre: dep?.nombre ?? 'Local desconocido',
-                  delta: n,
-                };
-              })
-              .filter((d): d is DeltaAjuste => d !== null);
-            if (deltasList.length > 0) {
-              setDeltasParaMotivos(deltasList);
-              setMotivosDialogOpen(true);
-            } else {
-              guardarMut.mutate({ motivosStock: [] });
-            }
+            continuarGuardado();
           }}
           disabled={!puedeEditar || guardarMut.isPending}
           className="ml-auto"
@@ -1209,6 +1221,61 @@ function PanelProducto({
           guardarMut.mutate({ motivosStock: motivos });
         }}
       />
+
+      {/* Dialog de doble confirmación para cambio de código. Reemplaza
+          el confirm() nativo que se cerraba con Enter/click accidental.
+          Al confirmar, sigue con continuarGuardado (que a su vez abre
+          el dialog de motivos si hay deltas de stock, o guarda directo). */}
+      <Dialog
+        open={confirmarCodigoOpen}
+        onOpenChange={setConfirmarCodigoOpen}
+        className="max-w-md"
+      >
+        <DialogHeader>
+          <DialogTitle>Confirmar cambio de código</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2 text-sm">
+          <p>
+            Vas a cambiar el código del producto{' '}
+            <b>{productoQ.data?.nombre}</b>.
+          </p>
+          <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 rounded-md border bg-muted/40 p-3">
+            <span className="text-xs uppercase text-muted-foreground">
+              Código actual
+            </span>
+            <span className="text-right font-mono text-base font-semibold text-slate-700">
+              {productoQ.data?.codigo_interno}
+            </span>
+            <span className="text-xs uppercase text-muted-foreground">
+              Código nuevo
+            </span>
+            <span className="text-right font-mono text-base font-semibold text-amber-700">
+              {codigo}
+            </span>
+          </div>
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+            Los tickets viejos siguen mostrando el código anterior. Los
+            cajeros que lo memorizaron van a tener que buscar por el nuevo.
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setConfirmarCodigoOpen(false)}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => {
+              setConfirmarCodigoOpen(false);
+              continuarGuardado();
+            }}
+            className="bg-amber-600 hover:bg-amber-700"
+          >
+            Sí, cambiar código
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       <ModalEstadisticasProducto
         open={estadOpen}
