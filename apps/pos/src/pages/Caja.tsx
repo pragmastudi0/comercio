@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
-import { LogOut, Wallet, Ban, ArrowLeftRight, Settings } from 'lucide-react';
+import { LogOut, Lock, Wallet, Ban, ArrowLeftRight, Settings } from 'lucide-react';
 import { BRAND } from '@comercio/business';
 import { PRESET_IDS } from '@comercio/db';
 import { useSesion } from '@/stores/sesion';
@@ -207,16 +207,26 @@ export function Caja() {
                 Admin
               </Button>
             )}
-            {/* Un solo botón "Salir" — abre ModalSalirCaja donde el
-                cajero elige entre Cerrar caja + arqueo o Solo cambiar
-                usuario (deja caja abierta para relevo). Antes eran 3
-                botones separados con confirm() y la gente terminaba
-                dejando la caja abierta sin querer. */}
+            {/* Cerrar caja directo — atajo visible para el arqueo
+                (el flujo más común). Los cajeros no encontraban esta
+                acción cuando estaba escondida detrás del modal Salir. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/cerrar-caja')}
+              title="Cerrar caja y hacer el arqueo"
+            >
+              <Lock className="mr-1 h-3 w-3" />
+              Cerrar caja
+            </Button>
+            {/* Salir — modal con "Cerrar caja" + "Solo cambiar usuario".
+                Sirve especialmente para el relevo (Diego → Franco): dejás
+                la caja abierta y el otro toma la posta al loguear. */}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setSalirOpen(true)}
-              title="Cerrar caja o cambiar de usuario"
+              title="Salir del PoS (cambiar usuario o cerrar caja)"
             >
               <LogOut className="mr-1 h-3 w-3" />
               Salir
