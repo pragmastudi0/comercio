@@ -507,6 +507,9 @@ function PanelProducto({
       );
       setPublicadoWeb(productoQ.data.publicado_web ?? false);
       setDescripcionLarga(productoQ.data.descripcion_larga ?? '');
+      // Re-lockear el código al cambiar de producto: si Agus salta de
+      // un producto a otro, tiene que confirmar el aviso antes de tocar.
+      setCodigoDesbloqueado(false);
     }
   }, [productoQ.data]);
 
@@ -536,6 +539,13 @@ function PanelProducto({
   // y queremos un click explícito, no un confirm() nativo que se cierra
   // sin querer.
   const [confirmarCodigoOpen, setConfirmarCodigoOpen] = useState(false);
+  // Seguro extra al TOCAR el input del código: arranca bloqueado; para
+  // desbloquear hay que confirmar en un dialog "¿estás seguro?". Se
+  // resetea cuando cambia el producto seleccionado. Al guardar el código
+  // se vuelve a lockear, así el siguiente cambio pide confirmación de
+  // vuelta.
+  const [codigoDesbloqueado, setCodigoDesbloqueado] = useState(false);
+  const [avisoCodigoOpen, setAvisoCodigoOpen] = useState(false);
 
   const guardarMut = useMutation({
     mutationFn: async ({ motivosStock }: { motivosStock: string[] }) => {
@@ -741,24 +751,54 @@ function PanelProducto({
             <Label className="mb-0 block text-[10px] uppercase text-slate-600">
               Código
             </Label>
+            {/* Doble seguro:
+                1) Solo empleados con productos.modificar_codigo pueden.
+                2) Aún con permiso, el input arranca LOCKEADO al abrir
+                   el producto. Al clickearlo se abre un aviso "¿estás
+                   seguro?". Solo si confirma se desbloquea la edición.
+                Con esto un click distraído sobre el campo no basta para
+                borrar el código. */}
             <Input
               value={codigo}
               onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ''))}
-              // Habilitado sólo si el empleado tiene el permiso extra
-              // productos.modificar_codigo — típicamente Pragma Soporte
-              // para corregir errores de importación. Al resto le queda
-              // como antes (read-only, sin sorpresas).
-              readOnly={!puedeModificarCodigo || !puedeEditar}
+              readOnly={!puedeModificarCodigo || !puedeEditar || !codigoDesbloqueado}
               disabled={!puedeModificarCodigo || !puedeEditar}
+              onMouseDown={(e) => {
+                if (
+                  puedeModificarCodigo &&
+                  puedeEditar &&
+                  !codigoDesbloqueado
+                ) {
+                  // Interceptamos el mouseDown (antes del focus) para
+                  // no dejar que el input tome el foco sin confirmar.
+                  e.preventDefault();
+                  setAvisoCodigoOpen(true);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (
+                  puedeModificarCodigo &&
+                  puedeEditar &&
+                  !codigoDesbloqueado &&
+                  e.key !== 'Tab'
+                ) {
+                  e.preventDefault();
+                  setAvisoCodigoOpen(true);
+                }
+              }}
               title={
                 puedeModificarCodigo
-                  ? 'Cambiar el código puede confundir a los cajeros que memorizaron el anterior'
+                  ? codigoDesbloqueado
+                    ? 'Cambiar el código puede confundir a los cajeros que memorizaron el anterior'
+                    : 'Click para editar (te pide confirmar antes)'
                   : 'El código no se puede modificar después de crear el producto'
               }
               maxLength={5}
               className={`h-7 text-sm tabular-nums ${
                 puedeModificarCodigo && puedeEditar
-                  ? 'border-amber-300 bg-amber-50/40'
+                  ? codigoDesbloqueado
+                    ? 'border-amber-400 bg-amber-50'
+                    : 'cursor-pointer border-amber-200 bg-amber-50/30 hover:bg-amber-50/60'
                   : 'cursor-not-allowed opacity-70'
               }`}
             />
@@ -1221,6 +1261,53 @@ function PanelProducto({
           guardarMut.mutate({ motivosStock: motivos });
         }}
       />
+
+      {/* Aviso al TOCAR el input del código. Es el primer filtro contra
+          clicks distraídos: aparece antes de que puedas escribir, no al
+          guardar. Al confirmar se desbloquea el input y hace foco. */}
+      <Dialog
+        open={avisoCodigoOpen}
+        onOpenChange={setAvisoCodigoOpen}
+        className="max-w-md"
+      >
+        <DialogHeader>
+          <DialogTitle>¿Modificar el código?</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2 py-2 text-sm">
+          <p>
+            Estás por editar el código de <b>{productoQ.data?.nombre}</b>{' '}
+            (actual: <span className="font-mono">{productoQ.data?.codigo_interno}</span>).
+          </p>
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+            Cambiar el código afecta los tickets viejos y a los cajeros que
+            lo tienen memorizado. Si fue un click sin querer, cancelá.
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setAvisoCodigoOpen(false)}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => {
+              setAvisoCodigoOpen(false);
+              setCodigoDesbloqueado(true);
+              // Foco al input en el próximo tick para que quede listo
+              // para escribir. Buscamos por atributo maxLength=5 dentro
+              // del panel — es el único input con ese cap.
+              setTimeout(() => {
+                const el = document.querySelector<HTMLInputElement>(
+                  'input[maxlength="5"]',
+                );
+                el?.focus();
+                el?.select();
+              }, 0);
+            }}
+            className="bg-amber-600 hover:bg-amber-700"
+          >
+            Sí, quiero editar
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       {/* Dialog de doble confirmación para cambio de código. Reemplaza
           el confirm() nativo que se cerraba con Enter/click accidental.
