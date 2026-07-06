@@ -16,7 +16,6 @@ import {
   Menu,
   X,
   TrendingUp,
-  PackagePlus,
   PlusCircle,
   AlertTriangle,
   CreditCard,
@@ -32,7 +31,6 @@ import { usePermisos } from '@/lib/permisos';
 
 import { ModalSaldosCajas } from './modal-saldos-cajas';
 import { ModalGananciasHoy } from './modal-ganancias-hoy';
-import { ModalCargarStock } from './modal-cargar-stock';
 
 type SubItem = {
   href: string;
@@ -100,10 +98,9 @@ const MENU: MenuItem[] = [
 
 // Acciones de la toolbar de íconos grandes (lo que Agus toca todo el tiempo).
 // Cada una abre un modal o navega a una ruta. `requiere` esconde la acción
-// si el rol no tiene ese permiso (un encargado de catálogo, p.ej., solo ve
-// Cargar stock / Productos / Faltantes).
+// si el rol no tiene ese permiso.
 type ToolbarAction =
-  | { type: 'modal'; key: 'saldos' | 'ganancias' | 'cargar-stock'; label: string; icon: typeof Home; color: string; requiere?: { modulo: ModuloPermiso; accion: string } }
+  | { type: 'modal'; key: 'saldos' | 'ganancias'; label: string; icon: typeof Home; color: string; requiere?: { modulo: ModuloPermiso; accion: string } }
   | { type: 'link'; href: string; label: string; icon: typeof Home; color: string; external?: boolean; requiere?: { modulo: ModuloPermiso; accion: string } };
 
 // URL del PoS — se abre en pestaña nueva desde el botón Cobrar. Si no se
@@ -114,7 +111,6 @@ const TOOLBAR: ToolbarAction[] = [
   { type: 'modal', key: 'saldos', label: 'Saldos de cajas', icon: Wallet, color: 'bg-emerald-100 text-emerald-700', requiere: req('caja', 'ver_otras_del_local') },
   { type: 'modal', key: 'ganancias', label: 'Ganancias', icon: TrendingUp, color: 'bg-blue-100 text-blue-700', requiere: req('reportes', 'ver_ganancia') },
   { type: 'link', href: '/ventas', label: 'Ventas', icon: ShoppingCart, color: 'bg-indigo-100 text-indigo-700', requiere: req('reportes', 'ver_local_propio') },
-  { type: 'modal', key: 'cargar-stock', label: 'Cargar stock', icon: PackagePlus, color: 'bg-amber-100 text-amber-700', requiere: req('stock', 'ajustar') },
   // "Productos" abre /productos en su vista normal — el panel a la
   // derecha muestra el primer producto seleccionado. Para crear uno
   // nuevo Agus tiene el botón "Nuevo" dentro de la página.
@@ -226,7 +222,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   // Modal activo (de la toolbar)
-  const [modalActivo, setModalActivo] = useState<'saldos' | 'ganancias' | 'cargar-stock' | null>(null);
+  const [modalActivo, setModalActivo] = useState<'saldos' | 'ganancias' | null>(null);
 
   // Guards de auth/rol (idénticos al shell anterior).
   useEffect(() => {
@@ -460,7 +456,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       {/* Modales globales de la toolbar */}
       <ModalSaldosCajas open={modalActivo === 'saldos'} onOpenChange={(v) => !v && setModalActivo(null)} />
       <ModalGananciasHoy open={modalActivo === 'ganancias'} onOpenChange={(v) => !v && setModalActivo(null)} />
-      <ModalCargarStock open={modalActivo === 'cargar-stock'} onOpenChange={(v) => !v && setModalActivo(null)} />
     </div>
   );
 }
