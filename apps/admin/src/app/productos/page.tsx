@@ -136,9 +136,13 @@ function ProductosPageInner() {
     staleTime: 15_000,
   });
 
-  // Auto-seleccionar el primer producto cuando carga la lista la primera vez.
+  // Auto-seleccionar SOLO cuando la búsqueda deja UN solo resultado
+  // (típico: tipeás el código y aparece el producto sin necesidad de
+  // clickear la fila). Si son varios, el usuario elige a mano. Con la
+  // lista completa (sin filtro) no auto-seleccionamos — el panel derecho
+  // muestra el placeholder "Seleccioná un producto…".
   useEffect(() => {
-    if (!seleccionadoId && rows.length > 0) {
+    if (rows.length === 1 && seleccionadoId !== rows[0]!.id) {
       setSeleccionadoId(rows[0]!.id);
     }
   }, [rows, seleccionadoId]);
@@ -1273,15 +1277,13 @@ function PanelProducto({
         <DialogHeader>
           <DialogTitle>¿Modificar el código?</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2 py-2 text-sm">
+        <div className="py-2 text-sm">
           <p>
-            Estás por editar el código de <b>{productoQ.data?.nombre}</b>{' '}
-            (actual: <span className="font-mono">{productoQ.data?.codigo_interno}</span>).
+            ¿Estás seguro que querés modificar el código de{' '}
+            <b>{productoQ.data?.nombre}</b> (actual:{' '}
+            <span className="font-mono">{productoQ.data?.codigo_interno}</span>
+            )?
           </p>
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-            Cambiar el código afecta los tickets viejos y a los cajeros que
-            lo tienen memorizado. Si fue un click sin querer, cancelá.
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setAvisoCodigoOpen(false)}>
