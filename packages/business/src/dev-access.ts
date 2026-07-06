@@ -13,13 +13,43 @@ export const PRAGMA_DEV_EMAILS: readonly string[] = [
 ];
 
 /**
+ * Super-admins: dueño(s) del negocio + dev de Pragma. Tienen bypass
+ * total de permisos en el admin — cualquier `puede(...)` devuelve true.
+ * Sirve para que Agus (dueño) no se quede afuera de acciones puntuales
+ * como "editar código de producto" por un override mal seteado en BD,
+ * y para que Pragma pueda entrar a corregir cosas siempre.
+ *
+ * NO se puede editar desde el cliente: cambios acá van por PR.
+ */
+export const SUPER_ADMIN_EMAILS: readonly string[] = [
+  'agustinicikson@hotmail.com',
+  'pragmasolucionesdigitales@gmail.com',
+];
+
+function emailEnLista(
+  empleado: { email?: string } | null | undefined,
+  lista: readonly string[],
+): boolean {
+  if (!empleado?.email) return false;
+  const norm = empleado.email.trim().toLowerCase();
+  return lista.some((e) => e.toLowerCase() === norm);
+}
+
+/**
  * true si el empleado logueado es un dev con acceso a las acciones de
  * corrección (editar sesión de caja, forzar cierre). Se matchea por
  * email exacto, case-insensitive. Devuelve false si el empleado es
  * null/undefined o si el email no está en la whitelist.
  */
 export function esPragmaDev(empleado: { email?: string } | null | undefined): boolean {
-  if (!empleado?.email) return false;
-  const norm = empleado.email.trim().toLowerCase();
-  return PRAGMA_DEV_EMAILS.some((e) => e.toLowerCase() === norm);
+  return emailEnLista(empleado, PRAGMA_DEV_EMAILS);
+}
+
+/**
+ * true si el empleado es super-admin (dueño o dev). En el hook de
+ * permisos del admin, cualquier `puede(...)` devuelve true si esto es
+ * true, sin importar el rol ni el override guardado en BD.
+ */
+export function esSuperAdmin(empleado: { email?: string } | null | undefined): boolean {
+  return emailEnLista(empleado, SUPER_ADMIN_EMAILS);
 }

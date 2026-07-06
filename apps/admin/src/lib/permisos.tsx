@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import {
+  esSuperAdmin,
   evaluarPermisos,
   makePuede,
   PERMISOS_PRESET,
@@ -75,10 +76,16 @@ export function usePermisos() {
     : undefined;
 
   const puede = efectivos ? makePuede(efectivos) : null;
+  // Bypass de super-admin (dueño + dev Pragma): saltea cualquier check
+  // de rol/override. Sirve para que Agus como dueño no se quede afuera
+  // de acciones puntuales (ej: editar código de producto) si un
+  // override quedó mal seteado en BD. Whitelist en @comercio/business.
+  const bypass = esSuperAdmin(empleado);
   return {
     permisos: efectivos,
     /** Devuelve true si el empleado puede hacer la acción. Mientras carga: true para admin, false para otros. */
     puede: <M extends ModuloPermiso>(modulo: M, accion: AccionPermiso<M>): boolean => {
+      if (bypass) return true;
       if (!puede) {
         // Antes que cargue, default: false (más seguro).
         return false;
