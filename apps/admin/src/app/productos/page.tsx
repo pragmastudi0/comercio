@@ -6,7 +6,6 @@ import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
-  Minus,
   Search,
   Save,
   Trash2,
@@ -1402,59 +1401,6 @@ function StockPorLocal({
   deltas: Record<string, string>;
   setDeltas: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }) {
-  const db = getDb();
-  const qc = useQueryClient();
-  const empleado = useSesion((s) => s.empleado);
-
-  // Delta pendiente esperando que el dialog de motivo se confirme. Cuando
-  // el usuario aprieta Enter o el botón "Aplicar" de una fila, guardamos
-  // el delta acá y abrimos el dialog. Al confirmar, el mutate se dispara
-  // con el motivo elegido.
-  const [pendiente, setPendiente] = useState<{
-    depositoId: string;
-    depositoNombre: string;
-    delta: number;
-  } | null>(null);
-
-  const ajustarMut = useMutation({
-    mutationFn: async ({
-      depositoId,
-      delta,
-      motivo,
-    }: {
-      depositoId: string;
-      delta: number;
-      motivo: string;
-    }) => {
-      if (!empleado) throw new Error('Sin sesión');
-      if (!Number.isFinite(delta) || delta === 0) throw new Error('Cantidad inválida');
-      await db.stock.ajustar({
-        producto_id: productoId,
-        deposito_id: depositoId,
-        cantidad: delta,
-        motivo,
-        empleado_id: empleado.id,
-      });
-    },
-    onSuccess: async (_data, vars) => {
-      const signo = vars.delta > 0 ? '+' : '';
-      toast.success(`Stock ajustado ${signo}${vars.delta}`);
-      setDeltas((prev) => ({ ...prev, [vars.depositoId]: '' }));
-      // refetch (no solo invalidate) para que el panel muestre el nuevo
-      // valor sin esperar a que React vuelva a observar la query.
-      await Promise.all([
-        qc.refetchQueries({ queryKey: ['producto-stock-detalle', productoId] }),
-        qc.refetchQueries({ queryKey: ['stock-totales-page'] }),
-        qc.refetchQueries({ queryKey: ['stock-consolidado'] }),
-      ]);
-    },
-    onError: (e: Error) => {
-      // eslint-disable-next-line no-console
-      console.error('Ajuste de stock falló:', e);
-      toast.error(`No se pudo guardar: ${e.message}`);
-    },
-  });
-
   return (
     <div className="rounded border border-slate-200 bg-slate-50 p-1.5">
       <div className="mb-1 flex items-center justify-between">
@@ -1474,7 +1420,7 @@ function StockPorLocal({
           return (
             <div
               key={d.id}
-              className="grid grid-cols-[1fr_auto_auto] items-center gap-1.5 rounded-sm border border-slate-300 bg-white px-2 py-0.5 text-xs"
+              className="flex items-center justify-between gap-1.5 rounded-sm border border-slate-300 bg-white px-2 py-0.5 text-xs"
             >
               <div className="flex items-center gap-2">
                 <span className="text-slate-600">{d.nombre}</span>
@@ -1487,55 +1433,28 @@ function StockPorLocal({
                 </span>
               </div>
               {puedeEditar && (
-                <>
-                  <Input
-                    type="number"
-                    step="1"
-                    value={delta}
-                    onChange={(e) =>
-                      setDeltas((prev) => ({ ...prev, [d.id]: e.target.value }))
-                    }
-                    onFocus={(e) => e.currentTarget.select()}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && tieneDelta) {
-                        e.preventDefault();
-                        setPendiente({
-                          depositoId: d.id,
-                          depositoNombre: d.nombre,
-                          delta: deltaN,
-                        });
-                      }
-                    }}
-                    className="h-6 w-20 text-right text-xs tabular-nums"
-                    maxLength={6}
-                    title={String(delta || '')}
-                    disabled={ajustarMut.isPending}
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      tieneDelta &&
-                      setPendiente({
-                        depositoId: d.id,
-                        depositoNombre: d.nombre,
-                        delta: deltaN,
-                      })
-                    }
-                    disabled={!tieneDelta || ajustarMut.isPending}
-                    className="flex h-6 w-6 items-center justify-center rounded-sm border border-slate-300 bg-white hover:bg-emerald-50 disabled:opacity-40"
-                    title={
-                      tieneDelta
-                        ? `${deltaN > 0 ? 'Sumar' : 'Restar'} ${Math.abs(deltaN)}`
-                        : 'Tipear cantidad'
-                    }
-                  >
-                    {deltaN < 0 ? (
-                      <Minus className="h-3 w-3 text-red-600" />
-                    ) : (
-                      <Plus className="h-3 w-3 text-emerald-700" />
-                    )}
-                  </button>
-                </>
+                // Delta pendiente por local. Se aplica todo junto al
+                // apretar "Guardar cambios" — ahí también se pide el
+                // motivo una sola vez. Sacamos el botón +/- inline
+                // (que abría su propio dialog de motivo) para no
+                // duplicar la pregunta de motivo al usuario.
+                <Input
+                  type="number"
+                  step="1"
+                  value={delta}
+                  onChange={(e) =>
+                    setDeltas((prev) => ({ ...prev, [d.id]: e.target.value }))
+                  }
+                  onFocus={(e) => e.currentTarget.select()}
+                  placeholder="+/−"
+                  className="h-6 w-20 text-right text-xs tabular-nums"
+                  maxLength={6}
+                  title={
+                    tieneDelta
+                      ? `Se aplica al apretar "Guardar cambios"`
+                      : 'Tipear cantidad (con signo, ej: -3)'
+                  }
+                />
               )}
             </div>
           );
@@ -1546,35 +1465,10 @@ function StockPorLocal({
         </div>
       </div>
 
-      {/* Dialog de motivo — se abre cuando el usuario aprieta Enter o el
-          botón Aplicar en un delta pendiente. Al confirmar dispara el
-          ajuste con el motivo elegido. */}
-      <MotivoAjusteDialog
-        open={pendiente !== null}
-        onOpenChange={(v) => {
-          if (!v) setPendiente(null);
-        }}
-        deltas={
-          pendiente
-            ? [
-                {
-                  key: pendiente.depositoId,
-                  depositoNombre: pendiente.depositoNombre,
-                  delta: pendiente.delta,
-                },
-              ]
-            : []
-        }
-        onConfirm={(motivos) => {
-          if (!pendiente) return;
-          ajustarMut.mutate({
-            depositoId: pendiente.depositoId,
-            delta: pendiente.delta,
-            motivo: motivos[0] ?? 'Ajuste desde detalle de producto',
-          });
-          setPendiente(null);
-        }}
-      />
+      {/* El motivo del ajuste se pide una única vez en el
+          MotivoAjusteDialog del padre (PanelProducto) cuando se aprieta
+          "Guardar cambios". No hay dialog local para no duplicar la
+          pregunta al usuario. */}
     </div>
   );
 }
