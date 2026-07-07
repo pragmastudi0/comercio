@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { LineChart, RefreshCw, ArrowRight } from 'lucide-react';
+import { MOTIVOS_INGRESO_STOCK, MOTIVOS_EGRESO_STOCK } from '@comercio/business';
 import { getDb } from '@/lib/db';
 import {
   motivoLegible,
@@ -463,8 +464,19 @@ function HistorialMovimientos({
         } else if (f.tipo === 'devolucion') {
           delta = f.cantidad;
         } else if (f.tipo === 'ajuste') {
-          // Signo real del ajuste no está en BD. No retrocedemos.
-          saldoIncierto = true;
+          // El signo del delta no queda en BD (cantidad se guarda en
+          // valor absoluto), así que lo inferimos del motivo. Los
+          // motivos preset están en dos listas explícitas en
+          // @comercio/business. Si el motivo es libre ("Otros") o no
+          // matchea ninguna lista, no podemos saber → saldoIncierto.
+          const m = f.motivo ?? '';
+          if ((MOTIVOS_INGRESO_STOCK as readonly string[]).includes(m)) {
+            delta = f.cantidad;
+          } else if ((MOTIVOS_EGRESO_STOCK as readonly string[]).includes(m)) {
+            delta = -f.cantidad;
+          } else {
+            saldoIncierto = true;
+          }
         }
         if (delta !== 0) {
           punteros.set(f.deposito_id, d - delta);
@@ -529,12 +541,6 @@ function HistorialMovimientos({
                 <th className="px-2 py-1 text-left">Local</th>
                 <th
                   className="px-2 py-1 text-right"
-                  title="Stock que quedó en el local después de este movimiento"
-                >
-                  Stock local
-                </th>
-                <th
-                  className="px-2 py-1 text-right"
                   title="Stock total del producto (suma de todos los locales) después de este movimiento"
                 >
                   Stock total
@@ -549,10 +555,6 @@ function HistorialMovimientos({
                 const empNombre = empPorId.get(f.empleado_id) ?? '—';
                 if (f.kind === 'transferencia') {
                   const opac = f.anulada || f.esAnulacionDe ? 'opacity-60' : '';
-                  // En una transferencia mostramos ambos saldos: origen y
-                  // destino. Total no cambia (transferencia interna).
-                  const sOr = f.saldoLocal.get(f.origen_id) ?? 0;
-                  const sDe = f.saldoLocal.get(f.destino_id) ?? 0;
                   return (
                     <tr key={f.keyPar} className={`border-t border-border/50 ${opac}`}>
                       <td className="whitespace-nowrap px-2 py-1 tabular-nums">
@@ -566,11 +568,6 @@ function HistorialMovimientos({
                         <span>{depPorId.get(f.origen_id) ?? '—'}</span>
                         <ArrowRight className="mx-0.5 inline h-3 w-3 text-muted-foreground" />
                         <span>{depPorId.get(f.destino_id) ?? '—'}</span>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">
-                        <span className="text-muted-foreground">{sOr}</span>
-                        <span className="mx-1 text-muted-foreground">·</span>
-                        <span>{sDe}</span>
                       </td>
                       <td className="px-2 py-1 text-right tabular-nums">
                         {f.saldoTotal}
@@ -587,7 +584,6 @@ function HistorialMovimientos({
                   );
                 }
                 const signo = signoTipo(f.tipo);
-                const sLocal = f.saldoLocal.get(f.deposito_id) ?? 0;
                 return (
                   <tr key={f.id} className="border-t border-border/50">
                     <td className="whitespace-nowrap px-2 py-1 tabular-nums">
@@ -609,24 +605,8 @@ function HistorialMovimientos({
                     <td className="whitespace-nowrap px-2 py-1">
                       {depPorId.get(f.deposito_id) ?? '—'}
                     </td>
-                    <td
-                      className="whitespace-nowrap px-2 py-1 text-right tabular-nums"
-                      title={
-                        f.saldoIncierto
-                          ? 'Ajuste: el signo del delta no queda en BD, así que el "stock antes" no se puede reconstruir con certeza. Este es el saldo tal como quedó.'
-                          : undefined
-                      }
-                    >
-                      {sLocal}
-                      {f.saldoIncierto && (
-                        <span className="ml-0.5 text-muted-foreground">?</span>
-                      )}
-                    </td>
                     <td className="px-2 py-1 text-right tabular-nums">
                       {f.saldoTotal}
-                      {f.saldoIncierto && (
-                        <span className="ml-0.5 text-muted-foreground">?</span>
-                      )}
                     </td>
                     <td className="px-2 py-1 text-muted-foreground">
                       {motivoLegible(f.motivo)}
