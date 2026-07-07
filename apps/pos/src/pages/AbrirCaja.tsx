@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ import { formatCurrency } from '@comercio/ui/utils';
 
 export function AbrirCaja() {
   const db = getDb();
+  const qc = useQueryClient();
   const navigate = useNavigate();
   const empleado = useSesion((s) => s.empleado);
   const setCaja = useSesion((s) => s.setCaja);
@@ -119,7 +120,10 @@ export function AbrirCaja() {
       toast.success('Caja abierta');
       navigate('/caja');
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      toast.error(e.message);
+      qc.invalidateQueries({ queryKey: ['sesiones-abiertas-caja', cajaId] });
+    },
   });
 
   // "Tomar posta": la caja está abierta por otro empleado. Le cambiamos
@@ -164,7 +168,14 @@ export function AbrirCaja() {
       toast.success('Tomaste la posta de la caja');
       navigate('/caja');
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      toast.error(e.message);
+      // La sesión pudo haber sido cerrada (o forzada) entre que se
+      // renderizó la pantalla y el click. Refetch para que el cajero
+      // vea el estado real (probablemente "caja libre") y pueda abrir
+      // normal en vez de quedar trabado.
+      qc.invalidateQueries({ queryKey: ['sesiones-abiertas-caja', cajaId] });
+    },
   });
 
   if (!empleado) return null;

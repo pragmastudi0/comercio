@@ -84,6 +84,23 @@ function DashboardInner() {
     queryFn: () => db.ventas.list({ desde, hasta, estado: 'completada' }),
     refetchInterval,
   });
+  // "Últimas ventas" es un feed independiente del rango elegido — siempre
+  // trae las últimas ventas del sistema, sin importar si el dashboard
+  // está mostrando "hoy", "semana" o "mes". Refresh cada 5s para que se
+  // vea la venta apenas la cobra el cajero. Traemos 30 días como techo
+  // (el .slice(0, 8) del render decide cuántas mostrar) para no bajar
+  // toda la historia.
+  const ultimasVentasQ = useQuery({
+    queryKey: ['dashboard-ultimas-ventas'],
+    queryFn: () => {
+      const hace30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      return db.ventas.list({ desde: hace30, estado: 'completada' });
+    },
+    refetchInterval: 5_000,
+  });
+  const ultimasVentas = ultimasVentasQ.data ?? [];
   const productosQ = useQuery({
     queryKey: ['dashboard-sin-stock'],
     queryFn: () => db.productos.list({ activo: true, sin_stock: true }),
@@ -452,17 +469,16 @@ function DashboardInner() {
             <CardTitle className="text-base">Últimas ventas</CardTitle>
           </CardHeader>
           <CardContent>
-            {ventasQ.isLoading ? (
+            {ultimasVentasQ.isLoading ? (
               <Skeleton className="h-40" />
-            ) : ventasRango.length === 0 ? (
+            ) : ultimasVentas.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin ventas todavía.</p>
             ) : (
               <div className="space-y-1">
-                {/* ventasQ.list ya viene ordenado fecha DESC del repo
-                    (más nueva primero), así que slice directo. Antes había
-                    un .reverse() que devolvía las 8 MÁS VIEJAS del rango
-                    en vez de las últimas. */}
-                {ventasRango.slice(0, 8).map((v) => {
+                {/* ultimasVentas viene ordenado fecha DESC del repo. Es
+                    independiente del rango elegido en el dashboard: acá
+                    siempre son las últimas del sistema. */}
+                {ultimasVentas.slice(0, 8).map((v) => {
                   // Texto resumen de los productos de la venta: si es 1
                   // solo, muestro el nombre; si son varios, primer nombre
                   // + "+N más". Más útil que el número de ticket para el

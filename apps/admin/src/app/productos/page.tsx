@@ -1506,7 +1506,9 @@ function StockPorLocal({
                         });
                       }
                     }}
-                    className="h-6 w-14 text-right text-xs tabular-nums"
+                    className="h-6 w-20 text-right text-xs tabular-nums"
+                    maxLength={6}
+                    title={String(delta || '')}
                     disabled={ajustarMut.isPending}
                   />
                   <button
@@ -1827,7 +1829,9 @@ function PanelNuevoProducto({
                     setStockInicial((prev) => ({ ...prev, [d.id]: e.target.value }))
                   }
                   placeholder="0"
-                  className="h-6 w-14 text-right text-xs tabular-nums"
+                  className="h-6 w-20 text-right text-xs tabular-nums"
+                  maxLength={6}
+                  title={stockInicial[d.id] ?? ''}
                 />
               </div>
             ))}

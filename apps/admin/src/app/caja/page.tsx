@@ -511,6 +511,19 @@ function DetalleSesion({
     queryKey: ['productos-all-cierre-admin'],
     queryFn: () => db.productos.list(),
   });
+  // Auditoría de la sesión — buscamos si el cierre fue FORZADO por el
+  // dev de Pragma (accion='dev_forzar_cierre_sesion'). Si sí, badge
+  // naranja en el arqueo para que Agus lo distinga de un cierre normal.
+  const auditoriaQ = useQuery({
+    queryKey: ['auditoria-sesion', sesion.id],
+    queryFn: async () => {
+      const todos = await db.auditoria.list({ entidad: 'sesion_caja' });
+      return todos.filter((l) => l.entidad_id === sesion.id);
+    },
+  });
+  const forzadoLog = (auditoriaQ.data ?? []).find(
+    (l) => l.accion === 'dev_forzar_cierre_sesion',
+  );
 
   const ventas = (ventasQ.data ?? []) as Venta[];
   const ventasCompletadas = ventas.filter((v) => v.estado === 'completada');
@@ -705,6 +718,15 @@ function DetalleSesion({
           </span>
           {cerrada && (
             <>
+              <span className="text-muted-foreground">Cerrada por</span>
+              <span className="text-right">
+                <span className="font-medium">{empleadoNombre}</span>
+                {forzadoLog && (
+                  <span className="ml-1.5 inline-block rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-orange-800">
+                    Cierre forzado
+                  </span>
+                )}
+              </span>
               <span className="text-muted-foreground">Declarado por cajero</span>
               <span className="text-right tabular-nums">
                 {formatCurrency(declarado)}
