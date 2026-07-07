@@ -471,6 +471,7 @@ function HistorialMovimientos({
                         {motivoLegible(f.motivo)}
                       </td>
                       <td className="px-2 py-1">
+                        {/* Fila transferencia: no tiene .tipo, solo motivo. */}
                         <OrigenBadge origen={origenDeMovimiento(f.motivo)} />
                       </td>
                       <td className="px-2 py-1">{empNombre}</td>
@@ -503,7 +504,7 @@ function HistorialMovimientos({
                       {motivoLegible(f.motivo)}
                     </td>
                     <td className="px-2 py-1">
-                      <OrigenBadge origen={origenDeMovimiento(f.motivo)} />
+                      <OrigenBadge origen={origenDeMovimiento(f.motivo, f.tipo)} />
                     </td>
                     <td className="px-2 py-1">{empNombre}</td>
                   </tr>

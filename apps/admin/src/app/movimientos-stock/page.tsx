@@ -179,6 +179,8 @@ function MovimientosStockInner() {
       });
     }
     if (origenFiltro) {
+      // Este listado es de Transferencias (no de movimientos individuales),
+      // así que solo importa el prefijo del motivo — no hay ventas acá.
       lista = lista.filter((t) => origenDeMovimiento(t.motivo) === origenFiltro);
     }
     return [...lista].sort((a, b) => b.fecha.localeCompare(a.fecha));

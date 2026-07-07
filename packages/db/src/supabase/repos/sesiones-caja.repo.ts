@@ -119,28 +119,45 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
       );
     },
     async actualizarSaldoInicial(id, nuevoSaldoInicial) {
-      return ok<SesionCaja>(
-        await sb
-          .from('sesiones_caja')
-          .update({ saldo_inicial: nuevoSaldoInicial })
-          .eq('id', id)
-          .eq('estado', 'abierta')
-          .select('*')
-          .single(),
-        'sesiones_caja.actualizarSaldoInicial',
-      );
+      // maybeSingle + validación explícita: si otra sesión cerró la
+      // caja entre que el cajero abrió la pantalla y apretó guardar,
+      // el UPDATE afecta 0 filas y .single() explotaba con
+      // "Cannot coerce the result to a single JSON object" — mensaje
+      // críptico que no le dice a nadie qué hacer. Ahora tira un error
+      // legible.
+      const res = await sb
+        .from('sesiones_caja')
+        .update({ saldo_inicial: nuevoSaldoInicial })
+        .eq('id', id)
+        .eq('estado', 'abierta')
+        .select('*')
+        .maybeSingle();
+      const sesion = okMaybe<SesionCaja>(res, 'sesiones_caja.actualizarSaldoInicial');
+      if (!sesion) {
+        throw new Error(
+          'La caja ya no está abierta. Recargá la pantalla y volvé a intentar.',
+        );
+      }
+      return sesion;
     },
     async cambiarResponsable(id, nuevoEmpleadoId) {
-      return ok<SesionCaja>(
-        await sb
-          .from('sesiones_caja')
-          .update({ empleado_actual_id: nuevoEmpleadoId })
-          .eq('id', id)
-          .eq('estado', 'abierta')
-          .select('*')
-          .single(),
-        'sesiones_caja.cambiarResponsable',
-      );
+      // Mismo motivo que actualizarSaldoInicial: la sesión pudo haber
+      // sido cerrada (o forzada) entre que se vio "Tomar posta" y el
+      // click. maybeSingle + mensaje legible.
+      const res = await sb
+        .from('sesiones_caja')
+        .update({ empleado_actual_id: nuevoEmpleadoId })
+        .eq('id', id)
+        .eq('estado', 'abierta')
+        .select('*')
+        .maybeSingle();
+      const sesion = okMaybe<SesionCaja>(res, 'sesiones_caja.cambiarResponsable');
+      if (!sesion) {
+        throw new Error(
+          'La caja ya no está abierta. Recargá la pantalla y volvé a intentar.',
+        );
+      }
+      return sesion;
     },
     async cerrarOtrasSesionesEnCaja(cajaId, exceptoSesionId) {
       const { data: filas, error } = await sb
