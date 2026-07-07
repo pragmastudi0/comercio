@@ -191,7 +191,8 @@ function CajasPageInner() {
               <thead className="text-xs uppercase text-muted-foreground">
                 <tr className="border-b">
                   <th className="whitespace-nowrap px-3 py-2 text-left">Caja</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left">Cajero</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left">Abrió</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left">Cerró</th>
                   <th className="whitespace-nowrap px-3 py-2 text-left">Apertura</th>
                   <th className="whitespace-nowrap px-3 py-2 text-left">
                     <button
@@ -225,12 +226,10 @@ function CajasPageInner() {
                     key={s.id}
                     sesion={s}
                     cajaNombre={cajaNombre(s.caja_id)}
-                    empleadoNombre={empleadoNombre(s.empleado_actual_id ?? s.empleado_id)}
-                  empleadoOriginalNombre={
-                    s.empleado_actual_id && s.empleado_actual_id !== s.empleado_id
-                      ? empleadoNombre(s.empleado_id)
-                      : undefined
-                  }
+                    empleadoAbrioNombre={empleadoNombre(s.empleado_id)}
+                    empleadoCerroNombre={empleadoNombre(
+                      s.empleado_actual_id ?? s.empleado_id,
+                    )}
                     onVerDetalle={() => setSesionDetalle(s)}
                     onEditar={
                       puedeEditarSesiones ? () => setSesionEditar(s) : undefined
@@ -254,6 +253,7 @@ function CajasPageInner() {
           <DetalleSesion
             sesion={sesionDetalle}
             cajaNombre={cajaNombre(sesionDetalle.caja_id)}
+            empleadoAbrioNombre={empleadoNombre(sesionDetalle.empleado_id)}
             empleadoNombre={empleadoNombre(
               sesionDetalle.empleado_actual_id ?? sesionDetalle.empleado_id,
             )}
@@ -491,10 +491,14 @@ function DetalleSesion({
   sesion,
   cajaNombre,
   empleadoNombre,
+  empleadoAbrioNombre,
 }: {
   sesion: SesionCaja;
   cajaNombre: string;
+  /** Empleado responsable actual / que cerró (empleado_actual_id). */
   empleadoNombre: string;
+  /** Empleado que abrió la sesión originalmente (empleado_id). */
+  empleadoAbrioNombre: string;
 }) {
   const db = getDb();
   // Ventas de la sesión + movimientos de caja en paralelo.
@@ -716,6 +720,11 @@ function DetalleSesion({
           <span className="text-right font-medium tabular-nums">
             {formatCurrency(sesion.saldo_inicial)}
           </span>
+          {/* Quién abrió + quién cerró — la sesión puede haber cambiado
+              de responsable en el medio (feature Tomar posta) y Agus
+              necesita ver ambos claramente. */}
+          <span className="text-muted-foreground">Abierta por</span>
+          <span className="text-right font-medium">{empleadoAbrioNombre}</span>
           {cerrada && (
             <>
               <span className="text-muted-foreground">Cerrada por</span>
@@ -768,15 +777,18 @@ function DetalleSesion({
 function FilaSesionCerrada({
   sesion,
   cajaNombre,
-  empleadoNombre,
-  empleadoOriginalNombre,
+  empleadoAbrioNombre,
+  empleadoCerroNombre,
   onVerDetalle,
   onEditar,
 }: {
   sesion: SesionCaja;
   cajaNombre: string;
-  empleadoNombre: string;
-  empleadoOriginalNombre?: string;
+  /** Empleado que ABRIÓ la sesión (empleado_id original, no cambia). */
+  empleadoAbrioNombre: string;
+  /** Empleado responsable al momento del cierre (empleado_actual_id
+   *  al cerrar; puede ser el mismo que abrió si no hubo relevo). */
+  empleadoCerroNombre: string;
   onVerDetalle: () => void;
   onEditar?: () => void;
 }) {
@@ -838,14 +850,8 @@ function FilaSesionCerrada({
       onClick={onVerDetalle}
     >
       <td className="whitespace-nowrap px-3 py-2">{cajaNombre}</td>
-      <td className="whitespace-nowrap px-3 py-2">
-        {empleadoNombre}
-        {empleadoOriginalNombre && (
-          <span className="ml-1 text-[10px] text-muted-foreground">
-            (abrió {empleadoOriginalNombre})
-          </span>
-        )}
-      </td>
+      <td className="whitespace-nowrap px-3 py-2">{empleadoAbrioNombre}</td>
+      <td className="whitespace-nowrap px-3 py-2">{empleadoCerroNombre}</td>
       <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
         {formatDate(sesion.abierta_en)}
       </td>
