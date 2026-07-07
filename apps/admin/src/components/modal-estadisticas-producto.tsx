@@ -79,6 +79,14 @@ export function ModalEstadisticasProducto({
     queryFn: () => db.depositos.list(),
     enabled: open,
   });
+  // Stock actual por depósito — punto de partida para reconstruir "cómo
+  // quedó el stock" después de cada movimiento en el historial.
+  const stockActualQ = useQuery({
+    queryKey: ['estad-producto-stock-actual', productoId],
+    queryFn: () => db.stock.porProducto(productoId),
+    enabled: open,
+    staleTime: 5_000,
+  });
 
   const datos = useMemo(() => {
     const ventas = (ventasQ.data ?? []).filter(
@@ -246,6 +254,7 @@ export function ModalEstadisticasProducto({
         movs={movsQ.data ?? []}
         depositos={depositosQ.data ?? []}
         empleados={empleadosQ.data ?? []}
+        stockActual={stockActualQ.data ?? []}
         cargando={movsQ.isLoading}
       />
 
@@ -287,6 +296,7 @@ function HistorialMovimientos({
   movs,
   depositos,
   empleados,
+  stockActual,
   cargando,
 }: {
   movs: Array<{
@@ -301,6 +311,9 @@ function HistorialMovimientos({
   }>;
   depositos: Array<{ id: string; nombre: string }>;
   empleados: Array<{ id: string; nombre: string; apellido: string }>;
+  /** Stock actual por depósito — se usa como punto de partida para
+   *  reconstruir cómo quedaba el stock después de cada movimiento. */
+  stockActual: Array<{ deposito_id: string; cantidad: number | string }>;
   cargando: boolean;
 }) {
   const depPorId = useMemo(
@@ -392,6 +405,77 @@ function HistorialMovimientos({
     return [...pares, ...simples].sort((a, b) => b.fecha.localeCompare(a.fecha));
   }, [movs]);
 
+  // Calculamos el "stock después" de cada movimiento reconstruyendo hacia
+  // atrás desde el stock actual. Estrategia: para cada fila (ordenadas
+  // desc por fecha), el saldo "después" del movimiento es el puntero
+  // actual; después ajustamos el puntero restando el delta para tener el
+  // estado ANTES del mov (que es el "después" del siguiente hacia atrás).
+  //
+  // Cuidado con los ajustes: en la BD guardamos cantidad=|delta| y perdemos
+  // el signo del delta original. Para esos movs el "stock después" queda
+  // como el actual del puntero, pero no ajustamos hacia atrás (marcado con
+  // '?' visualmente). Es una limitación conocida del schema; se puede
+  // resolver con una columna nueva en BD si molesta.
+  type FilaConSaldo = Fila & {
+    /** Stock que quedó en el depósito principal después de este mov. */
+    saldoLocal: Map<string, number>;
+    /** Suma de stock del producto en todos los depósitos después de este mov. */
+    saldoTotal: number;
+    /** true si es un ajuste y no podemos calcular el delta con certeza. */
+    saldoIncierto?: boolean;
+  };
+  const filasConSaldo = useMemo<FilaConSaldo[]>(() => {
+    // Punteros de stock actual por depósito.
+    const punteros = new Map<string, number>();
+    for (const s of stockActual ?? []) {
+      punteros.set(s.deposito_id, Number(s.cantidad));
+    }
+    let totalActual = 0;
+    for (const v of punteros.values()) totalActual += v;
+
+    const out: FilaConSaldo[] = [];
+    for (const f of filas) {
+      // Snapshot de saldos DESPUÉS del mov (= estado actual de los punteros).
+      const saldoLocal = new Map<string, number>();
+      let saldoIncierto = false;
+
+      if (f.kind === 'transferencia') {
+        // Mov de origen: sale cantidad. Mov de destino: entra cantidad.
+        // Neto total = 0. Saldo local muestra ambos.
+        const dOr = punteros.get(f.origen_id) ?? 0;
+        const dDe = punteros.get(f.destino_id) ?? 0;
+        saldoLocal.set(f.origen_id, dOr);
+        saldoLocal.set(f.destino_id, dDe);
+        // Retroceder: antes del mov, origen tenía +cant y destino -cant.
+        punteros.set(f.origen_id, dOr + f.cantidad);
+        punteros.set(f.destino_id, dDe - f.cantidad);
+        // Total no cambia (fue cero neto).
+      } else {
+        // Simple: afecta un depósito.
+        const d = punteros.get(f.deposito_id) ?? 0;
+        saldoLocal.set(f.deposito_id, d);
+        let delta = 0;
+        if (
+          f.tipo === 'venta' ||
+          f.tipo === 'merma'
+        ) {
+          delta = -f.cantidad;
+        } else if (f.tipo === 'devolucion') {
+          delta = f.cantidad;
+        } else if (f.tipo === 'ajuste') {
+          // Signo real del ajuste no está en BD. No retrocedemos.
+          saldoIncierto = true;
+        }
+        if (delta !== 0) {
+          punteros.set(f.deposito_id, d - delta);
+          totalActual -= delta;
+        }
+      }
+      out.push({ ...f, saldoLocal, saldoTotal: totalActual, saldoIncierto });
+    }
+    return out;
+  }, [filas, stockActual]);
+
   function fmtFecha(iso: string): string {
     return new Date(iso).toLocaleString('es-AR', {
       day: '2-digit',
@@ -443,16 +527,32 @@ function HistorialMovimientos({
                 <th className="px-2 py-1 text-left">Tipo</th>
                 <th className="px-2 py-1 text-right">Cant.</th>
                 <th className="px-2 py-1 text-left">Local</th>
+                <th
+                  className="px-2 py-1 text-right"
+                  title="Stock que quedó en el local después de este movimiento"
+                >
+                  Stock local
+                </th>
+                <th
+                  className="px-2 py-1 text-right"
+                  title="Stock total del producto (suma de todos los locales) después de este movimiento"
+                >
+                  Stock total
+                </th>
                 <th className="px-2 py-1 text-left">Motivo</th>
                 <th className="px-2 py-1 text-left">Origen</th>
                 <th className="px-2 py-1 text-left">Empleado</th>
               </tr>
             </thead>
             <tbody>
-              {filas.map((f) => {
+              {filasConSaldo.map((f) => {
                 const empNombre = empPorId.get(f.empleado_id) ?? '—';
                 if (f.kind === 'transferencia') {
                   const opac = f.anulada || f.esAnulacionDe ? 'opacity-60' : '';
+                  // En una transferencia mostramos ambos saldos: origen y
+                  // destino. Total no cambia (transferencia interna).
+                  const sOr = f.saldoLocal.get(f.origen_id) ?? 0;
+                  const sDe = f.saldoLocal.get(f.destino_id) ?? 0;
                   return (
                     <tr key={f.keyPar} className={`border-t border-border/50 ${opac}`}>
                       <td className="whitespace-nowrap px-2 py-1 tabular-nums">
@@ -467,6 +567,14 @@ function HistorialMovimientos({
                         <ArrowRight className="mx-0.5 inline h-3 w-3 text-muted-foreground" />
                         <span>{depPorId.get(f.destino_id) ?? '—'}</span>
                       </td>
+                      <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">
+                        <span className="text-muted-foreground">{sOr}</span>
+                        <span className="mx-1 text-muted-foreground">·</span>
+                        <span>{sDe}</span>
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums">
+                        {f.saldoTotal}
+                      </td>
                       <td className="px-2 py-1 text-muted-foreground">
                         {motivoLegible(f.motivo)}
                       </td>
@@ -479,6 +587,7 @@ function HistorialMovimientos({
                   );
                 }
                 const signo = signoTipo(f.tipo);
+                const sLocal = f.saldoLocal.get(f.deposito_id) ?? 0;
                 return (
                   <tr key={f.id} className="border-t border-border/50">
                     <td className="whitespace-nowrap px-2 py-1 tabular-nums">
@@ -499,6 +608,25 @@ function HistorialMovimientos({
                     </td>
                     <td className="whitespace-nowrap px-2 py-1">
                       {depPorId.get(f.deposito_id) ?? '—'}
+                    </td>
+                    <td
+                      className="whitespace-nowrap px-2 py-1 text-right tabular-nums"
+                      title={
+                        f.saldoIncierto
+                          ? 'Ajuste: el signo del delta no queda en BD, así que el "stock antes" no se puede reconstruir con certeza. Este es el saldo tal como quedó.'
+                          : undefined
+                      }
+                    >
+                      {sLocal}
+                      {f.saldoIncierto && (
+                        <span className="ml-0.5 text-muted-foreground">?</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1 text-right tabular-nums">
+                      {f.saldoTotal}
+                      {f.saldoIncierto && (
+                        <span className="ml-0.5 text-muted-foreground">?</span>
+                      )}
                     </td>
                     <td className="px-2 py-1 text-muted-foreground">
                       {motivoLegible(f.motivo)}
