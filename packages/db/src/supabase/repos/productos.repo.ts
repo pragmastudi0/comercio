@@ -112,7 +112,7 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
       if (error) throw new Error(`productos.listPaginado: ${error.message}`);
       return { rows: (data ?? []) as Producto[], total: count ?? 0 };
     },
-    async buscarRapido(query, limit = 10) {
+    async buscarRapido(query, limit = 20) {
       if (!query.trim()) return [];
       const q = query.trim();
       const esNumerico = /^\d+$/.test(q);
@@ -134,15 +134,30 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
           'productos.buscarRapido',
         );
       }
-      return okList<Producto>(
+      // Búsqueda por nombre: traemos hasta `limit` con orden alfabético
+      // desde Postgres, y después priorizamos client-side los que EMPIEZAN
+      // con el término tipeado. Antes se traían 8 sin ORDER BY: si había
+      // 15+ productos con "valija" en el nombre, Postgres devolvía 8 en
+      // orden random y "Valija mediana" podía quedar afuera. Bug real
+      // reportado por el cliente.
+      const filas = okList<Producto>(
         await sb
           .from('productos')
           .select('*')
           .eq('activo', true)
           .ilike('nombre', `%${q}%`)
+          .order('nombre', { ascending: true })
           .limit(limit),
         'productos.buscarRapido',
       );
+      const qLower = q.toLowerCase();
+      const empieza: Producto[] = [];
+      const contiene: Producto[] = [];
+      for (const p of filas) {
+        if (p.nombre.toLowerCase().startsWith(qLower)) empieza.push(p);
+        else contiene.push(p);
+      }
+      return [...empieza, ...contiene];
     },
     async buscarPorCodigo(codigo) {
       return okMaybe<Producto>(

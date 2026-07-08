@@ -22,6 +22,7 @@ export function Login() {
   // Si entra con otro email (cambio de turno) → /abrir-caja como siempre.
   const sesionCaja = useSesion((s) => s.sesionCaja);
   const setSesionCaja = useSesion((s) => s.setSesionCaja);
+  const setCaja = useSesion((s) => s.setCaja);
   // Cuando el SSO desde admin falla y caemos al login manual, el admin
   // nos pasa ?email=... para que el dueño/encargado no tenga que tipear
   // el email también — sólo la contraseña.
@@ -41,19 +42,39 @@ export function Login() {
     onSuccess: async (emp) => {
       setEmpleado(emp);
       toast.success(`Hola ${emp.nombre}`);
+      // Sanidad: si el store tiene sesionCaja persistido de un turno
+      // anterior, primero refrescamos contra BD. Si la sesión ya fue
+      // cerrada desde otro lado (Agus la forzó, otro dispositivo la
+      // cerró), limpiamos el store y llevamos al empleado a /abrir-caja
+      // limpio — sino quedaba con el "Cannot coerce" ambiguo o entraba
+      // a /caja con una sesión fantasma.
+      let sesionVigente = sesionCaja;
+      if (sesionCaja) {
+        try {
+          const real = await db.sesionesCaja.get(sesionCaja.id);
+          if (!real || real.estado === 'cerrada') {
+            setSesionCaja(null);
+            setCaja(null);
+            sesionVigente = null;
+          } else {
+            sesionVigente = real;
+          }
+        } catch {
+          // Si el fetch falla no bloqueamos: seguimos con lo del store y
+          // dejamos que las guardas de /caja resuelvan.
+        }
+      }
       // Si hay una caja activa en el store (la dejó abierta el usuario
       // anterior via "Cambiar usuario") y el que entra ES OTRO empleado,
       // marcamos el traspaso: actualizamos empleado_actual_id de la sesión
       // y logueamos el cambio en auditoría para que el admin lo vea después.
-      // Cada venta sigue teniendo su propio empleado_id (quien la cobró),
-      // pero la sesión refleja quién es el responsable AHORA.
-      if (sesionCaja && sesionCaja.estado === 'abierta') {
+      if (sesionVigente && sesionVigente.estado === 'abierta') {
         const responsableAnterior =
-          sesionCaja.empleado_actual_id ?? sesionCaja.empleado_id;
+          sesionVigente.empleado_actual_id ?? sesionVigente.empleado_id;
         if (responsableAnterior !== emp.id && db.sesionesCaja.cambiarResponsable) {
           try {
             const actualizada = await db.sesionesCaja.cambiarResponsable(
-              sesionCaja.id,
+              sesionVigente.id,
               emp.id,
             );
             setSesionCaja(actualizada);
@@ -61,7 +82,7 @@ export function Login() {
               .log({
                 accion: 'cambio_responsable_caja',
                 entidad: 'sesion_caja',
-                entidad_id: sesionCaja.id,
+                entidad_id: sesionVigente.id,
                 empleado_id: emp.id,
                 detalle: {
                   empleado_anterior_id: responsableAnterior,
@@ -78,9 +99,7 @@ export function Login() {
           }
         }
       }
-      // RequireSesionAbierta poolea contra BD y si la sesión ya fue cerrada
-      // desde otro lado, kickea a /abrir-caja.
-      navigate(sesionCaja ? '/caja' : '/abrir-caja');
+      navigate(sesionVigente ? '/caja' : '/abrir-caja');
     },
     onError: (e: Error) => toast.error(e.message),
   });
