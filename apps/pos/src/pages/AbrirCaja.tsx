@@ -59,6 +59,15 @@ export function AbrirCaja() {
     !!sesionAbiertaEnCaja && responsableActualId === empleado?.id;
   const esAjena =
     !!sesionAbiertaEnCaja && responsableActualId !== empleado?.id;
+  // ¿La sesión ajena se abrió otro día? Comparamos por fecha calendario
+  // en zona local. Si es del mismo día, es un relevo normal (típico
+  // cambio de turno mañana→tarde). Si es de otro día, hubo un olvido
+  // de cierre del turno anterior — mostramos un banner más notorio y
+  // un copy sin jerga.
+  const esDeOtroDia =
+    !!sesionAbiertaEnCaja &&
+    new Date(sesionAbiertaEnCaja.abierta_en).toDateString() !==
+      new Date().toDateString();
 
   const dueño = sesionAbiertaEnCaja
     ? empleadosQ.data?.find((e) => e.id === responsableActualId)
@@ -233,14 +242,40 @@ export function AbrirCaja() {
           {cargandoEstadoCaja && <Skeleton className="h-24 w-full" />}
 
           {!cargandoEstadoCaja && esAjena && sesionAbiertaEnCaja && (
-            <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm">
+            <div
+              className={`rounded-md border p-3 text-sm ${
+                esDeOtroDia
+                  ? 'border-orange-300 bg-orange-50'
+                  : 'border-blue-300 bg-blue-50'
+              }`}
+            >
               <div className="flex items-start gap-2">
-                <Users className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-700" />
+                <Users
+                  className={`mt-0.5 h-4 w-4 flex-shrink-0 ${
+                    esDeOtroDia ? 'text-orange-700' : 'text-blue-700'
+                  }`}
+                />
                 <div className="flex-1">
-                  <div className="font-medium text-blue-900">
-                    Caja abierta por {dueñoNombre}
+                  <div
+                    className={`font-medium ${
+                      esDeOtroDia ? 'text-orange-900' : 'text-blue-900'
+                    }`}
+                  >
+                    {esDeOtroDia
+                      ? 'El turno anterior no cerró la caja'
+                      : `Caja abierta por ${dueñoNombre}`}
                   </div>
-                  <div className="mt-1 grid grid-cols-2 gap-y-0.5 text-xs text-blue-900/90">
+                  <div
+                    className={`mt-1 grid grid-cols-2 gap-y-0.5 text-xs ${
+                      esDeOtroDia ? 'text-orange-900/90' : 'text-blue-900/90'
+                    }`}
+                  >
+                    {esDeOtroDia && (
+                      <>
+                        <span>Cajero anterior:</span>
+                        <span className="text-right">{dueñoNombre}</span>
+                      </>
+                    )}
                     <span>Apertura:</span>
                     <span className="text-right tabular-nums">
                       {new Date(sesionAbiertaEnCaja.abierta_en).toLocaleString('es-AR')}
@@ -250,10 +285,14 @@ export function AbrirCaja() {
                       {formatCurrency(sesionAbiertaEnCaja.saldo_inicial)}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-blue-900/90">
-                    Si vas a atender vos, tomá la posta: quedás como
-                    responsable de la caja y las ventas siguen sobre la
-                    misma sesión (no se toca el saldo inicial).
+                  <p
+                    className={`mt-2 text-xs ${
+                      esDeOtroDia ? 'text-orange-900/90' : 'text-blue-900/90'
+                    }`}
+                  >
+                    {esDeOtroDia
+                      ? 'Podés continuar sobre la misma caja tocando "Continuar mi turno" (el saldo inicial no se toca) o avisale a Agus para que la revise antes.'
+                      : 'Si vas a atender vos, tocá "Continuar mi turno" — quedás como responsable de la caja y las ventas siguen sobre la misma sesión (el saldo inicial no se toca).'}
                   </p>
                 </div>
               </div>
@@ -297,7 +336,9 @@ export function AbrirCaja() {
                 disabled={!cajaId || tomarPostaMut.isPending}
                 onClick={() => tomarPostaMut.mutate()}
               >
-                {tomarPostaMut.isPending ? 'Tomando posta…' : 'Tomar posta'}
+                {tomarPostaMut.isPending
+                  ? 'Continuando…'
+                  : 'Continuar mi turno'}
               </Button>
             ) : (
               <Button
