@@ -119,7 +119,13 @@ function MovimientosStockInner() {
       { salida?: typeof movs[number]; entrada?: typeof movs[number] }
     >();
     for (const m of movs) {
-      const key = `${m.producto_id}|${m.cantidad}|${m.fecha}`;
+      // Redondeamos la fecha al segundo (dropeamos los ms). Los
+      // transferenciaInmediata históricos guardaban 2 movs con timestamps
+      // que diferían en microsegundos, y como agrupábamos por fecha
+      // exacta los pares no se formaban. Con el fix del repo los nuevos
+      // ya comparten timestamp, pero este redondeo rescata los históricos.
+      const fechaSeg = m.fecha.slice(0, 19);
+      const key = `${m.producto_id}|${m.cantidad}|${fechaSeg}`;
       const g = grupos.get(key) ?? {};
       if (m.tipo === 'transferencia_salida') g.salida = m;
       else g.entrada = m;

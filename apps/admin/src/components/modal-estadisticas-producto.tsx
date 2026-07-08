@@ -360,11 +360,15 @@ function HistorialMovimientos({
     const otras = movs.filter(
       (m) => m.tipo !== 'transferencia_salida' && m.tipo !== 'transferencia_entrada',
     );
-    // Pares por (cantidad + fecha exacta) — la transferencia inmediata del
-    // PoS inserta ambos movs con el mismo timestamp.
+    // Pares por (cantidad + fecha redondeada al segundo) — antes usaba
+    // la fecha exacta, pero los transferenciaInmediata históricos
+    // guardaban 2 movs con timestamps que diferían en microsegundos.
+    // Con el redondeo, los pares se agrupan bien tanto los nuevos como
+    // los históricos.
     const grupos = new Map<string, { salida?: typeof movs[number]; entrada?: typeof movs[number] }>();
     for (const m of transf) {
-      const key = `${m.cantidad}|${m.fecha}`;
+      const fechaSeg = m.fecha.slice(0, 19);
+      const key = `${m.cantidad}|${fechaSeg}`;
       const g = grupos.get(key) ?? {};
       if (m.tipo === 'transferencia_salida') g.salida = m;
       else g.entrada = m;

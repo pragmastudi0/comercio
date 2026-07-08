@@ -19,7 +19,26 @@ export type ItemCarrito = {
   /** Motivo del descuento por línea. Obligatorio si descuento_pct > 0
    *  al confirmar la venta. Queda en auditoría. */
   motivo_descuento_linea?: string;
+  /** Escalas de precio del producto (desde N unidades → precio X). Se
+   *  usan para recalcular precio_unitario al cambiar la cantidad — típico
+   *  precio mayorista al pasar el umbral. Escala 0 = precio unitario CF. */
+  escalas?: { desde: number; precio: number }[];
 };
+
+/** Devuelve el precio aplicable según las escalas y la cantidad. Toma
+ *  la ÚLTIMA escala con `desde <= cantidad`. Requiere escalas ordenadas
+ *  ascendentes por `desde`. */
+function precioSegunEscala(
+  escalas: { desde: number; precio: number }[],
+  cantidad: number,
+): number {
+  let aplicado = escalas[0]?.precio ?? 0;
+  for (const e of escalas) {
+    if (cantidad >= e.desde) aplicado = e.precio;
+    else break;
+  }
+  return aplicado;
+}
 
 export type ModoDescuento = 'pct' | 'monto';
 
@@ -54,7 +73,11 @@ type VentaState = {
   carritoActivoId: string;
   /** Próximo id correlativo (para nombrar c1, c2, c3...). */
   _nextCarritoSeq: number;
-  agregar: (producto: Producto, precio: number) => void;
+  agregar: (
+    producto: Producto,
+    precio: number,
+    escalas?: { desde: number; precio: number }[],
+  ) => void;
   setCantidad: (productoId: string, cantidad: number) => void;
   setPrecio: (productoId: string, precio: number) => void;
   setMotivoPrecio: (productoId: string, motivo: string) => void;
@@ -91,13 +114,32 @@ export const useVenta = create<VentaState>()(
       carritosParalelos: {},
       carritoActivoId: 'c1',
       _nextCarritoSeq: 2,
-      agregar: (producto, precio) =>
+      agregar: (producto, precio, escalas) =>
         set((state) => {
           const existente = state.items.find((i) => i.producto.id === producto.id);
           if (existente) {
+            // Sumar 1 y recalcular precio según escalas si aplica
+            // (cruzar el umbral mayorista al agregar la siguiente).
+            const nuevaCantidad = existente.cantidad + 1;
+            const escalasOrdenadas = existente.escalas ?? escalas ?? [];
+            const precioNuevo =
+              escalasOrdenadas.length > 1 &&
+              existente.precio_unitario === existente.precio_base
+                ? Math.max(
+                    PRECIO_MINIMO,
+                    precioSegunEscala(escalasOrdenadas, nuevaCantidad),
+                  )
+                : existente.precio_unitario;
             return {
               items: state.items.map((i) =>
-                i.producto.id === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i,
+                i.producto.id === producto.id
+                  ? {
+                      ...i,
+                      cantidad: nuevaCantidad,
+                      precio_unitario: precioNuevo,
+                      precio_base: precioNuevo,
+                    }
+                  : i,
               ),
               seleccionadoId: producto.id,
             };
@@ -108,7 +150,13 @@ export const useVenta = create<VentaState>()(
           return {
             items: [
               ...state.items,
-              { producto, cantidad: 1, precio_unitario: precioOk, precio_base: precioOk },
+              {
+                producto,
+                cantidad: 1,
+                precio_unitario: precioOk,
+                precio_base: precioOk,
+                escalas: escalas ?? undefined,
+              },
             ],
             seleccionadoId: producto.id,
           };
@@ -116,7 +164,29 @@ export const useVenta = create<VentaState>()(
       setCantidad: (productoId, cantidad) =>
         set((state) => ({
           items: state.items
-            .map((i) => (i.producto.id === productoId ? { ...i, cantidad } : i))
+            .map((i) => {
+              if (i.producto.id !== productoId) return i;
+              // Si el precio no fue editado a mano (== precio_base) y hay
+              // escalas, recalcular según la nueva cantidad. El precio_base
+              // se sincroniza con el nuevo también, así el subtotal del
+              // carrito refleja correctamente el precio mayorista aplicado.
+              const escalas = i.escalas ?? [];
+              const puedeRecalcular =
+                escalas.length > 1 && i.precio_unitario === i.precio_base;
+              if (puedeRecalcular) {
+                const nuevoPrecio = Math.max(
+                  PRECIO_MINIMO,
+                  precioSegunEscala(escalas, cantidad),
+                );
+                return {
+                  ...i,
+                  cantidad,
+                  precio_unitario: nuevoPrecio,
+                  precio_base: nuevoPrecio,
+                };
+              }
+              return { ...i, cantidad };
+            })
             .filter((i) => i.cantidad > 0),
         })),
       setPrecio: (productoId, precio) =>
