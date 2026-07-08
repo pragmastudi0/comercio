@@ -229,7 +229,7 @@ export function BuscadorProducto() {
     const precios = await db.productos.preciosDe(p.id);
     const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
     const precio = cf?.escalas[0]?.precio ?? 0;
-    agregar(p, precio);
+    agregar(p, precio, cf?.escalas ?? []);
     // NO borramos el código: dejamos el texto seleccionado para que el
     // siguiente Enter sume otra unidad del mismo producto, o que al tipear
     // se reemplace automáticamente con el código nuevo.
@@ -256,7 +256,7 @@ export function BuscadorProducto() {
     const precios = await db.productos.preciosDe(p.id);
     const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
     const precio = cf?.escalas[0]?.precio ?? 0;
-    agregar(p, precio);
+    agregar(p, precio, cf?.escalas ?? []);
     // Igual que agregarPorCodigoExacto: mantenemos el texto seleccionado
     // para sumar más unidades con Enter o reemplazar tipeando.
     setMostrarLista(false);

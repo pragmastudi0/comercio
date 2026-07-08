@@ -144,6 +144,20 @@ export function ItemCarritoRow({ item }: { item: ItemCarrito }) {
               precio editado · base {formatCurrency(item.precio_base)}
             </span>
           )}
+          {/* Precio mayorista aplicado: si la línea tiene escalas y la
+              cantidad ya cruzó el umbral, mostramos una pill indigo. */}
+          {(() => {
+            const escalas = item.escalas ?? [];
+            if (escalas.length < 2) return null;
+            const escMayo = escalas.find((e) => e.desde > 1);
+            if (!escMayo) return null;
+            if (item.cantidad < escMayo.desde) return null;
+            return (
+              <span className="rounded bg-indigo-100 px-1.5 py-0.5 font-medium text-indigo-800">
+                Precio mayorista (desde {escMayo.desde}u)
+              </span>
+            );
+          })()}
           {item.descuento_pct ? (
             <span className="flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-green-700">
               <Tag className="h-3 w-3" /> -{item.descuento_pct}%

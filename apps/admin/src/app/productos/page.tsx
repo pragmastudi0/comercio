@@ -428,10 +428,14 @@ function PanelProducto({
   });
 
   const LISTA_CF_ID = PRESET_IDS.listas.consumidorFinal;
-  const precioCfInicial =
-    preciosQ.data
-      ?.find((x) => x.lista_precio_id === LISTA_CF_ID)
-      ?.escalas[0]?.precio ?? 0;
+  const escalasIniciales =
+    preciosQ.data?.find((x) => x.lista_precio_id === LISTA_CF_ID)?.escalas ?? [];
+  const precioCfInicial = escalasIniciales[0]?.precio ?? 0;
+  // Segunda escala = precio mayorista. Si existe, tiene un `desde` > 1
+  // (típico 12u). Sino, no hay mayorista configurado.
+  const escalaMayoristaInicial = escalasIniciales.find((e) => e.desde > 1);
+  const precioMayoristaInicial = escalaMayoristaInicial?.precio ?? 0;
+  const desdeMayoristaInicial = escalaMayoristaInicial?.desde ?? 12;
 
   // State local del form. Se inicializa cuando carga el producto.
   const [nombre, setNombre] = useState('');
@@ -440,6 +444,12 @@ function PanelProducto({
   const [estadOpen, setEstadOpen] = useState(false);
   const [costoTxt, setCostoTxt] = useState('');
   const [precioCfTxt, setPrecioCfTxt] = useState('');
+  // Precio mayorista: aplica automáticamente en el PoS cuando la
+  // cantidad de la línea >= desde. Se guarda como segunda escala de la
+  // lista Consumidor Final (usamos las escalas que ya soporta el modelo).
+  const [tieneMayorista, setTieneMayorista] = useState(false);
+  const [precioMayoristaTxt, setPrecioMayoristaTxt] = useState('');
+  const [desdeMayoristaTxt, setDesdeMayoristaTxt] = useState('12');
   const [categoriaId, setCategoriaId] = useState('');
   const [proveedorId, setProveedorId] = useState('');
   const [activo, setActivo] = useState(true);
@@ -519,12 +529,28 @@ function PanelProducto({
   useEffect(() => {
     if (preciosQ.data) {
       setPrecioCfTxt(String(precioCfInicial));
+      const hayMayo = !!escalaMayoristaInicial && precioMayoristaInicial > 0;
+      setTieneMayorista(hayMayo);
+      setPrecioMayoristaTxt(hayMayo ? String(precioMayoristaInicial) : '');
+      setDesdeMayoristaTxt(hayMayo ? String(desdeMayoristaInicial) : '12');
     }
-  }, [preciosQ.data, precioCfInicial]);
+  }, [
+    preciosQ.data,
+    precioCfInicial,
+    escalaMayoristaInicial,
+    precioMayoristaInicial,
+    desdeMayoristaInicial,
+  ]);
 
   const costo = parseFloat(costoTxt) || 0;
   const precioCf = parseFloat(precioCfTxt) || 0;
   const margen = costo > 0 ? ((precioCf - costo) / costo) * 100 : 0;
+  const precioMayorista = parseFloat(precioMayoristaTxt) || 0;
+  const desdeMayorista = parseInt(desdeMayoristaTxt, 10) || 0;
+  const margenMayorista =
+    costo > 0 && precioMayorista > 0
+      ? ((precioMayorista - costo) / costo) * 100
+      : 0;
 
   function setMargenAmano(nuevoMargen: number) {
     if (costo <= 0) return;
@@ -613,11 +639,23 @@ function PanelProducto({
         descripcion_larga: descripcionLarga.trim() || undefined,
       } as unknown as Partial<Producto>;
       await db.productos.update(productoId, patch);
-      // Update del precio CF si cambió.
-      if (precioCf !== precioCfInicial) {
-        await db.productos.setPrecio(productoId, LISTA_CF_ID, [
+      // Update de las escalas de la lista CF: primera escala = precio
+      // unitario (todos los productos), segunda escala = precio mayorista
+      // desde X unidades (opcional). Si tieneMayorista se desactiva o
+      // el precio es 0, se guarda solo la escala 1.
+      const cambioCf = precioCf !== precioCfInicial;
+      const cambioMayo =
+        tieneMayorista !== (!!escalaMayoristaInicial && precioMayoristaInicial > 0) ||
+        precioMayorista !== precioMayoristaInicial ||
+        desdeMayorista !== desdeMayoristaInicial;
+      if (cambioCf || cambioMayo) {
+        const escalasNuevas: { desde: number; precio: number }[] = [
           { desde: 1, precio: precioCf },
-        ]);
+        ];
+        if (tieneMayorista && precioMayorista > 0 && desdeMayorista > 1) {
+          escalasNuevas.push({ desde: desdeMayorista, precio: precioMayorista });
+        }
+        await db.productos.setPrecio(productoId, LISTA_CF_ID, escalasNuevas);
       }
       // Aplicar los deltas de stock pendientes (los que el user tipeó
       // en los inputs +/- por local pero no apretó el botón). El motivo
@@ -882,6 +920,72 @@ function PanelProducto({
             </div>
           )}
         </div>
+        )}
+
+        {/* Precio mayorista: opcional. Cuando el cliente lleva N unidades
+            o más, en el PoS se aplica automáticamente el precio de esta
+            escala en vez del unitario. Se guarda como segunda escala en
+            producto_lista_precio (la primera es el precio CF). */}
+        {verPrecioVenta && (
+          <div className="rounded border border-indigo-200 bg-indigo-50/40 p-1.5">
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-700">
+              <input
+                type="checkbox"
+                checked={tieneMayorista}
+                onChange={(e) => setTieneMayorista(e.target.checked)}
+                disabled={!puedeEditar}
+                className="h-3.5 w-3.5"
+              />
+              <span className="font-medium">Precio mayorista por cantidad</span>
+            </label>
+            {tieneMayorista && (
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                    Precio mayorista
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={precioMayoristaTxt}
+                    onChange={(e) => setPrecioMayoristaTxt(e.target.value)}
+                    disabled={!puedeEditar}
+                    placeholder="0"
+                    className="h-7 text-sm tabular-nums"
+                  />
+                </div>
+                <div>
+                  <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                    Desde qué cantidad
+                  </Label>
+                  <Input
+                    type="number"
+                    min="2"
+                    step="1"
+                    value={desdeMayoristaTxt}
+                    onChange={(e) => setDesdeMayoristaTxt(e.target.value)}
+                    disabled={!puedeEditar}
+                    placeholder="12"
+                    className="h-7 text-sm tabular-nums"
+                  />
+                </div>
+              </div>
+            )}
+            {tieneMayorista &&
+              verCosto &&
+              costo > 0 &&
+              precioMayorista > 0 && (
+                <div className="mt-1 text-[10px] text-slate-600">
+                  Ganás <b>{formatCurrency(precioMayorista - costo)}</b> por
+                  unidad (margen{' '}
+                  <b className={margenMayorista < 0 ? 'text-red-700' : ''}>
+                    {margenMayorista.toFixed(1)}%
+                  </b>
+                  ). Se aplica desde {desdeMayorista || '?'} unidades.
+                </div>
+              )}
+          </div>
         )}
 
         <div className="grid grid-cols-2 gap-2">

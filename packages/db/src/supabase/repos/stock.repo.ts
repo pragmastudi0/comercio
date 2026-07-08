@@ -319,6 +319,14 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
         }).catch(() => {});
         throw new Error(`stock.transferenciaInmediata (destino): ${(e as Error).message}`);
       }
+      // Compartimos EL MISMO timestamp para los dos movimientos del par
+      // (salida + entrada). Antes cada INSERT tomaba su propio default
+      // now() de Postgres y quedaban con fechas distintas en microsegundos.
+      // El listado de /admin/movimientos-stock arma pares por
+      // (producto_id + cantidad + fecha exacta) — como las fechas no
+      // matcheaban, los pares nunca se formaban y las transferencias no
+      // aparecían en el listado. Bug real reportado por el cliente.
+      const fechaPar = new Date().toISOString();
       const salida = ok<MovimientoStock>(
         await sb
           .from('movimientos_stock')
@@ -330,6 +338,7 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
             cantidad,
             motivo,
             empleado_id,
+            fecha: fechaPar,
           })
           .select('*')
           .single(),
@@ -346,6 +355,7 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
             cantidad,
             motivo,
             empleado_id,
+            fecha: fechaPar,
           })
           .select('*')
           .single(),
@@ -433,6 +443,10 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
         throw new Error(`stock.anularTransferencia (destino): ${(e as Error).message}`);
       }
 
+      // Mismo timestamp para los 2 movs — ver comentario en
+      // transferenciaInmediata: sin esto los pares no se agrupan bien
+      // en el listado del admin.
+      const fechaPar = new Date().toISOString();
       const salida = ok<MovimientoStock>(
         await sb
           .from('movimientos_stock')
@@ -444,6 +458,7 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
             cantidad: original.cantidad,
             motivo: refMotivo,
             empleado_id,
+            fecha: fechaPar,
           })
           .select('*')
           .single(),
@@ -460,6 +475,7 @@ export function makeStockRepo(sb: SupabaseClient): StockRepo {
             cantidad: original.cantidad,
             motivo: refMotivo,
             empleado_id,
+            fecha: fechaPar,
           })
           .select('*')
           .single(),
