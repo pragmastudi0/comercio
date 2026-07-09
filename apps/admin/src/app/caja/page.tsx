@@ -317,6 +317,14 @@ function DialogEditarSesion({
     sesion.empleado_actual_id ?? sesion.empleado_id,
   );
   const [cajaId, setCajaId] = useState(sesion.caja_id);
+  const [saldoInicialTxt, setSaldoInicialTxt] = useState(
+    String(sesion.saldo_inicial ?? 0),
+  );
+  const [saldoFinalDeclaradoTxt, setSaldoFinalDeclaradoTxt] = useState(
+    sesion.saldo_final_declarado != null
+      ? String(sesion.saldo_final_declarado)
+      : '',
+  );
   const empleadosOrdenados = [...empleados]
     .filter((e) => e.activo || e.id === sesion.empleado_id || e.id === sesion.empleado_actual_id)
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -330,6 +338,8 @@ function DialogEditarSesion({
         empleado_id?: string;
         empleado_actual_id?: string;
         caja_id?: string;
+        saldo_inicial?: number;
+        saldo_final_declarado?: number | null;
       } = {};
       if (empleadoId !== sesion.empleado_id) patch.empleado_id = empleadoId;
       const actualOriginal = sesion.empleado_actual_id ?? sesion.empleado_id;
@@ -337,6 +347,30 @@ function DialogEditarSesion({
         patch.empleado_actual_id = empleadoActualId;
       }
       if (cajaId !== sesion.caja_id) patch.caja_id = cajaId;
+      const saldoInicialNum = parseFloat(saldoInicialTxt);
+      if (
+        Number.isFinite(saldoInicialNum) &&
+        saldoInicialNum >= 0 &&
+        Math.abs(saldoInicialNum - sesion.saldo_inicial) > 0.001
+      ) {
+        patch.saldo_inicial = saldoInicialNum;
+      }
+      // Saldo final: string vacío → guardamos null (sesión sin declaración).
+      // Con valor → parse a number.
+      const sfTrim = saldoFinalDeclaradoTxt.trim();
+      const sfOriginal = sesion.saldo_final_declarado ?? null;
+      if (sfTrim === '' && sfOriginal !== null) {
+        patch.saldo_final_declarado = null;
+      } else if (sfTrim !== '') {
+        const sfNum = parseFloat(sfTrim);
+        if (
+          Number.isFinite(sfNum) &&
+          sfNum >= 0 &&
+          (sfOriginal === null || Math.abs(sfNum - sfOriginal) > 0.001)
+        ) {
+          patch.saldo_final_declarado = sfNum;
+        }
+      }
       if (Object.keys(patch).length === 0) return;
       await db.sesionesCaja.editarSesion(sesion.id, patch);
       await db.auditoria.log({
@@ -404,10 +438,24 @@ function DialogEditarSesion({
   });
 
   const abierta = sesion.estado === 'abierta';
+  const saldoInicialCambio = (() => {
+    const n = parseFloat(saldoInicialTxt);
+    return Number.isFinite(n) && Math.abs(n - sesion.saldo_inicial) > 0.001;
+  })();
+  const saldoFinalCambio = (() => {
+    const t = saldoFinalDeclaradoTxt.trim();
+    const orig = sesion.saldo_final_declarado ?? null;
+    if (t === '') return orig !== null;
+    const n = parseFloat(t);
+    if (!Number.isFinite(n)) return false;
+    return orig === null || Math.abs(n - orig) > 0.001;
+  })();
   const cambios =
     empleadoId !== sesion.empleado_id ||
     empleadoActualId !== (sesion.empleado_actual_id ?? sesion.empleado_id) ||
-    cajaId !== sesion.caja_id;
+    cajaId !== sesion.caja_id ||
+    saldoInicialCambio ||
+    saldoFinalCambio;
 
   return (
     <>
@@ -467,6 +515,38 @@ function DialogEditarSesion({
               </option>
             ))}
           </select>
+        </div>
+        {/* Editar saldos: el saldo inicial siempre se puede editar; el
+            saldo declarado por el cajero al cerrar solo se muestra si la
+            sesión está cerrada (o si Pragma quiere setearlo en una que
+            todavía no cerró — raro pero se permite). Toda edición queda
+            auditada con el estado ANTES en el detalle del log. */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label className="mb-1 block text-xs">Saldo inicial ($)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={saldoInicialTxt}
+              onChange={(e) => setSaldoInicialTxt(e.target.value)}
+              className="h-9 tabular-nums"
+            />
+          </div>
+          <div>
+            <Label className="mb-1 block text-xs">
+              Declarado al cerrar ($)
+            </Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={saldoFinalDeclaradoTxt}
+              onChange={(e) => setSaldoFinalDeclaradoTxt(e.target.value)}
+              placeholder={abierta ? '(sesión abierta)' : 'sin declarar'}
+              className="h-9 tabular-nums"
+            />
+          </div>
         </div>
         {abierta && (
           <div className="rounded-md border border-orange-200 bg-orange-50 p-2 text-xs">

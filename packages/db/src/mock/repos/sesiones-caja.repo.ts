@@ -119,6 +119,10 @@ export function makeSesionesCajaRepo(store: Store): SesionesCajaRepo {
           empleado_actual_id: patch.empleado_actual_id,
         }),
         ...(patch.caja_id !== undefined && { caja_id: patch.caja_id }),
+        ...(patch.saldo_inicial !== undefined && { saldo_inicial: patch.saldo_inicial }),
+        ...(patch.saldo_final_declarado !== undefined && {
+          saldo_final_declarado: patch.saldo_final_declarado ?? undefined,
+        }),
       };
       return clone(store.sesionesCaja[idx]!);
     },

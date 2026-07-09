@@ -186,6 +186,10 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
         update.empleado_actual_id = patch.empleado_actual_id;
       }
       if (patch.caja_id !== undefined) update.caja_id = patch.caja_id;
+      if (patch.saldo_inicial !== undefined) update.saldo_inicial = patch.saldo_inicial;
+      if (patch.saldo_final_declarado !== undefined) {
+        update.saldo_final_declarado = patch.saldo_final_declarado;
+      }
       return ok<SesionCaja>(
         await sb
           .from('sesiones_caja')
