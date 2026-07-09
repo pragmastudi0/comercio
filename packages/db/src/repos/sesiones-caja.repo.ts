@@ -43,7 +43,13 @@ export type SesionesCajaRepo = {
    */
   editarSesion?(
     id: ID,
-    patch: { empleado_id?: ID; empleado_actual_id?: ID; caja_id?: ID },
+    patch: {
+      empleado_id?: ID;
+      empleado_actual_id?: ID;
+      caja_id?: ID;
+      saldo_inicial?: number;
+      saldo_final_declarado?: number | null;
+    },
   ): Promise<SesionCaja>;
   /**
    * Cierra una sesión que quedó abierta sin arqueo (el cajero se fue
