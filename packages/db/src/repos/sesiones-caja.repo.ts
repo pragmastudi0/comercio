@@ -52,4 +52,12 @@ export type SesionesCajaRepo = {
    * Pragma. Devuelve la sesión ya cerrada.
    */
   forzarCierre?(id: ID, cerradaEn?: string): Promise<SesionCaja>;
+  /**
+   * Elimina una sesión de caja Y todos sus registros asociados
+   * (movimientos_caja, ventas de la sesión, movimientos_stock de esas
+   * ventas). Reservado al dev de Pragma para limpiar sesiones de prueba.
+   * OPERACIÓN IRREVERSIBLE — no hay soft delete. Recomendable exportar
+   * un backup antes si hay data real.
+   */
+  eliminar?(id: ID): Promise<{ ventas: number; movimientos_caja: number }>;
 };
