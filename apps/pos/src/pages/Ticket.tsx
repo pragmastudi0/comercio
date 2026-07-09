@@ -96,14 +96,20 @@ export function Ticket() {
   const codigo = (productoId: string) =>
     productosQ.data?.find((p) => p.id === productoId)?.codigo_interno ?? '—';
 
-  // El cajero puede anular su propia venta del día. Validación servidor
-  // adicional vive en el repo (chequea permisos del rol).
+  // El cajero puede anular CUALQUIER venta del día del sistema. Antes se
+  // requería que la venta fuera "propia" (venta.empleado_id === empleado.id),
+  // pero en la práctica todos operan sobre la sesión que quedó logueada
+  // en el PoS, así que las ventas quedan atribuidas al usuario logueado
+  // aunque físicamente las haya cobrado otro cajero. Con la regla vieja,
+  // si Andrés llega y quiere anular una venta que en el sistema figura
+  // hecha por Susana (aunque él la haya cobrado), no podía. Ahora sí.
+  // La anulación queda registrada en auditoría con el empleado que la
+  // anuló, así que hay trazabilidad completa.
   const inicioDelDia = new Date();
   inicioDelDia.setHours(0, 0, 0, 0);
-  const esPropiaDelDia =
+  const esAnulableHoy =
     !!empleado &&
     venta.estado === 'completada' &&
-    venta.empleado_id === empleado.id &&
     new Date(venta.fecha) >= inicioDelDia;
 
   // El cambio está habilitado si la venta es de los últimos 2 días y está
@@ -136,7 +142,7 @@ export function Ticket() {
                 Cambio
               </Button>
             )}
-            {esPropiaDelDia && (
+            {esAnulableHoy && (
               <Button
                 variant="outline"
                 size="sm"

@@ -274,6 +274,14 @@ export const PERMISOS_PRESET: Record<RolPreset, PermisosConfig> = {
     ventas: {
       crear: true,
       anular_propia_del_dia: true,
+      // Los cajeros de Turisteando en la práctica operan todos sobre la
+      // misma sesión del PoS (nadie hace login formal por cambio de
+      // turno), así que las ventas quedan atribuidas al usuario logueado
+      // aunque físicamente las haya cobrado otro. Habilitamos anular
+      // ajenas del día para que ese caso no bloquee. La UI ya muestra
+      // el botón Anular con esta política; la auditoría registra quién
+      // hizo la anulación real.
+      anular_ajena_del_dia: true,
       descuento_manual: true,
       modificar_precio_unitario: true,
       vender_cuenta_corriente: true,
