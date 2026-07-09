@@ -52,15 +52,16 @@ export function CerrarCaja() {
     totales[m.metodo] += signo * m.monto;
   }
   const totalEfectivoEsperado = (sesion?.saldo_inicial ?? 0) + totales.efectivo;
-  const diferencia = parseFloat(saldoFinal || '0') - totalEfectivoEsperado;
-  // "Sobrante para retirar": el cajero al cierre se lleva el efectivo que
-  // cobró en el turno y deja SOLO el saldo inicial en caja como cambio
-  // para el próximo turno. Fórmula: saldo declarado - saldo inicial.
-  //   Ej.: abrió con $15.000, cierra declarando $18.000 → sobró $3.000
-  //   que se retiran; en caja quedan los $15.000 iniciales limpios.
-  // Distinto de "diferencia" (arqueo: declarado vs esperado). Podés
-  // tener diferencia = 0 y sobrante > 0 al mismo tiempo — es lo normal
-  // cuando cobraste efectivo en el turno.
+  // Turisteando: al cierre el cajero retira el efectivo cobrado en el
+  // turno y deja SOLO el saldo inicial en caja como cambio del próximo
+  // turno. La comparación real es:
+  //   sobranteRetiro = declarado - saldo_inicial
+  //     - Cero    → cuadra perfecto (dejó el inicial, retiró el cobrado).
+  //     - Positivo → sobró para retirar (o dejó más de lo pedido).
+  //     - Negativo → faltó, revisar.
+  // Ya usamos esta lógica en /admin/caja hace tiempo. El PoS venía con
+  // el arqueo viejo comparando contra "efectivo esperado" (saldo inicial
+  // + ventas efectivo), que tiraba "falta $X" siempre — falso positivo.
   const sobranteRetiro =
     parseFloat(saldoFinal || '0') - (sesion?.saldo_inicial ?? 0);
   // Total facturado del turno: suma de todos los métodos (efectivo,
@@ -200,9 +201,13 @@ export function CerrarCaja() {
                   {formatCurrency(totalFacturado)}
                 </span>
               </div>
-              <div className="flex justify-between pt-1 text-sm font-semibold">
-                <span>Efectivo esperado (saldo inicial + ventas - retiros)</span>
-                <span className="tabular-nums">{formatCurrency(totalEfectivoEsperado)}</span>
+              <div className="flex justify-between pt-1 text-xs text-muted-foreground">
+                <span>
+                  Efectivo neto del turno (saldo inicial + ventas − retiros)
+                </span>
+                <span className="tabular-nums">
+                  {formatCurrency(totalEfectivoEsperado)}
+                </span>
               </div>
             </div>
           )}
@@ -368,31 +373,24 @@ export function CerrarCaja() {
           </div>
           {saldoFinal && (
             <div className="space-y-2">
-              {/* Arqueo: diferencia entre lo contado y lo esperado. Si es
-                  0 la caja cierra bien; si sobra o falta hay que investigar. */}
-              <div
-                className={`rounded p-3 text-sm ${
-                  Math.abs(diferencia) < 0.01
-                    ? 'bg-green-50 text-green-700'
-                    : diferencia < 0
-                      ? 'bg-destructive/10 text-destructive'
-                      : 'bg-orange-50 text-orange-700'
-                }`}
-              >
-                Arqueo: {formatCurrency(diferencia)}{' '}
-                {Math.abs(diferencia) < 0.01
-                  ? '· cuadra con lo esperado'
-                  : diferencia < 0
-                    ? '· falta efectivo respecto al esperado'
-                    : '· sobra efectivo respecto al esperado'}
-              </div>
-
-              {/* Sobrante para retirar: el cajero se lleva la diferencia
-                  entre lo declarado y el saldo inicial, así en la caja
-                  quedan sólo los billetes de cambio para el próximo turno.
-                  Distinto del arqueo — puede sobrar $3.000 acá aunque el
-                  arqueo cuadre en cero. */}
-              {sobranteRetiro > 0.01 ? (
+              {/* Arqueo unificado: comparación contra saldo_inicial (no
+                  contra "efectivo esperado" que incluye lo cobrado — eso
+                  es normal que el cajero se lo lleve). Ver comentario en
+                  el cálculo de sobranteRetiro. Los 3 casos:
+                    - Cuadra (dejó el inicial, retiró todo lo cobrado)
+                    - Sobró para retirar
+                    - Faltó al saldo inicial */}
+              {Math.abs(sobranteRetiro) < 0.01 ? (
+                <div className="rounded border border-green-300 bg-green-50 p-3 text-sm text-green-800">
+                  <div className="font-semibold">
+                    Cuadra: dejaste exactamente el saldo inicial (
+                    {formatCurrency(sesion?.saldo_inicial ?? 0)}).
+                  </div>
+                  <div className="mt-0.5 text-xs">
+                    El efectivo cobrado durante el turno queda retirado.
+                  </div>
+                </div>
+              ) : sobranteRetiro > 0.01 ? (
                 <div className="rounded border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
                   <div className="font-semibold">
                     Sobró para retirar: {formatCurrency(sobranteRetiro)}
@@ -403,7 +401,7 @@ export function CerrarCaja() {
                     en caja como cambio.
                   </div>
                 </div>
-              ) : sobranteRetiro < -0.01 ? (
+              ) : (
                 <div className="rounded border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">
                   <div className="font-semibold">
                     Falta para completar el saldo inicial:{' '}
@@ -414,7 +412,7 @@ export function CerrarCaja() {
                     de confirmar.
                   </div>
                 </div>
-              ) : null}
+              )}
             </div>
           )}
           <Button
