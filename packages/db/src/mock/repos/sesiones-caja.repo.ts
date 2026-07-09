@@ -134,5 +134,25 @@ export function makeSesionesCajaRepo(store: Store): SesionesCajaRepo {
       };
       return clone(store.sesionesCaja[idx]!);
     },
+    async eliminar(id) {
+      const idx = store.sesionesCaja.findIndex((x) => x.id === id);
+      if (idx === -1) throw notFound('Sesión de caja', id);
+      // Borrar ventas + movimientos_caja de la sesión. En el mock los
+      // movimientos_stock de las ventas no se tocan porque el mock no
+      // los tiene indexados por sesion_caja_id.
+      const ventasIds = store.ventas
+        .filter((v) => v.sesion_caja_id === id)
+        .map((v) => v.id);
+      const ventasBorradas = ventasIds.length;
+      store.ventas = store.ventas.filter((v) => v.sesion_caja_id !== id);
+      const movsBorrados = store.movimientosCaja.filter(
+        (m) => m.sesion_caja_id === id,
+      ).length;
+      store.movimientosCaja = store.movimientosCaja.filter(
+        (m) => m.sesion_caja_id !== id,
+      );
+      store.sesionesCaja.splice(idx, 1);
+      return { ventas: ventasBorradas, movimientos_caja: movsBorrados };
+    },
   };
 }

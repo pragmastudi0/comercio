@@ -211,5 +211,69 @@ export function makeSesionesCajaRepo(sb: SupabaseClient): SesionesCajaRepo {
         'sesiones_caja.forzarCierre',
       );
     },
+    async eliminar(id) {
+      // Cascade manual: borrar antes las dependencias que apuntan a la
+      // sesión (o a las ventas de la sesión) y después la sesión misma.
+      // Orden importa por las FK. Si algún paso falla se aborta.
+      //
+      // NO ES ATÓMICO. Si algún paso falla la sesión puede quedar
+      // parcialmente borrada. En la práctica lo usa solo el dev de
+      // Pragma para limpiar pruebas — vale la simplicidad.
+
+      // 1) IDs de las ventas de esta sesión (para el paso 2).
+      const { data: ventasFilas, error: errVentas } = await sb
+        .from('ventas')
+        .select('id')
+        .eq('sesion_caja_id', id);
+      if (errVentas) {
+        throw new Error(`sesiones_caja.eliminar (ventas ids): ${errVentas.message}`);
+      }
+      const ventasIds = (ventasFilas ?? []).map((r) => r.id as string);
+
+      // 2) Movimientos de stock que refieren a ventas de esta sesión.
+      if (ventasIds.length > 0) {
+        const { error } = await sb
+          .from('movimientos_stock')
+          .delete()
+          .in('referencia_id', ventasIds);
+        if (error) {
+          throw new Error(
+            `sesiones_caja.eliminar (movimientos_stock): ${error.message}`,
+          );
+        }
+      }
+
+      // 3) Movimientos de caja de la sesión.
+      const { data: movsCajaData, error: errMovsC } = await sb
+        .from('movimientos_caja')
+        .delete()
+        .eq('sesion_caja_id', id)
+        .select('id');
+      if (errMovsC) {
+        throw new Error(
+          `sesiones_caja.eliminar (movimientos_caja): ${errMovsC.message}`,
+        );
+      }
+
+      // 4) Ventas de la sesión (todos sus estados: completadas, anuladas,
+      //    canceladas, presupuestos).
+      if (ventasIds.length > 0) {
+        const { error } = await sb.from('ventas').delete().eq('sesion_caja_id', id);
+        if (error) {
+          throw new Error(`sesiones_caja.eliminar (ventas): ${error.message}`);
+        }
+      }
+
+      // 5) La sesión.
+      const { error: errSes } = await sb.from('sesiones_caja').delete().eq('id', id);
+      if (errSes) {
+        throw new Error(`sesiones_caja.eliminar (sesion): ${errSes.message}`);
+      }
+
+      return {
+        ventas: ventasIds.length,
+        movimientos_caja: movsCajaData?.length ?? 0,
+      };
+    },
   };
 }

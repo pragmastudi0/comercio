@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Wallet, LockOpen, Lock, Eye, ChevronDown, ChevronUp, Pencil, LockKeyhole } from 'lucide-react';
+import { Wallet, LockOpen, Lock, Eye, ChevronDown, ChevronUp, Pencil, LockKeyhole, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { esPragmaDev } from '@comercio/business';
@@ -377,6 +377,32 @@ function DialogEditarSesion({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const eliminarMut = useMutation({
+    mutationFn: async () => {
+      if (!db.sesionesCaja.eliminar) {
+        throw new Error('El repo no soporta eliminar sesión');
+      }
+      // Log ANTES de eliminar — sino se borra la fila y no queda rastro.
+      await db.auditoria.log({
+        empleado_id: empleadoLogueadoId,
+        accion: 'dev_eliminar_sesion',
+        entidad: 'sesion_caja',
+        entidad_id: sesion.id,
+        detalle: { sesion },
+      });
+      const r = await db.sesionesCaja.eliminar(sesion.id);
+      return r;
+    },
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['sesiones-caja-todas'] });
+      toast.success(
+        `Sesión eliminada (${r.ventas} venta(s), ${r.movimientos_caja} mov. de caja)`,
+      );
+      onCerrar();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const abierta = sesion.estado === 'abierta';
   const cambios =
     empleadoId !== sesion.empleado_id ||
@@ -471,6 +497,39 @@ function DialogEditarSesion({
             </Button>
           </div>
         )}
+        {/* Eliminar sesión — reservado a Pragma para limpiar pruebas.
+            Borra la sesión + sus ventas + movs de caja + movs de stock.
+            Operación irreversible. */}
+        <div className="rounded-md border border-red-300 bg-red-50 p-2 text-xs">
+          <div className="mb-1 font-medium text-red-900">
+            Eliminar sesión (irreversible)
+          </div>
+          <p className="mb-2 text-red-900/90">
+            Borra la sesión y TODO lo asociado: ventas, movimientos de caja
+            y movimientos de stock generados por esas ventas. Usar solo
+            para limpiar sesiones de prueba.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const ok1 = confirm(
+                'Vas a ELIMINAR la sesión y todo lo asociado (ventas, movimientos de caja y stock). Es IRREVERSIBLE. ¿Continuar?',
+              );
+              if (!ok1) return;
+              const ok2 = confirm(
+                '¿Estás totalmente seguro? Esta operación NO se puede deshacer.',
+              );
+              if (!ok2) return;
+              eliminarMut.mutate();
+            }}
+            disabled={eliminarMut.isPending}
+            className="border-red-400 text-red-800 hover:bg-red-100"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            {eliminarMut.isPending ? 'Eliminando…' : 'Eliminar sesión'}
+          </Button>
+        </div>
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onCerrar}>
@@ -528,6 +587,21 @@ function DetalleSesion({
   const forzadoLog = (auditoriaQ.data ?? []).find(
     (l) => l.accion === 'dev_forzar_cierre_sesion',
   );
+  // Cuando el cierre fue forzado desde el admin, el "Cerrada por" real
+  // es quien accionó desde el admin (Agus/Pragma), no el último cajero
+  // que estaba en la sesión (empleado_actual_id). Buscamos el nombre
+  // en el log de auditoría del forzado.
+  const empleadosLookupQ = useQuery({
+    queryKey: ['empleados-lookup-cierre'],
+    queryFn: () => db.empleados.list(),
+  });
+  const empleadoForzoNombre = (() => {
+    if (!forzadoLog?.empleado_id) return null;
+    const e = empleadosLookupQ.data?.find(
+      (x) => x.id === forzadoLog.empleado_id,
+    );
+    return e ? `${e.nombre} ${e.apellido ?? ''}`.trim() : null;
+  })();
 
   const ventas = (ventasQ.data ?? []) as Venta[];
   const ventasCompletadas = ventas.filter((v) => v.estado === 'completada');
@@ -729,7 +803,14 @@ function DetalleSesion({
             <>
               <span className="text-muted-foreground">Cerrada por</span>
               <span className="text-right">
-                <span className="font-medium">{empleadoNombre}</span>
+                {/* Si fue cierre forzado desde admin, mostramos QUIÉN lo
+                    forzó (Agus/Pragma) — antes decía el último cajero de
+                    la sesión, que no era quien realmente la cerró. */}
+                <span className="font-medium">
+                  {forzadoLog && empleadoForzoNombre
+                    ? empleadoForzoNombre
+                    : empleadoNombre}
+                </span>
                 {forzadoLog && (
                   <span className="ml-1.5 inline-block rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-orange-800">
                     Cierre forzado
