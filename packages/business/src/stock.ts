@@ -49,6 +49,8 @@ export const MOTIVOS_EGRESO_STOCK = [
   'Extravío de mercadería',
   'Mercadería en mal estado',
   'Devolución al proveedor',
+  'Vale mercadería',
+  'Corrección de mercadería',
 ] as const;
 
 export const MOTIVO_OTROS = 'Otros';

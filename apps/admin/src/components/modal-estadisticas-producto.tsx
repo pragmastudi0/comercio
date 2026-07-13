@@ -157,7 +157,7 @@ export function ModalEstadisticasProducto({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} className="max-w-xl">
+    <Dialog open={open} onOpenChange={onOpenChange} className="max-w-6xl">
       <DialogHeader>
         <DialogTitle>
           <span className="flex items-center gap-2">
@@ -210,37 +210,38 @@ export function ModalEstadisticasProducto({
             )}
           </div>
 
-          {/* Rotación + totales */}
-          <div className="grid grid-cols-2 gap-2">
-            <Stat label="Vendidos últimos 7 días" valor={datos.cantidad7d} sub={`${datos.ventas7d} venta(s)`} />
-            <Stat label="Vendidos últimos 30 días" valor={datos.cantidad30d} sub={`${datos.ventas30d} venta(s)`} />
-          </div>
-
-          <div className="rounded-md border border-slate-300 bg-white p-3">
-            <div className="text-xs font-medium uppercase text-muted-foreground">
-              Rotación promedio (últimos 30 días)
-            </div>
-            <div className="mt-1 text-xl font-bold tabular-nums">
-              {datos.rotacion30d.toFixed(2)}{' '}
-              <span className="text-xs font-normal text-muted-foreground">u/día</span>
-            </div>
-          </div>
-
-          {/* Totales 90 días */}
-          <div className="grid grid-cols-2 gap-2 rounded-md border border-slate-300 bg-slate-50 p-2">
-            <div className="text-center">
+          {/* KPIs compactados en una sola fila (5 tarjetas). Con el modal
+              más ancho entra todo en un vistazo. */}
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            <Stat
+              label="Vendidos 7 días"
+              valor={datos.cantidad7d}
+              sub={`${datos.ventas7d} venta(s)`}
+            />
+            <Stat
+              label="Vendidos 30 días"
+              valor={datos.cantidad30d}
+              sub={`${datos.ventas30d} venta(s)`}
+            />
+            <Stat
+              label="Vendidos 90 días"
+              valor={datos.cantidadTotal}
+              sub={`${datos.ventas} venta(s)`}
+            />
+            <div className="rounded-md border border-slate-300 bg-white p-2 text-center">
               <div className="text-[10px] uppercase text-muted-foreground">
-                Cantidad vendida (90 días)
+                Rotación 30d
               </div>
-              <div className="text-lg font-semibold tabular-nums text-slate-900">
-                {datos.cantidadTotal}
+              <div className="text-xl font-semibold tabular-nums">
+                {datos.rotacion30d.toFixed(2)}
               </div>
+              <div className="text-[10px] text-muted-foreground">u/día</div>
             </div>
-            <div className="text-center">
-              <div className="text-[10px] uppercase text-muted-foreground">
-                Facturado (90 días)
+            <div className="rounded-md border border-slate-300 bg-emerald-50 p-2 text-center">
+              <div className="text-[10px] uppercase text-emerald-800">
+                Facturado 90d
               </div>
-              <div className="text-lg font-semibold tabular-nums text-emerald-700">
+              <div className="text-lg font-semibold tabular-nums text-emerald-800">
                 {formatCurrency(datos.facturadoTotal)}
               </div>
             </div>
@@ -422,8 +423,12 @@ function HistorialMovimientos({
   // '?' visualmente). Es una limitación conocida del schema; se puede
   // resolver con una columna nueva en BD si molesta.
   type FilaConSaldo = Fila & {
-    /** Stock que quedó en el depósito principal después de este mov. */
-    saldoLocal: Map<string, number>;
+    /** Snapshot COMPLETO de stock por depósito DESPUÉS de este mov.
+     *  Incluye todos los depósitos que aparecen en el stock actual, no
+     *  solo los que este mov tocó — para que la tabla tenga una columna
+     *  fija por depósito y se lea todo el estado del producto en cada
+     *  línea del historial. */
+    saldoPorDeposito: Map<string, number>;
     /** Suma de stock del producto en todos los depósitos después de este mov. */
     saldoTotal: number;
     /** true si es un ajuste y no podemos calcular el delta con certeza. */
@@ -440,25 +445,21 @@ function HistorialMovimientos({
 
     const out: FilaConSaldo[] = [];
     for (const f of filas) {
-      // Snapshot de saldos DESPUÉS del mov (= estado actual de los punteros).
-      const saldoLocal = new Map<string, number>();
+      // Snapshot DESPUÉS del mov = estado actual de los punteros ANTES de
+      // retroceder. Clonamos el Map completo para que quede fijo por fila.
+      const saldoPorDeposito = new Map(punteros);
       let saldoIncierto = false;
 
       if (f.kind === 'transferencia') {
-        // Mov de origen: sale cantidad. Mov de destino: entra cantidad.
-        // Neto total = 0. Saldo local muestra ambos.
+        // Retroceder: antes del mov, origen tenía +cant y destino -cant.
+        // Total neto = 0.
         const dOr = punteros.get(f.origen_id) ?? 0;
         const dDe = punteros.get(f.destino_id) ?? 0;
-        saldoLocal.set(f.origen_id, dOr);
-        saldoLocal.set(f.destino_id, dDe);
-        // Retroceder: antes del mov, origen tenía +cant y destino -cant.
         punteros.set(f.origen_id, dOr + f.cantidad);
         punteros.set(f.destino_id, dDe - f.cantidad);
-        // Total no cambia (fue cero neto).
       } else {
         // Simple: afecta un depósito.
         const d = punteros.get(f.deposito_id) ?? 0;
-        saldoLocal.set(f.deposito_id, d);
         let delta = 0;
         if (
           f.tipo === 'venta' ||
@@ -487,10 +488,30 @@ function HistorialMovimientos({
           totalActual -= delta;
         }
       }
-      out.push({ ...f, saldoLocal, saldoTotal: totalActual, saldoIncierto });
+      out.push({ ...f, saldoPorDeposito, saldoTotal: totalActual, saldoIncierto });
     }
     return out;
   }, [filas, stockActual]);
+
+  // Lista ordenada de depósitos que aparecen en el stock actual — para
+  // renderizar una columna fija por cada uno. Preservamos el orden que
+  // llega de la query de depositos si lo tenemos, si no ordenamos alfa.
+  const depositosVisibles = useMemo(() => {
+    const idsConStock = new Set(
+      (stockActual ?? []).map((s) => s.deposito_id),
+    );
+    // Orden estable: primero según el orden natural del array de
+    // `depositos` (que suele venir "Central, B12, C11"), después alfabético
+    // para cualquier depósito huérfano.
+    const enOrden = depositos.filter((d) => idsConStock.has(d.id));
+    const restoIds = [...idsConStock].filter(
+      (id) => !depositos.some((d) => d.id === id),
+    );
+    return [
+      ...enOrden,
+      ...restoIds.map((id) => ({ id, nombre: '—' })),
+    ];
+  }, [depositos, stockActual]);
 
   function fmtFecha(iso: string): string {
     return new Date(iso).toLocaleString('es-AR', {
@@ -535,19 +556,30 @@ function HistorialMovimientos({
           No hubo movimientos de este producto en los últimos 90 días.
         </p>
       ) : (
-        <div className="max-h-80 overflow-y-auto rounded-md border">
+        <div className="max-h-[32rem] overflow-y-auto rounded-md border">
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-muted/60 text-[10px] uppercase text-muted-foreground">
+            <thead className="sticky top-0 z-10 bg-muted/60 text-[10px] uppercase text-muted-foreground">
               <tr>
                 <th className="px-2 py-1 text-left">Fecha</th>
                 <th className="px-2 py-1 text-left">Tipo</th>
                 <th className="px-2 py-1 text-right">Cant.</th>
                 <th className="px-2 py-1 text-left">Local</th>
+                {/* Una columna por depósito: cómo quedó el stock del
+                    producto en ESE depósito después del mov. */}
+                {depositosVisibles.map((d) => (
+                  <th
+                    key={d.id}
+                    className="whitespace-nowrap px-2 py-1 text-right"
+                    title={`Stock en ${d.nombre} después de este movimiento`}
+                  >
+                    {d.nombre}
+                  </th>
+                ))}
                 <th
-                  className="px-2 py-1 text-right"
-                  title="Stock total del producto (suma de todos los locales) después de este movimiento"
+                  className="border-l px-2 py-1 text-right font-semibold"
+                  title="Suma de stock del producto en todos los depósitos después de este movimiento"
                 >
-                  Stock total
+                  Total
                 </th>
                 <th className="px-2 py-1 text-left">Motivo</th>
                 <th className="px-2 py-1 text-left">Origen</th>
@@ -573,7 +605,22 @@ function HistorialMovimientos({
                         <ArrowRight className="mx-0.5 inline h-3 w-3 text-muted-foreground" />
                         <span>{depPorId.get(f.destino_id) ?? '—'}</span>
                       </td>
-                      <td className="px-2 py-1 text-right tabular-nums">
+                      {depositosVisibles.map((d) => {
+                        const val = f.saldoPorDeposito.get(d.id) ?? 0;
+                        const esOrigenODestino =
+                          d.id === f.origen_id || d.id === f.destino_id;
+                        return (
+                          <td
+                            key={d.id}
+                            className={`px-2 py-1 text-right tabular-nums ${
+                              esOrigenODestino ? 'bg-blue-50/50 font-medium' : ''
+                            }`}
+                          >
+                            {val}
+                          </td>
+                        );
+                      })}
+                      <td className="border-l px-2 py-1 text-right font-semibold tabular-nums">
                         {f.saldoTotal}
                       </td>
                       <td className="px-2 py-1 text-muted-foreground">
@@ -609,7 +656,26 @@ function HistorialMovimientos({
                     <td className="whitespace-nowrap px-2 py-1">
                       {depPorId.get(f.deposito_id) ?? '—'}
                     </td>
-                    <td className="px-2 py-1 text-right tabular-nums">
+                    {depositosVisibles.map((d) => {
+                      const val = f.saldoPorDeposito.get(d.id) ?? 0;
+                      const esAfectado = d.id === f.deposito_id;
+                      return (
+                        <td
+                          key={d.id}
+                          className={`px-2 py-1 text-right tabular-nums ${
+                            esAfectado ? 'bg-blue-50/50 font-medium' : ''
+                          }`}
+                          title={
+                            f.saldoIncierto && esAfectado
+                              ? 'No podemos calcular el saldo previo con certeza (ajuste con motivo libre).'
+                              : undefined
+                          }
+                        >
+                          {f.saldoIncierto && esAfectado ? `${val} ?` : val}
+                        </td>
+                      );
+                    })}
+                    <td className="border-l px-2 py-1 text-right font-semibold tabular-nums">
                       {f.saldoTotal}
                     </td>
                     <td className="px-2 py-1 text-muted-foreground">
