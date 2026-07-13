@@ -39,6 +39,45 @@ function normalizarMotivo(s: string): string {
     .trim();
 }
 
+// Palabras "vacías" que ignoramos al comparar motivos por palabras
+// significativas. Motivos como "correccion inventario" (tipeado por un
+// cajero apurado sin la "de") tienen que matchear "Corrección de
+// inventario" del preset — la diferencia son solo conectores.
+const STOPWORDS_MOTIVO = new Set([
+  'de',
+  'del',
+  'la',
+  'el',
+  'los',
+  'las',
+  'a',
+  'al',
+  'en',
+  'por',
+  'para',
+]);
+
+/** Tokens significativos de un motivo ya normalizado. Un Set para poder
+ *  comparar como conjunto (no importa el orden). */
+function palabrasClave(motivoNorm: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of motivoNorm.split(' ')) {
+    if (w && !STOPWORDS_MOTIVO.has(w)) out.add(w);
+  }
+  return out;
+}
+
+/** Dos motivos matchean si sus palabras clave coinciden como conjunto.
+ *  "correccion inventario" ≡ "corrección de inventario" (ambos {correccion, inventario}).
+ *  "compra proveedor" ≡ "Compra a proveedor" (ambos {compra, proveedor}). */
+function mismoMotivo(a: string, b: string): boolean {
+  const A = palabrasClave(normalizarMotivo(a));
+  const B = palabrasClave(normalizarMotivo(b));
+  if (A.size !== B.size || A.size === 0) return false;
+  for (const w of A) if (!B.has(w)) return false;
+  return true;
+}
+
 /**
  * Modal con estadísticas básicas de un producto:
  *  - Última venta (fecha + cajero)
@@ -507,14 +546,14 @@ function HistorialMovimientos({
           } else if (mNorm.startsWith('auto-transfer a ')) {
             delta = -f.cantidad;
           } else if (
-            (MOTIVOS_INGRESO_STOCK as readonly string[]).some(
-              (x) => normalizarMotivo(x) === mNorm,
+            (MOTIVOS_INGRESO_STOCK as readonly string[]).some((x) =>
+              mismoMotivo(x, m),
             )
           ) {
             delta = f.cantidad;
           } else if (
-            (MOTIVOS_EGRESO_STOCK as readonly string[]).some(
-              (x) => normalizarMotivo(x) === mNorm,
+            (MOTIVOS_EGRESO_STOCK as readonly string[]).some((x) =>
+              mismoMotivo(x, m),
             )
           ) {
             delta = -f.cantidad;
