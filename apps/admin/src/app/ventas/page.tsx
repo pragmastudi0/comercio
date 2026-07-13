@@ -1,10 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Search, Printer, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Search,
+  Printer,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@comercio/ui/table';
 import { Badge } from '@comercio/ui/badge';
@@ -55,6 +64,13 @@ function VentasPageInner() {
   // Orden por fecha. Default desc (más nueva arriba) — lo más útil para
   // el dueño que abre la pantalla a chequear lo del momento.
   const [ordenDesc, setOrdenDesc] = useState(true);
+  // Paginación client-side. Con el fix del cap de PostgREST empezamos a
+  // traer 1900+ ventas del mes — la tabla quedaba interminable. Default
+  // 100 por página; el dueño elige "Todas" si quiere ver un dump completo.
+  // `porPagina = 0` significa "todas". La página se resetea a 0 cada vez
+  // que cambia un filtro (ver efecto abajo).
+  const [porPagina, setPorPagina] = useState<number>(100);
+  const [pagina, setPagina] = useState<number>(0);
 
   const ventasQ = useQuery({
     queryKey: ['ventas-admin', desde, hasta, empleadoId, localId],
@@ -227,6 +243,40 @@ function VentasPageInner() {
     ventas = ventas.filter((v) => v.items.some((it) => idsMatch.has(it.producto_id)));
   }
 
+  // Ventas ordenadas — mismo criterio que la tabla — para poder cortar la
+  // página SIN cambiar el orden visible. Antes el sort vivía dentro del
+  // .flatMap del render.
+  const ventasOrdenadas = [...ventas].sort((a, b) => {
+    const cmp = a.fecha.localeCompare(b.fecha);
+    return ordenDesc ? -cmp : cmp;
+  });
+  const paginaSize = porPagina === 0 ? ventasOrdenadas.length : porPagina;
+  const totalPaginas = paginaSize > 0
+    ? Math.max(1, Math.ceil(ventasOrdenadas.length / paginaSize))
+    : 1;
+  const paginaActual = Math.min(pagina, totalPaginas - 1);
+  const ventasPagina = ventasOrdenadas.slice(
+    paginaActual * paginaSize,
+    paginaActual * paginaSize + paginaSize,
+  );
+  // Cuando cambia cualquier filtro / orden / tamaño de página, volver a la
+  // primera página. Sin esto, si estabas en la página 15 y filtrás algo
+  // que solo tiene 3, la tabla se ve vacía.
+  useEffect(() => {
+    setPagina(0);
+  }, [
+    desde,
+    hasta,
+    empleadoId,
+    localId,
+    metodo,
+    estado,
+    turno,
+    textoProducto,
+    ordenDesc,
+    porPagina,
+  ]);
+
   const total = ventas
     .filter((v) => v.estado === 'completada')
     .reduce((acc, v) => acc + v.total, 0);
@@ -372,8 +422,24 @@ function VentasPageInner() {
 
       <div className="rounded border border-slate-300 bg-white shadow-sm">
         <div className="flex flex-col items-start justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 sm:flex-row sm:items-center">
-          <div className="text-xs font-semibold uppercase text-slate-700">
-            {ventas.length} ventas · Total: {formatCurrency(total)}
+          <div className="flex items-center gap-3">
+            <div className="text-xs font-semibold uppercase text-slate-700">
+              {ventas.length} ventas · Total: {formatCurrency(total)}
+            </div>
+            {/* Selector de tamaño de página. "0" = mostrar todas. */}
+            <label className="flex items-center gap-1 text-xs text-slate-600">
+              <span>Por página</span>
+              <select
+                value={porPagina}
+                onChange={(e) => setPorPagina(Number(e.target.value))}
+                className="h-6 rounded border border-slate-300 bg-white px-1 text-xs"
+              >
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value={0}>Todas</option>
+              </select>
+            </label>
           </div>
           <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:items-end">
             {ventasConDescuento.length > 0 && (
@@ -440,13 +506,10 @@ function VentasPageInner() {
                     Items de la misma venta se ven con bandeo alternado
                     (color de fondo) + borde superior más grueso en la
                     primera fila para que se distinga claramente. Pedido
-                    del cliente, igual que el patrón de la historia del PoS. */}
-                {[...ventas]
-                  .sort((a, b) => {
-                    const cmp = a.fecha.localeCompare(b.fecha);
-                    return ordenDesc ? -cmp : cmp;
-                  })
-                  .flatMap((v, vIdx) => {
+                    del cliente, igual que el patrón de la historia del PoS.
+                    Iteramos SOLO sobre la página actual (ventasPagina);
+                    el orden ya viene aplicado desde arriba. */}
+                {ventasPagina.flatMap((v, vIdx) => {
                     const anulada = v.estado === 'anulada';
                     const cancelada = v.estado === 'cancelada';
                     const banda = vIdx % 2 === 0 ? '' : 'bg-slate-50/70';
@@ -536,6 +599,66 @@ function VentasPageInner() {
                   })}
               </TableBody>
             </Table>
+          )}
+          {/* Nav de paginación. Se esconde si todo entra en una página
+              (ej. usuario eligió "Todas" o hay ≤ porPagina ventas). */}
+          {ventasOrdenadas.length > paginaSize && paginaSize > 0 && (
+            <div className="mt-3 flex flex-col items-center justify-between gap-2 border-t border-slate-200 pt-3 text-xs text-slate-600 sm:flex-row">
+              <div>
+                Mostrando {paginaActual * paginaSize + 1}
+                {'–'}
+                {Math.min(
+                  (paginaActual + 1) * paginaSize,
+                  ventasOrdenadas.length,
+                )}{' '}
+                de {ventasOrdenadas.length} ventas
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={paginaActual === 0}
+                  onClick={() => setPagina(0)}
+                  className="h-7 px-2"
+                  title="Primera página"
+                >
+                  <ChevronsLeft className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={paginaActual === 0}
+                  onClick={() => setPagina((p) => Math.max(0, p - 1))}
+                  className="h-7 px-2"
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                </Button>
+                <span className="min-w-[80px] text-center tabular-nums">
+                  Página {paginaActual + 1} de {totalPaginas}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={paginaActual >= totalPaginas - 1}
+                  onClick={() =>
+                    setPagina((p) => Math.min(totalPaginas - 1, p + 1))
+                  }
+                  className="h-7 px-2"
+                >
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={paginaActual >= totalPaginas - 1}
+                  onClick={() => setPagina(totalPaginas - 1)}
+                  className="h-7 px-2"
+                  title="Última página"
+                >
+                  <ChevronsRight className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       </div>
