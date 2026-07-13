@@ -1,19 +1,21 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { TransferenciasRepo } from '../../repos/transferencias.repo';
 import type { Transferencia } from '../../types';
-import { ok, okList, okMaybe } from '../helpers';
+import { ok, okList, okMaybe, paginarTodo } from '../helpers';
 
 export function makeTransferenciasRepo(sb: SupabaseClient): TransferenciasRepo {
   return {
     async list(filtro = {}) {
-      let q = sb.from('transferencias').select('*').order('creada_en', { ascending: false });
-      if (filtro.estado) q = q.eq('estado', filtro.estado);
-      if (filtro.deposito_id) {
-        q = q.or(
-          `deposito_origen_id.eq.${filtro.deposito_id},deposito_destino_id.eq.${filtro.deposito_id}`,
-        );
-      }
-      return okList<Transferencia>(await q, 'transferencias.list');
+      return paginarTodo<Transferencia>((from, to) => {
+        let q = sb.from('transferencias').select('*').order('creada_en', { ascending: false });
+        if (filtro.estado) q = q.eq('estado', filtro.estado);
+        if (filtro.deposito_id) {
+          q = q.or(
+            `deposito_origen_id.eq.${filtro.deposito_id},deposito_destino_id.eq.${filtro.deposito_id}`,
+          );
+        }
+        return q.range(from, to);
+      }, 'transferencias.list');
     },
     async get(id) {
       return okMaybe<Transferencia>(
