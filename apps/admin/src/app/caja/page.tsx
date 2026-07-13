@@ -216,7 +216,6 @@ function CajasPageInner() {
                   <th className="whitespace-nowrap px-3 py-2 text-right">Inicial</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Cobrado efect.</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right">Declarado</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right">Diferencia</th>
                   <th className="whitespace-nowrap px-3 py-2 text-right"></th>
                 </tr>
               </thead>
@@ -990,19 +989,15 @@ function FilaSesionCerrada({
   const dif = declarado - sesion.saldo_inicial;
   const cargando = movsQ.isLoading;
 
+  // La columna Diferencia se sacó por pedido del cliente, pero el
+  // resaltado de fila se conserva como señal visual (rojo faltó,
+  // naranja sobró) para que el dueño detecte al toque cuáles revisar.
   let claseFila = '';
-  let claseDif = 'text-green-700';
-  let etiqueta = 'OK';
   if (!cargando && Math.abs(dif) >= 0.01) {
-    if (dif < 0) {
-      claseFila = 'bg-red-50/60 dark:bg-red-950/20';
-      claseDif = 'text-destructive font-semibold';
-      etiqueta = 'Faltó';
-    } else {
-      claseFila = 'bg-orange-50/60 dark:bg-orange-950/20';
-      claseDif = 'text-orange-600 font-semibold';
-      etiqueta = 'Sobró';
-    }
+    claseFila =
+      dif < 0
+        ? 'bg-red-50/60 dark:bg-red-950/20'
+        : 'bg-orange-50/60 dark:bg-orange-950/20';
   }
 
   return (
@@ -1027,16 +1022,6 @@ function FilaSesionCerrada({
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
         {formatCurrency(declarado)}
-      </td>
-      <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${claseDif}`}>
-        {cargando ? (
-          '…'
-        ) : (
-          <div className="flex flex-col items-end">
-            <span>{formatCurrency(dif)}</span>
-            <span className="text-[10px] uppercase tracking-wider">{etiqueta}</span>
-          </div>
-        )}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-right">
         <div className="flex items-center justify-end gap-1">
