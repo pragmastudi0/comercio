@@ -1,16 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NotasCreditoRepo } from '../../repos/notas-credito.repo';
 import type { NotaCredito } from '../../types';
-import { okList, okMaybe } from '../helpers';
+import { okMaybe, paginarTodo } from '../helpers';
 
 export function makeNotasCreditoRepo(sb: SupabaseClient): NotasCreditoRepo {
   return {
     async list(filtro = {}) {
-      let q = sb.from('notas_credito').select('*').order('fecha', { ascending: false });
-      if (filtro.venta_id) q = q.eq('venta_id', filtro.venta_id);
-      if (filtro.desde) q = q.gte('fecha', filtro.desde);
-      if (filtro.hasta) q = q.lte('fecha', filtro.hasta);
-      return okList<NotaCredito>(await q, 'notas_credito.list');
+      return paginarTodo<NotaCredito>((from, to) => {
+        let q = sb.from('notas_credito').select('*').order('fecha', { ascending: false });
+        if (filtro.venta_id) q = q.eq('venta_id', filtro.venta_id);
+        if (filtro.desde) q = q.gte('fecha', filtro.desde);
+        if (filtro.hasta) q = q.lte('fecha', filtro.hasta);
+        return q.range(from, to);
+      }, 'notas_credito.list');
     },
     async get(id) {
       return okMaybe<NotaCredito>(

@@ -1,23 +1,28 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VentasRepo } from '../../repos/ventas.repo';
 import type { Venta } from '../../types';
-import { ok, okList, okMaybe } from '../helpers';
+import { ok, okMaybe, paginarTodo } from '../helpers';
 import { aplicarDeltaStock } from './stock.repo';
 
 export function makeVentasRepo(sb: SupabaseClient): VentasRepo {
   return {
     async list(filtro = {}) {
-      let q = sb.from('ventas').select('*').order('fecha', { ascending: false });
-      if (filtro.local_id) q = q.eq('local_id', filtro.local_id);
-      if (filtro.caja_id) q = q.eq('caja_id', filtro.caja_id);
-      if (filtro.sesion_caja_id)
-        q = q.eq('sesion_caja_id', filtro.sesion_caja_id);
-      if (filtro.empleado_id) q = q.eq('empleado_id', filtro.empleado_id);
-      if (filtro.cliente_id) q = q.eq('cliente_id', filtro.cliente_id);
-      if (filtro.estado) q = q.eq('estado', filtro.estado);
-      if (filtro.desde) q = q.gte('fecha', filtro.desde);
-      if (filtro.hasta) q = q.lte('fecha', filtro.hasta);
-      return okList<Venta>(await q, 'ventas.list');
+      // PostgREST corta silenciosamente a 1000 filas si no se paginan.
+      // Con go-live tempranero + volumen real, el admin veía "1000
+      // ventas" y creía que era el total. Ver helpers.paginarTodo.
+      return paginarTodo<Venta>((from, to) => {
+        let q = sb.from('ventas').select('*').order('fecha', { ascending: false });
+        if (filtro.local_id) q = q.eq('local_id', filtro.local_id);
+        if (filtro.caja_id) q = q.eq('caja_id', filtro.caja_id);
+        if (filtro.sesion_caja_id)
+          q = q.eq('sesion_caja_id', filtro.sesion_caja_id);
+        if (filtro.empleado_id) q = q.eq('empleado_id', filtro.empleado_id);
+        if (filtro.cliente_id) q = q.eq('cliente_id', filtro.cliente_id);
+        if (filtro.estado) q = q.eq('estado', filtro.estado);
+        if (filtro.desde) q = q.gte('fecha', filtro.desde);
+        if (filtro.hasta) q = q.lte('fecha', filtro.hasta);
+        return q.range(from, to);
+      }, 'ventas.list');
     },
     async get(id) {
       return okMaybe<Venta>(

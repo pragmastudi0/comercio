@@ -27,3 +27,27 @@ export function okMaybe<T>(res: RowResp<T>, ctx?: string): T | null {
   }
   return res.data;
 }
+
+/**
+ * PostgREST corta a 1000 filas por request aunque no pongas `.limit()`. Este
+ * helper llama `buildQuery(from, to)` de a 1000 hasta que una página vuelva
+ * incompleta y devuelve todo concatenado. Usarlo en cualquier `list()` que
+ * pueda superar 1000 registros (ventas, auditoría, notas de crédito,
+ * transferencias, movimientos, etc.) — sin esto los datos se pierden en
+ * silencio y el admin cree que ese es el total.
+ */
+export async function paginarTodo<T>(
+  buildQuery: (from: number, to: number) => PromiseLike<ListResp<T>>,
+  ctx: string,
+): Promise<T[]> {
+  const PAGE = 1000;
+  const acumulado: T[] = [];
+  for (let page = 0; ; page++) {
+    const from = page * PAGE;
+    const to = from + PAGE - 1;
+    const chunk = okList<T>(await buildQuery(from, to), ctx);
+    acumulado.push(...chunk);
+    if (chunk.length < PAGE) break;
+  }
+  return acumulado;
+}
