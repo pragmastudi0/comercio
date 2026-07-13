@@ -53,6 +53,25 @@ export function AbrirCaja() {
 
   const sesionAbiertaEnCaja =
     (sesionesQ.data ?? []).find((s) => s.estado === 'abierta') ?? null;
+  // Última sesión cerrada de esta caja física con arqueo declarado.
+  // Sirve para sugerir "el turno anterior dejó $X" al abrir un turno
+  // nuevo: por ejemplo mañana cierra con $10.000, tarde entra y arranca
+  // sugerido en $10.000. Descartamos las que quedaron con
+  // saldo_final_declarado null (típicamente cierres forzados por el
+  // dev) porque no aportan info real de cuánto quedó físicamente.
+  const ultimaCerradaConDeclarado = (sesionesQ.data ?? [])
+    .filter((s) => s.estado === 'cerrada' && s.saldo_final_declarado != null)
+    .sort((a, b) => (b.cerrada_en ?? '').localeCompare(a.cerrada_en ?? ''))[0];
+  const saldoSugerido = ultimaCerradaConDeclarado?.saldo_final_declarado ?? null;
+  const cajeroCierreAnteriorNombre = ultimaCerradaConDeclarado
+    ? (() => {
+        const respId =
+          ultimaCerradaConDeclarado.empleado_actual_id ??
+          ultimaCerradaConDeclarado.empleado_id;
+        const e = empleadosQ.data?.find((x) => x.id === respId);
+        return e ? `${e.nombre} ${e.apellido ?? ''}`.trim() : null;
+      })()
+    : null;
   const responsableActualId =
     sesionAbiertaEnCaja?.empleado_actual_id ?? sesionAbiertaEnCaja?.empleado_id;
   const esTuya =
@@ -83,6 +102,22 @@ export function AbrirCaja() {
       setSaldoInicial(String(sesionAbiertaEnCaja.saldo_inicial));
     }
   }, [esTuya, sesionAbiertaEnCaja]);
+
+  // Cuando la caja está LIBRE (sin sesión abierta) y hay un cierre
+  // anterior con arqueo declarado, sugerimos ese monto como saldo
+  // inicial — "lo que dejó el turno anterior". Reemplaza al sistema
+  // viejo que arrancaba siempre en 0 y obligaba a recordar de memoria
+  // lo que había en la caja. El cajero igual puede sobreescribirlo si
+  // el conteo físico da distinto.
+  //
+  // Piso el input solo cuando cambia la caja o llega/cambia la data
+  // de sesiones. Si el cajero después edita, se respeta hasta que
+  // vuelva a cambiar la caja.
+  useEffect(() => {
+    if (!sesionAbiertaEnCaja && saldoSugerido != null) {
+      setSaldoInicial(String(saldoSugerido));
+    }
+  }, [cajaId, sesionAbiertaEnCaja, saldoSugerido]);
 
   const abrirMut = useMutation({
     mutationFn: async () => {
@@ -306,6 +341,25 @@ export function AbrirCaja() {
                   ? 'Saldo inicial (podés corregirlo si quedó mal)'
                   : 'Saldo inicial (efectivo en caja)'}
               </Label>
+              {/* Banner sugerencia: aparece solo cuando la caja está libre
+                  y hay un cierre anterior con arqueo declarado. */}
+              {!esTuya && saldoSugerido != null && (
+                <div className="mb-2 rounded-md border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-900">
+                  <div className="font-medium">
+                    El turno anterior dejó{' '}
+                    <span className="tabular-nums">
+                      {formatCurrency(saldoSugerido)}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-emerald-800/90">
+                    {cajeroCierreAnteriorNombre
+                      ? `Cierre de ${cajeroCierreAnteriorNombre}. `
+                      : ''}
+                    Lo cargamos por vos — ajustalo si el conteo físico da
+                    distinto.
+                  </div>
+                </div>
+              )}
               <Input
                 id="saldo"
                 type="number"
