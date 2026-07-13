@@ -24,6 +24,61 @@ const LABEL_TIPO_MOV: Record<string, string> = {
 };
 
 /**
+ * Normaliza un motivo para poder comparar tolerando variaciones históricas:
+ * mayúsculas ≠ minúsculas, tildes vs sin tildes, espacios sobrantes.
+ * Ejemplo: "Corrección de inventario" y "correccion inventario" quedan
+ * ambas como "correccion de inventario" (bueno, "correccion inventario"
+ * queda igual). Ideal para matchear contra las listas preset.
+ */
+function normalizarMotivo(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Palabras "vacías" que ignoramos al comparar motivos por palabras
+// significativas. Motivos como "correccion inventario" (tipeado por un
+// cajero apurado sin la "de") tienen que matchear "Corrección de
+// inventario" del preset — la diferencia son solo conectores.
+const STOPWORDS_MOTIVO = new Set([
+  'de',
+  'del',
+  'la',
+  'el',
+  'los',
+  'las',
+  'a',
+  'al',
+  'en',
+  'por',
+  'para',
+]);
+
+/** Tokens significativos de un motivo ya normalizado. Un Set para poder
+ *  comparar como conjunto (no importa el orden). */
+function palabrasClave(motivoNorm: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of motivoNorm.split(' ')) {
+    if (w && !STOPWORDS_MOTIVO.has(w)) out.add(w);
+  }
+  return out;
+}
+
+/** Dos motivos matchean si sus palabras clave coinciden como conjunto.
+ *  "correccion inventario" ≡ "corrección de inventario" (ambos {correccion, inventario}).
+ *  "compra proveedor" ≡ "Compra a proveedor" (ambos {compra, proveedor}). */
+function mismoMotivo(a: string, b: string): boolean {
+  const A = palabrasClave(normalizarMotivo(a));
+  const B = palabrasClave(normalizarMotivo(b));
+  if (A.size !== B.size || A.size === 0) return false;
+  for (const w of A) if (!B.has(w)) return false;
+  return true;
+}
+
+/**
  * Modal con estadísticas básicas de un producto:
  *  - Última venta (fecha + cajero)
  *  - Cantidad vendida total en los últimos 90 días
@@ -445,9 +500,15 @@ function HistorialMovimientos({
 
     const out: FilaConSaldo[] = [];
     for (const f of filas) {
-      // Snapshot DESPUÉS del mov = estado actual de los punteros ANTES de
-      // retroceder. Clonamos el Map completo para que quede fijo por fila.
+      // Snapshot DESPUÉS del mov = estado actual de los punteros ANTES
+      // de retroceder. Clonamos el Map completo y también capturamos el
+      // total en este momento para que quede coherente con las columnas
+      // (bug histórico: antes guardábamos el total DESPUÉS de restar el
+      // delta, entonces la columna Total mostraba el saldo previo al
+      // mov mientras las columnas por depósito mostraban el saldo
+      // posterior — no coincidían).
       const saldoPorDeposito = new Map(punteros);
+      const saldoTotalSnapshot = totalActual;
       let saldoIncierto = false;
 
       if (f.kind === 'transferencia') {
@@ -470,14 +531,31 @@ function HistorialMovimientos({
           delta = f.cantidad;
         } else if (f.tipo === 'ajuste') {
           // El signo del delta no queda en BD (cantidad se guarda en
-          // valor absoluto), así que lo inferimos del motivo. Los
-          // motivos preset están en dos listas explícitas en
-          // @comercio/business. Si el motivo es libre ("Otros") o no
-          // matchea ninguna lista, no podemos saber → saldoIncierto.
+          // valor absoluto), así que lo inferimos del motivo. Prioridad:
+          //   1) Auto-transfers del sistema: patrón fijo "Auto-transfer
+          //      desde ..." (ingreso) / "Auto-transfer a ..." (egreso).
+          //   2) Motivos preset (MOTIVOS_INGRESO_STOCK / MOTIVOS_EGRESO_STOCK)
+          //      comparados case-insensitive y sin tildes, para tolerar
+          //      variaciones históricas ("correccion inventario" ≡
+          //      "Corrección de inventario").
+          //   3) Si nada matchea → saldoIncierto = mostramos "?".
           const m = f.motivo ?? '';
-          if ((MOTIVOS_INGRESO_STOCK as readonly string[]).includes(m)) {
+          const mNorm = normalizarMotivo(m);
+          if (mNorm.startsWith('auto-transfer desde')) {
             delta = f.cantidad;
-          } else if ((MOTIVOS_EGRESO_STOCK as readonly string[]).includes(m)) {
+          } else if (mNorm.startsWith('auto-transfer a ')) {
+            delta = -f.cantidad;
+          } else if (
+            (MOTIVOS_INGRESO_STOCK as readonly string[]).some((x) =>
+              mismoMotivo(x, m),
+            )
+          ) {
+            delta = f.cantidad;
+          } else if (
+            (MOTIVOS_EGRESO_STOCK as readonly string[]).some((x) =>
+              mismoMotivo(x, m),
+            )
+          ) {
             delta = -f.cantidad;
           } else {
             saldoIncierto = true;
@@ -488,29 +566,35 @@ function HistorialMovimientos({
           totalActual -= delta;
         }
       }
-      out.push({ ...f, saldoPorDeposito, saldoTotal: totalActual, saldoIncierto });
+      out.push({
+        ...f,
+        saldoPorDeposito,
+        saldoTotal: saldoTotalSnapshot,
+        saldoIncierto,
+      });
     }
     return out;
   }, [filas, stockActual]);
 
-  // Lista ordenada de depósitos que aparecen en el stock actual — para
-  // renderizar una columna fija por cada uno. Preservamos el orden que
-  // llega de la query de depositos si lo tenemos, si no ordenamos alfa.
+  // Lista de depósitos a renderizar como columnas fijas. Mostramos TODOS
+  // los depósitos del sistema — no solo los que tienen fila en
+  // stock_items para este producto — porque cuando el dueño está
+  // corrigiendo inventario necesita ver la columna aunque el producto
+  // no haya tenido stock en ese depósito nunca (para poder darse
+  // cuenta de que le falta cargar ahí).
+  //
+  // Además incluimos "huérfanos": depósitos que aparecen en stockActual
+  // pero no están en la lista principal — no debería pasar, pero si
+  // sucede queremos verlos igual.
   const depositosVisibles = useMemo(() => {
-    const idsConStock = new Set(
+    const yaInclidos = new Set(depositos.map((d) => d.id));
+    const idsEnStock = new Set(
       (stockActual ?? []).map((s) => s.deposito_id),
     );
-    // Orden estable: primero según el orden natural del array de
-    // `depositos` (que suele venir "Central, B12, C11"), después alfabético
-    // para cualquier depósito huérfano.
-    const enOrden = depositos.filter((d) => idsConStock.has(d.id));
-    const restoIds = [...idsConStock].filter(
-      (id) => !depositos.some((d) => d.id === id),
-    );
-    return [
-      ...enOrden,
-      ...restoIds.map((id) => ({ id, nombre: '—' })),
-    ];
+    const huerfanos = [...idsEnStock]
+      .filter((id) => !yaInclidos.has(id))
+      .map((id) => ({ id, nombre: '—' }));
+    return [...depositos, ...huerfanos];
   }, [depositos, stockActual]);
 
   function fmtFecha(iso: string): string {
@@ -562,7 +646,12 @@ function HistorialMovimientos({
               <tr>
                 <th className="px-2 py-1 text-left">Fecha</th>
                 <th className="px-2 py-1 text-left">Tipo</th>
-                <th className="px-2 py-1 text-right">Cant.</th>
+                <th
+                  className="px-2 py-1 text-right"
+                  title="Cantidad movida en este movimiento (con signo según tipo)"
+                >
+                  Movimiento
+                </th>
                 <th className="px-2 py-1 text-left">Local</th>
                 {/* Una columna por depósito: cómo quedó el stock del
                     producto en ESE depósito después del mov. */}
