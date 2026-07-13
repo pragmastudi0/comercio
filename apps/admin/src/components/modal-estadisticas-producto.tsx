@@ -461,9 +461,15 @@ function HistorialMovimientos({
 
     const out: FilaConSaldo[] = [];
     for (const f of filas) {
-      // Snapshot DESPUÉS del mov = estado actual de los punteros ANTES de
-      // retroceder. Clonamos el Map completo para que quede fijo por fila.
+      // Snapshot DESPUÉS del mov = estado actual de los punteros ANTES
+      // de retroceder. Clonamos el Map completo y también capturamos el
+      // total en este momento para que quede coherente con las columnas
+      // (bug histórico: antes guardábamos el total DESPUÉS de restar el
+      // delta, entonces la columna Total mostraba el saldo previo al
+      // mov mientras las columnas por depósito mostraban el saldo
+      // posterior — no coincidían).
       const saldoPorDeposito = new Map(punteros);
+      const saldoTotalSnapshot = totalActual;
       let saldoIncierto = false;
 
       if (f.kind === 'transferencia') {
@@ -521,7 +527,12 @@ function HistorialMovimientos({
           totalActual -= delta;
         }
       }
-      out.push({ ...f, saldoPorDeposito, saldoTotal: totalActual, saldoIncierto });
+      out.push({
+        ...f,
+        saldoPorDeposito,
+        saldoTotal: saldoTotalSnapshot,
+        saldoIncierto,
+      });
     }
     return out;
   }, [filas, stockActual]);
