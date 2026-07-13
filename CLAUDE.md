@@ -277,3 +277,56 @@ comercio/
 - Vercel preview branch deploys son el camino correcto cuando producción ya está viva: rama nueva → preview → testeo del cliente → merge a main. La rama `feat/post-go-live-iteracion-1` cubrió 14 features en un solo ciclo sin tocar producción.
 
 **Migración SQL aplicada**: `scripts/migrations-iteracion-1.sql` (columnas promo_texto + promo_pct + check constraint 0-100).
+
+### 2026-07-12 — Iteración 2 (post go-live, 12 días de operación real)
+
+Sesión larga de feedback diario del cliente. Múltiples PRs chicos (#15 al #26) contra `main` vía Vercel branch previews. Producción operativa todo el tiempo.
+
+**Caja y sesiones (el bloque más pesado — bugs reales que pasaron en producción):**
+- **Multi-sesión por caja física** con distintos empleados (turnos solapados, dueño cobrando mientras el cajero también atiende). Cierre atómico: cerrar una cierra las otras de la misma caja física (`cerrarOtrasSesionesEnCaja`). Cada venta apunta a la sesión de QUIEN cobró.
+- **`empleado_actual_id`** (responsable ACTUAL) nuevo, separado de `empleado_id` (quien abrió). Modal Saldos y detalle Caja usan el actual. Historial preserva quién abrió.
+- **Flujo "Tomar posta"** en `AbrirCaja`: si la caja ya está ocupada por otro, el cajero entrante puede tomar el mando sin cerrar/reabrir. Nuevo método `cambiarResponsable`.
+- **Modal "Cerrar o cambiar"** reutilizable — reemplaza confirms nativos.
+- **Arqueo compara contra `saldo_inicial`** (no vs "efectivo esperado"). Aplica en `CerrarCaja` (PoS) y en `/admin/caja` detalle. Estados: cuadra (verde) / sobró (azul) / faltó (naranja).
+- **Ajustar caja** (Ingreso / Egreso / Corregir total): las 3 opciones modifican `saldo_inicial` en vez de crear movimientos fake que ensuciaban el historial.
+- **CerrarCaja**: mostrar Total facturado del turno + sobrante para retiro (`declarado − inicial`).
+- **Pragma dev puede corregir sesiones rotas** desde `/admin/caja`: `DialogEditarSesion` permite editar `empleado_id` / `empleado_actual_id` / `caja_id` / `saldo_inicial` / `saldo_final_declarado`. Botón **Forzar cierre** para sesiones sin arqueo. Botón **Eliminar sesión** con cascade manual (movimientos_stock → movimientos_caja → ventas → sesion). Todo logueado a `auditoria` antes de ejecutar.
+- **Whitelist `PRAGMA_DEV_EMAILS` + `SUPER_ADMIN_EMAILS`** en `@comercio/business/dev-access.ts` (hardcoded, sobrevive a resets de BD). `esSuperAdmin(empleado)` en `usePermisos.puede` bypasea todos los checks para Agus + Pragma.
+- **"Cerrada por"** en modal caja: si el badge dice "Cierre forzado", muestra quién lo hizo consultando el log `dev_forzar_cierre_sesion`. Sino muestra el `empleado_actual_id`.
+- **Fix "Cannot coerce the result to a single JSON object"**: `actualizarSaldoInicial` y `cambiarResponsable` ahora usan `.maybeSingle()` + validación explícita con mensaje "La caja ya no está abierta. Recargá."
+- **Fix `cerrar` silencioso**: `.select('*')` (no `.single`) para distinguir "0 filas afectadas → ya estaba cerrada" del error genérico de PostgREST. Error `SesionYaCerrada` como info amigable, no rojo.
+- **Fix RLS crítico (bug de días)**: `UPDATE` de `sesiones_caja` fallaba en silencio para role `authenticated` → cajeros cerraban la caja en el PoS y quedaba abierta al día siguiente. Toast decía "Esta caja ya había sido cerrada" (engañoso, era falso). Fix: `CREATE POLICY authenticated puede actualizar sesiones_caja … USING (true) WITH CHECK (true)`. Mismo patrón aplicado a `DELETE` sobre `ventas`, `movimientos_caja`, `movimientos_stock` para habilitar Pragma-eliminar-sesión.
+
+**PoS:**
+- Botón **Cerrar caja** directo en header (arqueo rápido) + **Cambiar usuario** sin cerrar sesión + **Anular** al lado de Historial.
+- **Nueva venta paralela** siempre disponible; **sacado cálculo de vuelto** (Agus lo hace mental).
+- **Sacado motivo obligatorio** al cambiar precio en el carrito (fricción alta para tickets rápidos).
+- **Anular cualquier venta del día**: relajado `esAnulableHoy` (antes solo la propia). Permiso nuevo `anular_ajena_del_dia` en preset cajero.
+- **Buscador con relevancia**: prioriza "empieza-con" antes de "contiene" + auto-select cuando queda 1 resultado.
+- **ModalTransferenciaStock** + botón **Stock** en header de Caja → mover entre depósitos desde el PoS sin ir al admin. Tab "Movimientos recientes" con Anular. Nuevos métodos `transferenciaInmediata` y `anularTransferenciaInmediata`.
+- **Recalcular precio unitario** al cambiar cantidad (para escalas mayorista).
+
+**Admin:**
+- **Nueva página `/movimientos-stock`** con Motivo + Origen (PoS vs Admin) + columnas Stock local / Stock total. Botón "Movimientos stock" en toolbar al lado de Faltantes.
+- **Motivo obligatorio con opciones preset** (Merma / Rotura / Vencido / Robo / Recuento / Otro) al ajustar stock.
+- **Cambiar código de producto**: dialog de confirmación + permiso `productos.modificar_codigo`.
+- **Historial de stock del producto** en modal Estadísticas.
+- **Transferencias visibles en admin**: fix del timestamp compartido entre salida/entrada (ambos INSERTs con el mismo `fechaPar`) + key de agrupamiento tolerante a milisegundos (`fecha.slice(0, 19)`).
+- **Método de pago en todas las filas** del historial + últimas ventas del dashboard ordenadas por fecha desc (sin filtro de rango).
+- **Separar Abrió y Cerró** en tabla de cajas + "Abierta por" en detalle.
+
+**Productos:**
+- **Promo NxM** (2x1, 3x2): campos `promo_tipo='nxm'` + `promo_pagas_n` + `promo_llevas_m`. Aplicación automática en subtotal del PoS + pill visual.
+- **Promo Combo** (N unidades por $X fijo): `promo_tipo='combo'` + `promo_combo_cant` + `promo_combo_precio`.
+- **Precio mayorista** por cantidad: 2ª escala en la lista Consumidor Final. Nuevos inputs precio + margen en `/admin/productos`.
+- **Flag `cuotas_sin_recargo`** en producto → ModalCobro no aplica recargo por cuotas.
+
+**Data / import:**
+- `/admin/ventas` mostraba **"1000 ventas"** y se creía que era el total — era el default de PostgREST. Fix pendiente de merge en [PR #26](https://github.com/pragmastudi0/comercio/pull/26): helper `paginarTodo()` en `packages/db/src/supabase/helpers.ts` aplicado a `ventas.list`, `notas_credito.list`, `transferencias.list`, `auditoria.list`. El de auditoría era el más grave (banners "Con cambio" y precio editado se perdían con >1000 logs en el rango).
+
+**Lecciones de la sesión:**
+- **RLS silencioso es la primera sospecha** cuando algo "no se guarda" en Supabase sin error visible. El SQL Editor usa `service_role` y siempre pasa aunque falte policy — obligatorio testear con role `authenticated` real. Perdimos días pensando que era bug de frontend cuando era `WITH CHECK` faltante.
+- **PostgREST corta a 1000 filas por default** sin `.range()`. Cualquier `list()` que pueda superar ese volumen tiene que paginar internamente. Documentado en el helper `paginarTodo()`.
+- **Whitelist hardcoded > flag en BD** para acceso de emergencia (Pragma dev, super-admin). Sobrevive a resets, imports fallidos y datos rotos — que es exactamente cuando se necesita.
+- **Auditar ANTES de ejecutar acciones destructivas**. `eliminar sesión` loguea a `auditoria` antes de borrar; si falla el borrado, el log queda igual. Ayuda a reconstruir qué se intentó y cuándo.
+- Cliente reporta síntomas ("cerró la caja pero quedó abierta"), no causas. El primer instinto de leer el código del PoS estaba equivocado — el código estaba bien, el problema era la policy. Escuchar el síntoma, no diagnosticar por dónde parece.
