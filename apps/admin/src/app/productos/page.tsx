@@ -122,7 +122,10 @@ function ProductosPageInner() {
       for (const p of rows) {
         const lp = await db.productos.preciosDe(p.id);
         const cf = lp.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
-        map.set(p.id, cf?.escalas[0]?.precio ?? 0);
+        // Ordenar por `desde` ASC para agarrar la escala minorista
+        // (Supabase no garantiza orden del array).
+        const escs = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+        map.set(p.id, escs[0]?.precio ?? 0);
       }
       return map;
     },
@@ -428,8 +431,11 @@ function PanelProducto({
   });
 
   const LISTA_CF_ID = PRESET_IDS.listas.consumidorFinal;
-  const escalasIniciales =
-    preciosQ.data?.find((x) => x.lista_precio_id === LISTA_CF_ID)?.escalas ?? [];
+  // Ordenar por `desde` ASC porque Supabase no garantiza orden y
+  // `escalas[0]` podía ser la mayorista.
+  const escalasIniciales = [
+    ...(preciosQ.data?.find((x) => x.lista_precio_id === LISTA_CF_ID)?.escalas ?? []),
+  ].sort((a, b) => a.desde - b.desde);
   const precioCfInicial = escalasIniciales[0]?.precio ?? 0;
   // Segunda escala = precio mayorista. Si existe, tiene un `desde` > 1
   // (típico 12u). Sino, no hay mayorista configurado.

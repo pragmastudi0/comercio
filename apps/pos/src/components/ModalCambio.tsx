@@ -129,10 +129,13 @@ export function ModalCambio({
   }
 
   async function agregarNuevo(p: Producto) {
-    // Precio de lista consumidor final (escala mínima).
+    // Precio de lista consumidor final (escala mínima). Ordenamos por
+    // `desde` ASC porque Supabase no garantiza orden y `escalas[0]`
+    // podía ser la mayorista.
     const precios = await db.productos.preciosDe(p.id);
     const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
-    const precio = cf?.escalas[0]?.precio ?? 0;
+    const escalasCF = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+    const precio = escalasCF[0]?.precio ?? 0;
     setItemsNuevos((arr) => {
       const ex = arr.find((x) => x.producto.id === p.id);
       if (ex) {

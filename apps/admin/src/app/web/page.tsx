@@ -62,7 +62,10 @@ function WebPageInner() {
       for (const p of productosQ.data ?? []) {
         const lp = await db.productos.preciosDe(p.id);
         const lista = lp.find((x) => LISTA_MAY_IDS.includes(x.lista_precio_id));
-        map.set(p.id, lista?.escalas[0]?.precio ?? 0);
+        // Ordenar por `desde` ASC — Supabase no garantiza orden y
+        // `escalas[0]` podía traer una escala con `desde` mayor.
+        const escs = [...(lista?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+        map.set(p.id, escs[0]?.precio ?? 0);
       }
       return map;
     },

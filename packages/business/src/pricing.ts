@@ -23,9 +23,15 @@ export type ConfigPagos = {
 
 export function precioPorCantidad(lista: ListaPrecio, cantidad: number): number {
   if (cantidad <= 0) return 0;
-  // Asume escalas ordenadas asc por desde; busca la última que cumple desde <= cantidad.
-  let aplicado = lista.escalas[0]?.precio ?? 0;
-  for (const e of lista.escalas) {
+  // Ordenamos defensivamente por `desde` ASC. Supabase no garantiza el
+  // orden del array de escalas al hacer el fetch, y varios call-sites
+  // pasaban escalas "como venían" — cuando la primera resultaba ser la
+  // mayorista (desde=12) el consumidor final se cobraba mal. Ordenar
+  // acá cubre a todos los consumidores del helper sin depender de que
+  // cada uno se acuerde.
+  const escalas = [...lista.escalas].sort((a, b) => a.desde - b.desde);
+  let aplicado = escalas[0]?.precio ?? 0;
+  for (const e of escalas) {
     if (cantidad >= e.desde) aplicado = e.precio;
     else break;
   }

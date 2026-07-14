@@ -228,8 +228,13 @@ export function BuscadorProducto() {
     if (!eval_.ok) return;
     const precios = await db.productos.preciosDe(p.id);
     const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
-    const precio = cf?.escalas[0]?.precio ?? 0;
-    agregar(p, precio, cf?.escalas ?? []);
+    // Ordenar las escalas por `desde` ASC. Sin esto, `escalas[0]` es
+    // "la que devolvió Supabase primera" (a veces la mayorista con
+    // desde=12), no la minorista con desde=1 — daba precios distintos
+    // en el dropdown (que sí ordena) vs al agregar al carrito.
+    const escalas = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+    const precio = escalas[0]?.precio ?? 0;
+    agregar(p, precio, escalas);
     // NO borramos el código: dejamos el texto seleccionado para que el
     // siguiente Enter sume otra unidad del mismo producto, o que al tipear
     // se reemplace automáticamente con el código nuevo.
@@ -255,8 +260,13 @@ export function BuscadorProducto() {
     if (!eval_.ok) return;
     const precios = await db.productos.preciosDe(p.id);
     const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
-    const precio = cf?.escalas[0]?.precio ?? 0;
-    agregar(p, precio, cf?.escalas ?? []);
+    // Ordenar las escalas por `desde` ASC. Sin esto, `escalas[0]` es
+    // "la que devolvió Supabase primera" (a veces la mayorista con
+    // desde=12), no la minorista con desde=1 — daba precios distintos
+    // en el dropdown (que sí ordena) vs al agregar al carrito.
+    const escalas = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+    const precio = escalas[0]?.precio ?? 0;
+    agregar(p, precio, escalas);
     // Igual que agregarPorCodigoExacto: mantenemos el texto seleccionado
     // para sumar más unidades con Enter o reemplazar tipeando.
     setMostrarLista(false);

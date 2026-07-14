@@ -26,14 +26,16 @@ export type ItemCarrito = {
 };
 
 /** Devuelve el precio aplicable según las escalas y la cantidad. Toma
- *  la ÚLTIMA escala con `desde <= cantidad`. Requiere escalas ordenadas
- *  ascendentes por `desde`. */
+ *  la ÚLTIMA escala con `desde <= cantidad`. Ordena defensivamente por
+ *  `desde` ASC: los call-sites no siempre venían ordenados y con
+ *  escalas mayoristas cargadas (desde=12) daba el precio equivocado. */
 function precioSegunEscala(
   escalas: { desde: number; precio: number }[],
   cantidad: number,
 ): number {
-  let aplicado = escalas[0]?.precio ?? 0;
-  for (const e of escalas) {
+  const orden = [...escalas].sort((a, b) => a.desde - b.desde);
+  let aplicado = orden[0]?.precio ?? 0;
+  for (const e of orden) {
     if (cantidad >= e.desde) aplicado = e.precio;
     else break;
   }
