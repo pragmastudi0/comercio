@@ -24,11 +24,34 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,png,woff2}'],
-        // El SW nuevo toma control sin esperar a que se cierren todas las tabs.
-        // Necesario para que los hot-fixes lleguen al cliente sin pasos manuales.
+        // OJO: sacamos 'html' del precache y usamos NetworkFirst para
+        // navegaciones. Motivo — bug del cliente 2026-07-14 (Agus, B12):
+        // al reabrir el PoS después de un deploy quedaba pantalla en
+        // blanco y solo Ctrl+F5 lo arreglaba. Con el HTML precacheado,
+        // el SW servía el index.html VIEJO que apuntaba a chunks JS
+        // con hash viejo (ej. index-abc123.js) que Vercel ya había
+        // borrado en el deploy nuevo — pantalla blanca hasta refresh
+        // manual.
+        //
+        // Ahora: los chunks/assets siguen precacheados (offline first),
+        // pero el HTML pasa por NetworkFirst con timeout 3s → siempre
+        // trae el index.html nuevo con los hashes de chunks nuevos, y
+        // si no hay red usa el cache como fallback.
+        globPatterns: ['**/*.{js,css,png,woff2}'],
+        cleanupOutdatedCaches: true,
         skipWaiting: true,
         clientsClaim: true,
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-cache',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 4 },
+            },
+          },
+        ],
       },
     }),
   ],
