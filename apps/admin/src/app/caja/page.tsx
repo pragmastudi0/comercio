@@ -866,13 +866,8 @@ function DetalleSesion({
           <span className="text-right tabular-nums">
             {(efectivoMovs >= 0 ? '+' : '') + formatCurrency(efectivoMovs)}
           </span>
-          {/* Info neta: cuánto efectivo pasó por la caja durante el
-              turno. NO es el "esperado" al cierre — Agus retira el
-              cobrado y el cajero deja solo el saldo inicial. */}
-          <span className="font-medium">Debería quedar en caja</span>
-          <span className="text-right font-medium tabular-nums">
-            {formatCurrency(sesion.saldo_inicial)}
-          </span>
+          {/* Sacamos "Debería quedar en caja" por pedido del cliente —
+              es redundante (siempre es igual al saldo inicial). */}
           {/* Quién abrió + quién cerró — la sesión puede haber cambiado
               de responsable en el medio (feature Tomar posta) y Agus
               necesita ver ambos claramente. */}
@@ -900,32 +895,9 @@ function DetalleSesion({
               <span className="text-right tabular-nums">
                 {formatCurrency(declarado)}
               </span>
-              <span
-                className={`font-semibold ${
-                  Math.abs(dif) < 0.01
-                    ? 'text-green-700'
-                    : dif < 0
-                      ? 'text-destructive'
-                      : 'text-orange-600'
-                }`}
-              >
-                {Math.abs(dif) < 0.01
-                  ? 'Cuadró exacto'
-                  : dif < 0
-                    ? 'Faltó'
-                    : 'Sobró'}
-              </span>
-              <span
-                className={`text-right font-semibold tabular-nums ${
-                  Math.abs(dif) < 0.01
-                    ? 'text-green-700'
-                    : dif < 0
-                      ? 'text-destructive'
-                      : 'text-orange-600'
-                }`}
-              >
-                {formatCurrency(dif)}
-              </span>
+              {/* Sacamos "Sobró/Faltó/Cuadró exacto" por pedido del
+                  cliente. La info sigue disponible en el resaltado
+                  visual de la fila cerrada en la tabla principal. */}
             </>
           )}
         </div>

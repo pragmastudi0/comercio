@@ -123,6 +123,16 @@ export function BuscadorProducto() {
   // Item resaltado en el dropdown (para navegar con flechas).
   const [resaltadoIdx, setResaltadoIdx] = useState(0);
 
+  // Estado de "confirmar borrado" — cuando el cajero aprieta Supr con
+  // el buscador vacío, en vez de borrar el producto directamente
+  // guardamos acá el objetivo y mostramos un banner: "Enter para
+  // borrar, Esc para cancelar". Antes borraba directo y los cajeros
+  // se comían productos sin querer al tipear Backspace de más.
+  const [confirmarBorrar, setConfirmarBorrar] = useState<{
+    id: string;
+    nombre: string;
+  } | null>(null);
+
 
   // Stocks de los productos visibles en los resultados (con breakdown
   // local vs otros depósitos). Antes solo traíamos el del local, lo que
@@ -308,9 +318,30 @@ export function BuscadorProducto() {
           setQ(e.target.value);
           setMostrarLista(true);
           setResaltadoIdx(0); // resetear al cambiar la búsqueda
+          // Si el cajero empieza a tipear (o borrar texto), cancela
+          // cualquier confirmación de borrado pendiente.
+          if (confirmarBorrar) setConfirmarBorrar(null);
         }}
         onKeyDown={(e) => {
           const lista = resultadosQ.data ?? [];
+          // Si hay una confirmación de borrado pendiente, Enter y Esc
+          // tienen precedencia sobre el resto.
+          if (confirmarBorrar) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              quitar(confirmarBorrar.id);
+              toast.info(`− ${confirmarBorrar.nombre}`);
+              setConfirmarBorrar(null);
+              return;
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setConfirmarBorrar(null);
+              return;
+            }
+            // Cualquier otra tecla cancela y sigue el flujo normal.
+            setConfirmarBorrar(null);
+          }
           if (e.key === 'Enter') {
             // Caso 1: hay resultados → agregar el resaltado.
             //   Si el código ya está en el carrito, el store suma cantidad.
@@ -343,23 +374,60 @@ export function BuscadorProducto() {
             setQ('');
             setMostrarLista(false);
             setResaltadoIdx(0);
-          } else if ((e.key === 'Delete' || e.key === 'Backspace') && q === '') {
-            // Buscador vacío + Supr/Backspace → borrar el item seleccionado
-            // del carrito (o el último si no hay nada seleccionado). Si el
-            // cajero está tipeando, no se dispara (q !== '').
+          } else if (e.key === 'Delete' && q === '') {
+            // Solo Supr (Delete) inicia la confirmación de borrado. NO
+            // usamos Backspace porque los cajeros tipean y borran texto
+            // muy seguido: con q === '' y otro Backspace de más se
+            // comían un producto sin querer. Supr es una tecla explícita
+            // y menos usada, y además pide confirmación abajo.
             const objetivo =
               itemsEnCarrito.find((i) => i.producto.id === seleccionadoId) ??
               itemsEnCarrito[itemsEnCarrito.length - 1];
             if (objetivo) {
               e.preventDefault();
-              quitar(objetivo.producto.id);
-              toast.info(`− ${objetivo.producto.nombre}`);
+              setConfirmarBorrar({
+                id: objetivo.producto.id,
+                nombre: objetivo.producto.nombre,
+              });
             }
           }
         }}
         placeholder="Código (ej: 1003) o nombre — Enter agrega · ↑↓ navega · Supr borra"
         className="h-14 text-lg"
       />
+      {/* Banner de confirmación de borrado. Aparece cuando el cajero
+          apretó Supr con el buscador vacío. */}
+      {confirmarBorrar && (
+        <div className="absolute left-0 right-0 top-full z-20 mt-1 flex items-center justify-between gap-2 rounded-md border-2 border-orange-400 bg-orange-50 px-3 py-2 shadow-lg">
+          <div className="text-sm text-orange-900">
+            ¿Quitar <span className="font-semibold">{confirmarBorrar.nombre}</span> del carrito?
+            <span className="ml-2 text-xs text-orange-700">
+              Enter = borrar · Esc = cancelar
+            </span>
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => setConfirmarBorrar(null)}
+              className="rounded border border-orange-300 bg-white px-2 py-1 text-xs font-medium hover:bg-orange-100"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                quitar(confirmarBorrar.id);
+                toast.info(`− ${confirmarBorrar.nombre}`);
+                setConfirmarBorrar(null);
+                inputRef.current?.focus();
+              }}
+              className="rounded bg-orange-600 px-2 py-1 text-xs font-medium text-white hover:bg-orange-700"
+            >
+              Borrar
+            </button>
+          </div>
+        </div>
+      )}
       {mostrarLista && q.trim().length > 0 && (resultadosQ.data?.length ?? 0) > 0 && (
         <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-80 overflow-y-auto rounded-md border bg-popover shadow-lg">
           {resultadosQ.data!.map((p, idx) => {
