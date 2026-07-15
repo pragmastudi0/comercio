@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -149,6 +149,61 @@ function ProductosPageInner() {
     }
   }, [rows, seleccionadoId]);
 
+  // Navegación por teclado en la tabla: ↑ ↓ mueven la selección al
+  // producto anterior/siguiente. Solo se dispara si el foco NO está en
+  // un input/textarea/select (para no pisar al usuario tipeando en un
+  // buscador o edit inline). El producto seleccionado hace scrollIntoView
+  // así siempre queda visible al navegar rápido.
+  const filaSeleccionadaRef = useRef<HTMLTableRowElement | null>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      const t = e.target as HTMLElement | null;
+      if (t) {
+        const tag = t.tagName;
+        if (
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT' ||
+          t.isContentEditable
+        )
+          return;
+      }
+      // Si hay un dialog/modal abierto, no interferimos.
+      if (document.querySelector('[role="dialog"]')) return;
+      if (rows.length === 0) return;
+      e.preventDefault();
+      const idxActual = seleccionadoId
+        ? rows.findIndex((p) => p.id === seleccionadoId)
+        : -1;
+      const delta = e.key === 'ArrowDown' ? 1 : -1;
+      // Si no hay selección, ↓ arranca en el primero y ↑ en el último.
+      const idxNuevo =
+        idxActual < 0
+          ? delta === 1
+            ? 0
+            : rows.length - 1
+          : Math.max(0, Math.min(rows.length - 1, idxActual + delta));
+      const proxima = rows[idxNuevo];
+      if (proxima && proxima.id !== seleccionadoId) {
+        setSeleccionadoId(proxima.id);
+        setModoCrear(false);
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [rows, seleccionadoId]);
+
+  // Scroll a la fila seleccionada cuando cambia — así al navegar con
+  // flechas la fila siempre queda visible aunque la selección quede
+  // fuera del viewport.
+  useEffect(() => {
+    filaSeleccionadaRef.current?.scrollIntoView({
+      block: 'nearest',
+      behavior: 'smooth',
+    });
+  }, [seleccionadoId]);
+
   const categoriaNombre = (id: string) =>
     categoriasQ.data?.find((c) => c.id === id)?.nombre ?? '—';
 
@@ -266,6 +321,7 @@ function ProductosPageInner() {
                   return (
                     <tr
                       key={p.id}
+                      ref={seleccionado ? filaSeleccionadaRef : undefined}
                       onClick={() => {
                         setSeleccionadoId(p.id);
                         setModoCrear(false);
