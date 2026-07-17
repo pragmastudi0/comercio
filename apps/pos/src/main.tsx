@@ -78,7 +78,12 @@ createRoot(rootEl).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <App />
-        <Toaster richColors position="top-right" />
+        {/* bottom-right: los toasts (éxito de venta, avisos, errores)
+            no tapan los botones del header (Cobrar / Anular / Ajustar
+            caja / Stock / Historial). duration global corto: los
+            cajeros procesan ventas rápido y el confirm del toast
+            estorba si se queda mucho. */}
+        <Toaster richColors position="bottom-right" duration={2000} />
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,
