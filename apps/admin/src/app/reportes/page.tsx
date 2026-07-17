@@ -33,6 +33,9 @@ function ReportesPageInner() {
 
   const [desde, setDesde] = useState(hace7);
   const [hasta, setHasta] = useState(hoy);
+  // '' = ambos locales (default). Cuando hay un local específico
+  // seleccionado, todas las tarjetas se filtran en memoria por él.
+  const [localId, setLocalId] = useState<string>('');
 
   const ventasQ = useQuery({
     queryKey: ['reportes-ventas', desde, hasta],
@@ -46,7 +49,11 @@ function ReportesPageInner() {
   const empleadosQ = useQuery({ queryKey: ['empleados'], queryFn: () => db.empleados.list() });
   const localesQ = useQuery({ queryKey: ['locales'], queryFn: () => db.locales.list() });
 
-  const ventas = ventasQ.data ?? [];
+  // Filtramos por local en memoria — evita re-fetch al cambiar el
+  // selector. El rango de fechas sí re-fetchea (nueva query key).
+  const ventas = (ventasQ.data ?? []).filter(
+    (v) => !localId || v.local_id === localId,
+  );
   const totalRango = ventas.reduce((acc, v) => acc + v.total, 0);
   const cantidadRango = ventas.length;
 
@@ -103,7 +110,7 @@ function ReportesPageInner() {
       </div>
 
       <Card className="mb-4">
-        <CardContent className="flex items-end gap-3 pt-4">
+        <CardContent className="flex flex-wrap items-end gap-3 pt-4">
           <div>
             <Label className="mb-1 block text-xs">Desde</Label>
             <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
@@ -111,6 +118,21 @@ function ReportesPageInner() {
           <div>
             <Label className="mb-1 block text-xs">Hasta</Label>
             <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          </div>
+          <div>
+            <Label className="mb-1 block text-xs">Local</Label>
+            <select
+              value={localId}
+              onChange={(e) => setLocalId(e.target.value)}
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="">Ambos locales</option>
+              {(localesQ.data ?? []).map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.nombre}
+                </option>
+              ))}
+            </select>
           </div>
         </CardContent>
       </Card>
