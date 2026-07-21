@@ -102,20 +102,30 @@ export function BuscadorProducto() {
     staleTime: 5 * 60_000,
   });
 
-  // Precios de la lista Consumidor Final, para mostrarlos en el dropdown
-  // (antes el cajero tenía que agregar al carrito para verlos). Se trae
-  // una sola vez y se cachea — ~1900 filas chicas, sin impacto.
+  // Precios de la lista Consumidor Final, para el dropdown Y para el
+  // agregar al carrito. Cachear ambos consumos en la MISMA query
+  // garantiza que dropdown y carrito muestren el mismo precio (bug
+  // real: antes el dropdown leía cache viejo y el agregar hacía una
+  // llamada fresca a `preciosDe()`, entonces si Agus cambiaba un precio
+  // en admin el cajero veía dos números distintos).
+  //
+  // staleTime: 30s → los cambios de precio del admin se propagan al PoS
+  // en máximo 30 segundos. Antes eran 5 min, un cajero atento veía el
+  // precio viejo hasta que expirara el cache.
   const preciosQ = useQuery({
     queryKey: ['pos-precios-cf'],
     queryFn: () => db.productos.preciosDeLista(PRESET_IDS.listas.consumidorFinal),
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
   });
-  // Map producto_id → precio base (escala desde 1).
-  const precioPorProducto = (() => {
-    const m = new Map<string, number>();
+  // Map producto_id → escalas ORDENADAS por `desde` ASC. Cambio del
+  // antiguo Map<string, number>: ahora tenemos las escalas completas
+  // para poder pasárselas al carrito (recalcula precio al cambiar
+  // cantidad si hay mayorista).
+  const escalasPorProducto = (() => {
+    const m = new Map<string, { desde: number; precio: number }[]>();
     for (const r of preciosQ.data ?? []) {
-      const esc = [...r.escalas].sort((a, b) => a.desde - b.desde)[0];
-      if (esc) m.set(r.producto_id, esc.precio);
+      const ord = [...r.escalas].sort((a, b) => a.desde - b.desde);
+      if (ord.length > 0) m.set(r.producto_id, ord);
     }
     return m;
   })();
@@ -236,13 +246,15 @@ export function BuscadorProducto() {
     }
     const eval_ = await evaluarStock(p);
     if (!eval_.ok) return;
-    const precios = await db.productos.preciosDe(p.id);
-    const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
-    // Ordenar las escalas por `desde` ASC. Sin esto, `escalas[0]` es
-    // "la que devolvió Supabase primera" (a veces la mayorista con
-    // desde=12), no la minorista con desde=1 — daba precios distintos
-    // en el dropdown (que sí ordena) vs al agregar al carrito.
-    const escalas = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+    // Preferimos el cache (mismos datos que ve el dropdown) para que el
+    // precio agregado sea EXACTAMENTE el mostrado. Si no está en cache
+    // (producto nuevo cargado hace muy poco), fallback a llamada directa.
+    let escalas = escalasPorProducto.get(p.id);
+    if (!escalas) {
+      const precios = await db.productos.preciosDe(p.id);
+      const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
+      escalas = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+    }
     const precio = escalas[0]?.precio ?? 0;
     agregar(p, precio, escalas);
     // NO borramos el código: dejamos el texto seleccionado para que el
@@ -268,13 +280,15 @@ export function BuscadorProducto() {
     if (!p) return;
     const eval_ = await evaluarStock(p);
     if (!eval_.ok) return;
-    const precios = await db.productos.preciosDe(p.id);
-    const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
-    // Ordenar las escalas por `desde` ASC. Sin esto, `escalas[0]` es
-    // "la que devolvió Supabase primera" (a veces la mayorista con
-    // desde=12), no la minorista con desde=1 — daba precios distintos
-    // en el dropdown (que sí ordena) vs al agregar al carrito.
-    const escalas = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+    // Ver comentario en agregarPorCodigoExacto: cache primero, fallback
+    // a llamada directa. Garantiza que dropdown y carrito muestran el
+    // MISMO precio siempre.
+    let escalas = escalasPorProducto.get(p.id);
+    if (!escalas) {
+      const precios = await db.productos.preciosDe(p.id);
+      const cf = precios.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
+      escalas = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+    }
     const precio = escalas[0]?.precio ?? 0;
     agregar(p, precio, escalas);
     // Igual que agregarPorCodigoExacto: mantenemos el texto seleccionado
@@ -431,7 +445,7 @@ export function BuscadorProducto() {
       {mostrarLista && q.trim().length > 0 && (resultadosQ.data?.length ?? 0) > 0 && (
         <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-80 overflow-y-auto rounded-md border bg-popover shadow-lg">
           {resultadosQ.data!.map((p, idx) => {
-            const precio = precioPorProducto.get(p.id);
+            const precio = escalasPorProducto.get(p.id)?.[0]?.precio;
             const resaltado = idx === resaltadoIdx;
             return (
               <button
