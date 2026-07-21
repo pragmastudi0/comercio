@@ -38,16 +38,26 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
   // Pestañas: asentar nuevo movimiento vs ver/anular recientes.
   const [tab, setTab] = useState<'asentar' | 'movimientos'>('asentar');
 
-  // Búsqueda y selección de producto
+  // Multi-item: los cajeros / dueño arman una lista de productos
+  // (con cantidad) y transfieren todos de un tirón con un mismo par
+  // origen → destino. Reemplaza el flujo "un producto por vez" anterior
+  // que obligaba a repetir el modal N veces al mover una bolsa
+  // completa entre locales.
+  type ItemTransferencia = {
+    producto: Producto;
+    cantidad: number;
+  };
+  const [items, setItems] = useState<ItemTransferencia[]>([]);
+
+  // Búsqueda (input siempre visible; al elegir un producto lo agrega
+  // a `items` y limpia el input para el próximo).
   const [q, setQ] = useState('');
-  const [producto, setProducto] = useState<Producto | null>(null);
   const [resaltadoIdx, setResaltadoIdx] = useState(0);
   const codigoRef = useRef<HTMLInputElement>(null);
 
-  // Origen, destino, cantidad
+  // Origen y destino comunes a toda la transferencia.
   const [origenId, setOrigenId] = useState('');
   const [destinoId, setDestinoId] = useState('');
-  const [cantidadTxt, setCantidadTxt] = useState('');
 
   const depositosQ = useQuery({
     queryKey: ['depositos-transferencia'],
@@ -58,81 +68,136 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
   const resultadosQ = useQuery({
     queryKey: ['pos-buscar-transferencia', q],
     queryFn: () => db.productos.buscarRapido(q, 8),
-    enabled: open && q.trim().length > 0 && !producto,
+    enabled: open && q.trim().length > 0,
   });
 
-  // Stock actual del producto seleccionado por depósito (referencia visual)
-  const stocksQ = useQuery({
-    queryKey: ['stock-prod-transferencia', producto?.id],
-    queryFn: () => (producto ? db.stock.porProducto(producto.id) : Promise.resolve([])),
-    enabled: open && !!producto,
+  // Stocks de los productos ya agregados en el ORIGEN — para mostrar
+  // cuánto hay disponible al lado de cada línea y avisar si algún item
+  // dejaría el origen en negativo (no bloqueamos: política Turisteando
+  // permite negativos y la operación física ya sucedió).
+  const idsItems = items.map((it) => it.producto.id).join(',');
+  const stocksOrigenQ = useQuery({
+    queryKey: ['stocks-origen-transferencia', idsItems, origenId],
+    queryFn: async () => {
+      const map = new Map<string, number>();
+      if (!origenId) return map;
+      for (const it of items) {
+        const filas = await db.stock.porProducto(it.producto.id);
+        const s = filas
+          .filter((s) => s.deposito_id === origenId)
+          .reduce((a, s) => a + Number(s.cantidad), 0);
+        map.set(it.producto.id, s);
+      }
+      return map;
+    },
+    enabled: open && items.length > 0 && !!origenId,
   });
-
-  const stockPorDeposito = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const s of stocksQ.data ?? []) {
-      map.set(s.deposito_id, (map.get(s.deposito_id) ?? 0) + Number(s.cantidad));
-    }
-    return map;
-  }, [stocksQ.data]);
 
   // Reset cuando se abre/cierra
   useEffect(() => {
     if (open) {
       setTab('asentar');
       setQ('');
-      setProducto(null);
+      setItems([]);
       setResaltadoIdx(0);
-      setCantidadTxt('1');
       setOrigenId(depositoActivo ?? '');
       setDestinoId('');
       setTimeout(() => codigoRef.current?.focus(), 50);
     }
   }, [open, depositoActivo]);
 
-  const cantidad = parseInt(cantidadTxt, 10);
-  const cantidadValida = !!cantidad && cantidad > 0;
+  function agregarItem(p: Producto) {
+    setItems((prev) => {
+      const idx = prev.findIndex((it) => it.producto.id === p.id);
+      if (idx >= 0) {
+        // Si ya está, incrementa cantidad en vez de duplicar la línea.
+        return prev.map((it, i) =>
+          i === idx ? { ...it, cantidad: it.cantidad + 1 } : it,
+        );
+      }
+      return [...prev, { producto: p, cantidad: 1 }];
+    });
+    setQ('');
+    setResaltadoIdx(0);
+    codigoRef.current?.focus();
+  }
+  function quitarItem(productoId: string) {
+    setItems((prev) => prev.filter((it) => it.producto.id !== productoId));
+  }
+  function setCantidad(productoId: string, valor: number) {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.producto.id === productoId ? { ...it, cantidad: Math.max(1, valor) } : it,
+      ),
+    );
+  }
+
   const origenOk = !!origenId;
   const destinoOk = !!destinoId && destinoId !== origenId;
-  const productoOk = !!producto;
-  const puedeConfirmar = productoOk && origenOk && destinoOk && cantidadValida;
+  const puedeConfirmar =
+    items.length > 0 && origenOk && destinoOk && items.every((it) => it.cantidad > 0);
 
   const transferirMut = useMutation({
     mutationFn: async () => {
       if (!empleado) throw new Error('Sin sesión');
-      if (!producto) throw new Error('Elegí un producto');
+      if (items.length === 0) throw new Error('Agregá al menos un producto');
       if (!db.stock.transferenciaInmediata) {
         throw new Error('La transferencia inmediata no está disponible en este modo');
       }
-      const motivo = `Transferencia PoS · ${producto.nombre}`;
-      return db.stock.transferenciaInmediata({
-        producto_id: producto.id,
-        deposito_origen_id: origenId,
-        deposito_destino_id: destinoId,
-        cantidad,
-        motivo,
-        empleado_id: empleado.id,
-      });
+      // Ejecutamos item por item. Si alguno falla NO revertimos los
+      // anteriores (no hay RPC atómica), guardamos el detalle para
+      // mostrar un resumen al final. La política del cliente es
+      // "avisar y seguir", no bloquear por stock insuficiente.
+      const ok: string[] = [];
+      const errores: { nombre: string; mensaje: string }[] = [];
+      for (const it of items) {
+        try {
+          await db.stock.transferenciaInmediata!({
+            producto_id: it.producto.id,
+            deposito_origen_id: origenId,
+            deposito_destino_id: destinoId,
+            cantidad: it.cantidad,
+            motivo: `Transferencia PoS · ${it.producto.nombre}`,
+            empleado_id: empleado.id,
+          });
+          ok.push(it.producto.nombre);
+        } catch (e) {
+          errores.push({
+            nombre: it.producto.nombre,
+            mensaje: (e as Error).message,
+          });
+        }
+      }
+      return { ok, errores };
     },
-    onSuccess: () => {
+    onSuccess: ({ ok, errores }) => {
       const origenNom = depositosQ.data?.find((d) => d.id === origenId)?.nombre ?? 'origen';
       const destinoNom = depositosQ.data?.find((d) => d.id === destinoId)?.nombre ?? 'destino';
-      toast.success(
-        `${cantidad} × ${producto?.nombre} · ${origenNom} → ${destinoNom}`,
-      );
       qc.invalidateQueries({ queryKey: ['stock-prod'] });
       qc.invalidateQueries({ queryKey: ['stock-prod-transferencia'] });
+      qc.invalidateQueries({ queryKey: ['stocks-origen-transferencia'] });
       qc.invalidateQueries({ queryKey: ['pos-stocks-buscar'] });
-      onOpenChange(false);
+      if (errores.length === 0) {
+        toast.success(
+          `Transferencia OK · ${ok.length} producto(s) · ${origenNom} → ${destinoNom}`,
+        );
+        onOpenChange(false);
+      } else {
+        // Operación parcial: dejamos el modal abierto y mostramos qué
+        // pasó con cada uno para que el usuario decida (reintentar los
+        // que fallaron, cerrar, etc). Usamos un toast largo con la lista.
+        toast.warning(
+          `Parcial: ${ok.length} OK, ${errores.length} fallaron. ` +
+            `Fallaron: ${errores.map((e) => e.nombre).join(', ')}`,
+          { duration: 10_000 },
+        );
+        // Sacamos de la lista los que sí se hicieron; los que fallaron
+        // quedan visibles para reintentar.
+        setItems((prev) => prev.filter((it) => !ok.includes(it.producto.nombre)));
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });
-
-  function elegirProducto(p: Producto) {
-    setProducto(p);
-    setQ(p.nombre);
-    setResaltadoIdx(0);
-  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} className="max-w-md">
@@ -177,11 +242,52 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">
           Registrá una transferencia que ya hiciste físicamente entre depósitos
-          o locales. El stock se actualiza al instante.
+          o locales. Agregá los productos que moviste y transferilos todos de
+          una.
         </p>
-        {/* Paso 1: buscar / elegir producto */}
+
+        {/* Paso 1: origen y destino comunes */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+          <div>
+            <Label className="mb-1 block text-xs">Desde</Label>
+            <select
+              value={origenId}
+              onChange={(e) => setOrigenId(e.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            >
+              <option value="">— Elegir —</option>
+              {(depositosQ.data ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="pb-2">
+            <ArrowRight className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div>
+            <Label className="mb-1 block text-xs">Hacia</Label>
+            <select
+              value={destinoId}
+              onChange={(e) => setDestinoId(e.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            >
+              <option value="">— Elegir —</option>
+              {(depositosQ.data ?? [])
+                .filter((d) => d.id !== origenId)
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nombre}
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Paso 2: buscador para agregar productos a la lista */}
         <div>
-          <Label className="mb-1 block text-xs">Producto</Label>
+          <Label className="mb-1 block text-xs">Agregar producto</Label>
           <div className="relative">
             <div className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground">
               <Search className="h-4 w-4" />
@@ -191,7 +297,6 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
               value={q}
               onChange={(e) => {
                 setQ(e.target.value);
-                if (producto) setProducto(null);
                 setResaltadoIdx(0);
               }}
               onKeyDown={(e) => {
@@ -199,7 +304,7 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
                 if (e.key === 'Enter' && lista.length > 0) {
                   e.preventDefault();
                   const target = lista[Math.min(resaltadoIdx, lista.length - 1)];
-                  if (target) elegirProducto(target);
+                  if (target) agregarItem(target);
                 } else if (e.key === 'ArrowDown' && lista.length > 0) {
                   e.preventDefault();
                   setResaltadoIdx((i) => Math.min(i + 1, lista.length - 1));
@@ -208,21 +313,20 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
                   setResaltadoIdx((i) => Math.max(0, i - 1));
                 }
               }}
-              placeholder="Código o nombre"
+              placeholder="Código o nombre — Enter agrega"
               className="pl-8"
             />
           </div>
-
-          {/* Dropdown de resultados (solo si no hay producto ya elegido) */}
-          {!producto && q.trim() && (resultadosQ.data?.length ?? 0) > 0 && (
-            <div className="mt-1 max-h-56 overflow-y-auto rounded-md border bg-popover shadow">
+          {q.trim() && (resultadosQ.data?.length ?? 0) > 0 && (
+            <div className="mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow">
               {resultadosQ.data!.map((p, idx) => {
                 const resaltado = idx === resaltadoIdx;
+                const yaAgregado = items.some((it) => it.producto.id === p.id);
                 return (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => elegirProducto(p)}
+                    onClick={() => agregarItem(p)}
                     onMouseEnter={() => setResaltadoIdx(idx)}
                     className={`flex w-full items-center justify-between border-b px-3 py-2 text-left text-sm transition-colors last:border-0 ${
                       resaltado
@@ -236,110 +340,87 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
                       </div>
                       <div className="truncate">{p.nombre}</div>
                     </div>
+                    {yaAgregado && (
+                      <span className="text-[10px] text-emerald-700">Ya en lista +1</span>
+                    )}
                   </button>
                 );
               })}
             </div>
           )}
-          {!producto && q.trim() && resultadosQ.data?.length === 0 && (
+          {q.trim() && resultadosQ.data?.length === 0 && (
             <p className="mt-1 text-xs text-muted-foreground">Sin resultados.</p>
           )}
         </div>
 
-        {/* Paso 2: si hay producto, mostrar contexto + origen/destino/cantidad */}
-        {producto && (
-          <>
-            <div className="rounded-md border bg-muted/30 p-2">
-              <div className="text-xs uppercase text-muted-foreground">
-                Stock por local
-              </div>
-              <div className="mt-1 grid grid-cols-2 gap-1.5 text-xs">
-                {(depositosQ.data ?? []).map((d) => {
-                  const c = stockPorDeposito.get(d.id) ?? 0;
-                  return (
-                    <div
-                      key={d.id}
-                      className="flex items-center justify-between rounded border bg-background px-2 py-1"
-                    >
-                      <span className="truncate text-muted-foreground">{d.nombre}</span>
-                      <span
-                        className={`tabular-nums font-medium ${
-                          c <= 0 ? 'text-destructive' : ''
-                        }`}
-                      >
-                        {c}
-                      </span>
+        {/* Paso 3: lista de items a transferir */}
+        {items.length > 0 && (
+          <div className="rounded-md border">
+            <div className="border-b bg-muted/30 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              A transferir ({items.length})
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {items.map((it) => {
+                const stockOr = stocksOrigenQ.data?.get(it.producto.id) ?? 0;
+                const insuficiente = origenOk && stockOr < it.cantidad;
+                return (
+                  <div
+                    key={it.producto.id}
+                    className="flex items-center gap-2 border-b px-2 py-1.5 last:border-0"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">
+                        {it.producto.nombre}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                        <span className="font-mono">#{it.producto.codigo_interno}</span>
+                        {origenOk && (
+                          <span
+                            className={insuficiente ? 'text-amber-700' : ''}
+                          >
+                            · En origen: {stockOr}
+                            {insuficiente && ' (insuficiente)'}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <Input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={it.cantidad}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        setCantidad(it.producto.id, isNaN(v) ? 1 : v);
+                      }}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="h-8 w-16 tabular-nums"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => quitarItem(it.producto.id)}
+                      className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      title="Quitar de la lista"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-
-            <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-              <div>
-                <Label className="mb-1 block text-xs">Desde</Label>
-                <select
-                  value={origenId}
-                  onChange={(e) => setOrigenId(e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                >
-                  <option value="">— Elegir —</option>
-                  {(depositosQ.data ?? []).map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="pb-2">
-                <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">Hacia</Label>
-                <select
-                  value={destinoId}
-                  onChange={(e) => setDestinoId(e.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                >
-                  <option value="">— Elegir —</option>
-                  {(depositosQ.data ?? [])
-                    .filter((d) => d.id !== origenId)
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.nombre}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <Label className="mb-1 block text-xs">Cantidad</Label>
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={cantidadTxt}
-                onChange={(e) => setCantidadTxt(e.target.value.replace(/[^\d]/g, ''))}
-                onFocus={(e) => e.currentTarget.select()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && puedeConfirmar && !transferirMut.isPending) {
-                    e.preventDefault();
-                    transferirMut.mutate();
-                  }
-                }}
-                className="text-lg tabular-nums"
-              />
-            </div>
-
-            {/* Advertencia si origen no tiene stock suficiente — no bloquea
-                porque la política Turisteando permite negativos. */}
-            {origenOk && cantidadValida && (stockPorDeposito.get(origenId) ?? 0) < cantidad && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-                El origen quedaría en stock negativo. Asentás igual si ya hiciste el movimiento.
+            {/* Aviso agregado si hay al menos un item con stock insuficiente
+                en origen. NO bloquea — solo avisa, la política del cliente
+                permite transferir aunque quede negativo. */}
+            {items.some(
+              (it) =>
+                origenOk &&
+                (stocksOrigenQ.data?.get(it.producto.id) ?? 0) < it.cantidad,
+            ) && (
+              <div className="border-t bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">
+                Algún producto no tiene stock suficiente en origen. Se transfiere igual si ya hiciste el movimiento.
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
       )}
@@ -353,7 +434,11 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
           onClick={() => transferirMut.mutate()}
           disabled={!puedeConfirmar || transferirMut.isPending}
         >
-          {transferirMut.isPending ? 'Asentando…' : 'Asentar transferencia'}
+          {transferirMut.isPending
+            ? 'Transfiriendo…'
+            : items.length === 0
+              ? 'Transferir'
+              : `Transferir ${items.length} producto${items.length === 1 ? '' : 's'}`}
         </Button>
       </div>
       )}
