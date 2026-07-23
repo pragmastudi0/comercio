@@ -59,10 +59,33 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
   const [origenId, setOrigenId] = useState('');
   const [destinoId, setDestinoId] = useState('');
 
+  // OJO: sacamos `enabled: open`. Reporte del cliente (2026-07-15) —
+  // los selectors "Desde/Hacia" aparecían vacíos aunque los depósitos
+  // existían en la BD. Hipótesis: el modal se desmontaba/montaba
+  // rápido (cerrar+abrir) y la query quedaba en un estado sin data.
+  // Ahora corre siempre, cachea entre aperturas, y si falla reintenta
+  // hasta 3 veces con backoff. Bonus: al ser cache warm, el modal se
+  // abre con las opciones ya listas.
   const depositosQ = useQuery({
     queryKey: ['depositos-transferencia'],
-    queryFn: () => db.depositos.list(),
-    enabled: open,
+    queryFn: async () => {
+      try {
+        const r = await db.depositos.list();
+        // eslint-disable-next-line no-console
+        console.log('[Transferencia] depósitos cargados:', r.length);
+        return r;
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[Transferencia] error cargando depósitos:', e);
+        throw e;
+      }
+    },
+    staleTime: 5 * 60_000,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
+    // Refetchear cuando el usuario vuelve a la pestaña (cajero deja el
+    // PoS en background, vuelve, la data queda fresca sin abrir/cerrar).
+    refetchOnWindowFocus: true,
   });
 
   const resultadosQ = useQuery({
@@ -254,8 +277,11 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
               value={origenId}
               onChange={(e) => setOrigenId(e.target.value)}
               className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              disabled={depositosQ.isLoading}
             >
-              <option value="">— Elegir —</option>
+              <option value="">
+                {depositosQ.isLoading ? 'Cargando…' : '— Elegir —'}
+              </option>
               {(depositosQ.data ?? []).map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.nombre}
@@ -272,8 +298,11 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
               value={destinoId}
               onChange={(e) => setDestinoId(e.target.value)}
               className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              disabled={depositosQ.isLoading}
             >
-              <option value="">— Elegir —</option>
+              <option value="">
+                {depositosQ.isLoading ? 'Cargando…' : '— Elegir —'}
+              </option>
               {(depositosQ.data ?? [])
                 .filter((d) => d.id !== origenId)
                 .map((d) => (
@@ -284,6 +313,41 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
             </select>
           </div>
         </div>
+        {/* Feedback si la lista no cargó o vino vacía — así el cajero no
+            queda mirando un select mudo sin saber si es error o timing.
+            Botón Reintentar fuerza refetch sin necesidad de Ctrl+F5. */}
+        {depositosQ.error && (
+          <div className="flex items-start justify-between gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-2 text-xs text-destructive">
+            <span>
+              No se pudieron cargar los locales. Tocá Reintentar. Si sigue
+              igual, refrescá con Ctrl+F5.
+            </span>
+            <button
+              type="button"
+              onClick={() => depositosQ.refetch()}
+              className="rounded border border-destructive/50 bg-white px-2 py-0.5 font-medium text-destructive hover:bg-destructive/5"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+        {!depositosQ.isLoading &&
+          !depositosQ.error &&
+          (depositosQ.data?.length ?? 0) === 0 && (
+            <div className="flex items-start justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+              <span>
+                No hay depósitos disponibles. Puede ser una desconexión
+                temporal — tocá Reintentar.
+              </span>
+              <button
+                type="button"
+                onClick={() => depositosQ.refetch()}
+                className="rounded border border-amber-300 bg-white px-2 py-0.5 font-medium text-amber-900 hover:bg-amber-100"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
 
         {/* Paso 2: buscador para agregar productos a la lista */}
         <div>
