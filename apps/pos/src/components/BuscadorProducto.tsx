@@ -90,7 +90,10 @@ export function BuscadorProducto() {
 
   const resultadosQ = useQuery({
     queryKey: ['pos-buscar', q],
-    queryFn: () => db.productos.buscarRapido(q, 8),
+    // 30 resultados: antes eran 8 y con búsquedas genéricas ("caja",
+    // "agenda", "llavero") quedaban productos afuera. El dropdown ya
+    // scrollea (max-h-80), así que traer más no rompe la UI.
+    queryFn: () => db.productos.buscarRapido(q, 30),
     enabled: q.trim().length > 0,
   });
 

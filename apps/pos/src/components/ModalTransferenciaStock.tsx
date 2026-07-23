@@ -67,7 +67,7 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
 
   const resultadosQ = useQuery({
     queryKey: ['pos-buscar-transferencia', q],
-    queryFn: () => db.productos.buscarRapido(q, 8),
+    queryFn: () => db.productos.buscarRapido(q, 30),
     enabled: open && q.trim().length > 0,
   });
 
