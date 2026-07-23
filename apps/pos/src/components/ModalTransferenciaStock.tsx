@@ -68,10 +68,24 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
   // abre con las opciones ya listas.
   const depositosQ = useQuery({
     queryKey: ['depositos-transferencia'],
-    queryFn: () => db.depositos.list(),
+    queryFn: async () => {
+      try {
+        const r = await db.depositos.list();
+        // eslint-disable-next-line no-console
+        console.log('[Transferencia] depósitos cargados:', r.length);
+        return r;
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[Transferencia] error cargando depósitos:', e);
+        throw e;
+      }
+    },
     staleTime: 5 * 60_000,
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
+    // Refetchear cuando el usuario vuelve a la pestaña (cajero deja el
+    // PoS en background, vuelve, la data queda fresca sin abrir/cerrar).
+    refetchOnWindowFocus: true,
   });
 
   const resultadosQ = useQuery({
@@ -300,18 +314,38 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
           </div>
         </div>
         {/* Feedback si la lista no cargó o vino vacía — así el cajero no
-            queda mirando un select mudo sin saber si es error o timing. */}
+            queda mirando un select mudo sin saber si es error o timing.
+            Botón Reintentar fuerza refetch sin necesidad de Ctrl+F5. */}
         {depositosQ.error && (
-          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2 text-xs text-destructive">
-            No se pudieron cargar los locales. Refrescá con F5 y volvé a
-            intentar. Si sigue igual, avisá a Agus.
+          <div className="flex items-start justify-between gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-2 text-xs text-destructive">
+            <span>
+              No se pudieron cargar los locales. Tocá Reintentar. Si sigue
+              igual, refrescá con Ctrl+F5.
+            </span>
+            <button
+              type="button"
+              onClick={() => depositosQ.refetch()}
+              className="rounded border border-destructive/50 bg-white px-2 py-0.5 font-medium text-destructive hover:bg-destructive/5"
+            >
+              Reintentar
+            </button>
           </div>
         )}
         {!depositosQ.isLoading &&
           !depositosQ.error &&
           (depositosQ.data?.length ?? 0) === 0 && (
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-              No hay depósitos cargados en el sistema.
+            <div className="flex items-start justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+              <span>
+                No hay depósitos disponibles. Puede ser una desconexión
+                temporal — tocá Reintentar.
+              </span>
+              <button
+                type="button"
+                onClick={() => depositosQ.refetch()}
+                className="rounded border border-amber-300 bg-white px-2 py-0.5 font-medium text-amber-900 hover:bg-amber-100"
+              >
+                Reintentar
+              </button>
             </div>
           )}
 
