@@ -96,7 +96,7 @@ export function ModalCambio({
 
   const buscarQ = useQuery({
     queryKey: ['pos-cambio-buscar', q],
-    queryFn: () => db.productos.buscarRapido(q, 30),
+    queryFn: () => db.productos.buscarRapido(q, 200),
     enabled: open && q.trim().length > 0,
   });
 
