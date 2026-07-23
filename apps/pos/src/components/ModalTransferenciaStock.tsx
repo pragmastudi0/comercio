@@ -59,10 +59,19 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
   const [origenId, setOrigenId] = useState('');
   const [destinoId, setDestinoId] = useState('');
 
+  // OJO: sacamos `enabled: open`. Reporte del cliente (2026-07-15) —
+  // los selectors "Desde/Hacia" aparecían vacíos aunque los depósitos
+  // existían en la BD. Hipótesis: el modal se desmontaba/montaba
+  // rápido (cerrar+abrir) y la query quedaba en un estado sin data.
+  // Ahora corre siempre, cachea entre aperturas, y si falla reintenta
+  // hasta 3 veces con backoff. Bonus: al ser cache warm, el modal se
+  // abre con las opciones ya listas.
   const depositosQ = useQuery({
     queryKey: ['depositos-transferencia'],
     queryFn: () => db.depositos.list(),
-    enabled: open,
+    staleTime: 5 * 60_000,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
   });
 
   const resultadosQ = useQuery({
@@ -254,8 +263,11 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
               value={origenId}
               onChange={(e) => setOrigenId(e.target.value)}
               className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              disabled={depositosQ.isLoading}
             >
-              <option value="">— Elegir —</option>
+              <option value="">
+                {depositosQ.isLoading ? 'Cargando…' : '— Elegir —'}
+              </option>
               {(depositosQ.data ?? []).map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.nombre}
@@ -272,8 +284,11 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
               value={destinoId}
               onChange={(e) => setDestinoId(e.target.value)}
               className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              disabled={depositosQ.isLoading}
             >
-              <option value="">— Elegir —</option>
+              <option value="">
+                {depositosQ.isLoading ? 'Cargando…' : '— Elegir —'}
+              </option>
               {(depositosQ.data ?? [])
                 .filter((d) => d.id !== origenId)
                 .map((d) => (
@@ -284,6 +299,21 @@ export function ModalTransferenciaStock({ open, onOpenChange }: Props) {
             </select>
           </div>
         </div>
+        {/* Feedback si la lista no cargó o vino vacía — así el cajero no
+            queda mirando un select mudo sin saber si es error o timing. */}
+        {depositosQ.error && (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2 text-xs text-destructive">
+            No se pudieron cargar los locales. Refrescá con F5 y volvé a
+            intentar. Si sigue igual, avisá a Agus.
+          </div>
+        )}
+        {!depositosQ.isLoading &&
+          !depositosQ.error &&
+          (depositosQ.data?.length ?? 0) === 0 && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+              No hay depósitos cargados en el sistema.
+            </div>
+          )}
 
         {/* Paso 2: buscador para agregar productos a la lista */}
         <div>
