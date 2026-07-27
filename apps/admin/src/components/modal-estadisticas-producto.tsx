@@ -702,7 +702,7 @@ function HistorialMovimientos({
                           <td
                             key={d.id}
                             className={`px-2 py-1 text-right tabular-nums ${
-                              esOrigenODestino ? 'bg-blue-50/50 font-medium' : ''
+                              esOrigenODestino ? 'bg-blue-200 font-semibold text-blue-900' : ''
                             }`}
                           >
                             {val}
@@ -752,7 +752,7 @@ function HistorialMovimientos({
                         <td
                           key={d.id}
                           className={`px-2 py-1 text-right tabular-nums ${
-                            esAfectado ? 'bg-blue-50/50 font-medium' : ''
+                            esAfectado ? 'bg-blue-200 font-semibold text-blue-900' : ''
                           }`}
                           title={
                             f.saldoIncierto && esAfectado
