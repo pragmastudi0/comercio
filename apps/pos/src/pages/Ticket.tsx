@@ -68,6 +68,94 @@ export function Ticket() {
   });
   const empleadosQ = useQuery({ queryKey: ['empleados-ticket'], queryFn: () => db.empleados.list() });
 
+  // Logs de auditoría `cambio_venta` de los últimos 30 días, para
+  // detectar si ESTA venta participó de un cambio (como original o
+  // como nueva) y mostrar el detalle abajo. Antes del PR, el cajero
+  // abría el ticket y solo veía la venta base — no había forma de
+  // saber que había habido un cambio ni qué se devolvió/llevó.
+  const desdeAudit = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString();
+  })();
+  const auditoriaCambiosQ = useQuery({
+    queryKey: ['pos-ticket-auditoria-cambios', desdeAudit],
+    queryFn: () =>
+      db.auditoria.list({ entidad: 'venta', desde: desdeAudit }),
+  });
+  type CambioInfo = {
+    venta_original_id: string;
+    nc_id: string | null;
+    nc_numero: string | null;
+    venta_nueva_id: string | null;
+    venta_nueva_numero: string | null;
+    total_devuelto: number;
+    total_nuevo: number;
+    diferencia_cobrada: number;
+    metodo_diferencia: string | null;
+    fecha: string;
+  };
+  const { cambioComoOriginal, cambioComoNueva } = (() => {
+    let original: CambioInfo | null = null;
+    let nueva: CambioInfo | null = null;
+    for (const log of auditoriaCambiosQ.data ?? []) {
+      if (log.accion !== 'cambio_venta' || !log.entidad_id) continue;
+      const d = (log.detalle ?? {}) as Record<string, unknown>;
+      const info: CambioInfo = {
+        venta_original_id: log.entidad_id,
+        nc_id: (d.nc_id as string | null) ?? null,
+        nc_numero: (d.nc_numero as string | null) ?? null,
+        venta_nueva_id: (d.venta_nueva_id as string | null) ?? null,
+        venta_nueva_numero: (d.venta_nueva_numero as string | null) ?? null,
+        total_devuelto:
+          typeof d.total_devuelto === 'number' ? d.total_devuelto : 0,
+        total_nuevo: typeof d.total_nuevo === 'number' ? d.total_nuevo : 0,
+        diferencia_cobrada:
+          typeof d.diferencia_cobrada === 'number' ? d.diferencia_cobrada : 0,
+        metodo_diferencia: (d.metodo_diferencia as string | null) ?? null,
+        fecha: log.fecha,
+      };
+      if (log.entidad_id === id) original = info;
+      if (info.venta_nueva_id === id) nueva = info;
+    }
+    return { cambioComoOriginal: original, cambioComoNueva: nueva };
+  })();
+
+  // Detalles de las ventas/NC relacionadas por el cambio. Los mostramos
+  // en los banners ámbar (qué se devolvió, qué se llevó).
+  const ncQ = useQuery({
+    queryKey: ['pos-ticket-nc', cambioComoOriginal?.nc_id],
+    queryFn: () =>
+      cambioComoOriginal?.nc_id
+        ? db.notasCredito.get(cambioComoOriginal.nc_id)
+        : Promise.resolve(null),
+    enabled: !!cambioComoOriginal?.nc_id,
+  });
+  const ventaNuevaQ = useQuery({
+    queryKey: ['pos-ticket-venta-nueva', cambioComoOriginal?.venta_nueva_id],
+    queryFn: () =>
+      cambioComoOriginal?.venta_nueva_id
+        ? db.ventas.get(cambioComoOriginal.venta_nueva_id)
+        : Promise.resolve(null),
+    enabled: !!cambioComoOriginal?.venta_nueva_id,
+  });
+  const ventaOrigQ = useQuery({
+    queryKey: ['pos-ticket-venta-orig', cambioComoNueva?.venta_original_id],
+    queryFn: () =>
+      cambioComoNueva?.venta_original_id
+        ? db.ventas.get(cambioComoNueva.venta_original_id)
+        : Promise.resolve(null),
+    enabled: !!cambioComoNueva?.venta_original_id,
+  });
+  const ncNuevaQ = useQuery({
+    queryKey: ['pos-ticket-nc-nueva', cambioComoNueva?.nc_id],
+    queryFn: () =>
+      cambioComoNueva?.nc_id
+        ? db.notasCredito.get(cambioComoNueva.nc_id)
+        : Promise.resolve(null),
+    enabled: !!cambioComoNueva?.nc_id,
+  });
+
   // El auto-print al cobrar fue removido a pedido del cliente: el cajero
   // imprime SOLO si lo necesita, apretando el botón "Imprimir" en el
   // header. Evita el popup molesto en cada venta.
@@ -237,6 +325,180 @@ export function Ticket() {
             )}
           </div>
 
+          {/* Banner de cambio — esta venta es la ORIGINAL que tuvo un
+              cambio. Muestra qué NC se emitió, qué venta nueva se hizo
+              y con qué método se cobró la diferencia, más las tablas
+              de productos devueltos y llevados. */}
+          {cambioComoOriginal && (
+            <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <div className="font-medium">
+                Esta venta tuvo un cambio el {formatDate(cambioComoOriginal.fecha)}
+              </div>
+              <div className="mt-1.5 grid gap-0.5 text-xs">
+                <div>
+                  <span className="text-amber-700">Se devolvió:</span>{' '}
+                  <span className="font-medium tabular-nums">
+                    {formatCurrency(cambioComoOriginal.total_devuelto)}
+                  </span>
+                  {cambioComoOriginal.nc_numero && (
+                    <>
+                      {' '}vía NC{' '}
+                      <span className="font-mono">
+                        #{cambioComoOriginal.nc_numero}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {cambioComoOriginal.venta_nueva_id ? (
+                  <>
+                    <div>
+                      <span className="text-amber-700">Se llevó:</span>{' '}
+                      <span className="font-medium tabular-nums">
+                        {formatCurrency(cambioComoOriginal.total_nuevo)}
+                      </span>
+                      {cambioComoOriginal.venta_nueva_numero && (
+                        <>
+                          {' '}en venta{' '}
+                          <Link
+                            to={`/ticket/${cambioComoOriginal.venta_nueva_id}`}
+                            className="font-mono underline hover:text-amber-950"
+                          >
+                            #{cambioComoOriginal.venta_nueva_numero}
+                          </Link>
+                        </>
+                      )}
+                    </div>
+                    {cambioComoOriginal.diferencia_cobrada > 0 ? (
+                      <div>
+                        <span className="text-amber-700">Cobró diferencia:</span>{' '}
+                        <span className="font-medium tabular-nums">
+                          {formatCurrency(cambioComoOriginal.diferencia_cobrada)}
+                        </span>
+                        {cambioComoOriginal.metodo_diferencia && (
+                          <>
+                            {' '}en{' '}
+                            <span className="font-medium">
+                              {LABEL_METODO[cambioComoOriginal.metodo_diferencia] ??
+                                cambioComoOriginal.metodo_diferencia}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    ) : cambioComoOriginal.total_nuevo <
+                      cambioComoOriginal.total_devuelto ? (
+                      <div className="italic text-amber-700">
+                        Quedó saldo a favor del cliente (política Turisteando:
+                        no se devuelve plata).
+                      </div>
+                    ) : (
+                      <div className="italic text-amber-700">Cambio exacto.</div>
+                    )}
+                  </>
+                ) : (
+                  <div className="italic text-amber-700">
+                    Devolución sin reemplazo.
+                  </div>
+                )}
+              </div>
+              {ncQ.data && ncQ.data.items.length > 0 && (
+                <div className="mt-3">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-amber-800">
+                    Productos devueltos
+                  </div>
+                  <TablaItemsMin
+                    items={ncQ.data.items}
+                    productoInfo={(pid) => ({
+                      codigo: codigo(pid),
+                      nombre: nombre(pid),
+                    })}
+                  />
+                </div>
+              )}
+              {ventaNuevaQ.data && ventaNuevaQ.data.items.length > 0 && (
+                <div className="mt-3">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-amber-800">
+                    Productos llevados (venta #
+                    {cambioComoOriginal.venta_nueva_numero ?? ''})
+                  </div>
+                  <TablaItemsMin
+                    items={ventaNuevaQ.data.items}
+                    productoInfo={(pid) => ({
+                      codigo: codigo(pid),
+                      nombre: nombre(pid),
+                    })}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Banner de cambio — esta venta es la NUEVA (la diferencia
+              cobrada tras un cambio). Le decimos al cajero que no es
+              un ingreso normal. */}
+          {cambioComoNueva && (
+            <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <div className="font-medium">
+                Esta venta es la diferencia de un cambio
+                {ventaOrigQ.data && (
+                  <>
+                    {' '}sobre la venta{' '}
+                    <Link
+                      to={`/ticket/${cambioComoNueva.venta_original_id}`}
+                      className="font-mono underline hover:text-amber-950"
+                    >
+                      #{ventaOrigQ.data.numero}
+                    </Link>
+                  </>
+                )}
+              </div>
+              <div className="mt-1 text-xs text-amber-800">
+                El cliente devolvió{' '}
+                <span className="font-medium tabular-nums">
+                  {formatCurrency(cambioComoNueva.total_devuelto)}
+                </span>{' '}
+                (NC{' '}
+                {cambioComoNueva.nc_numero ? (
+                  <span className="font-mono">#{cambioComoNueva.nc_numero}</span>
+                ) : (
+                  '—'
+                )}
+                ) y se llevó productos por{' '}
+                <span className="font-medium tabular-nums">
+                  {formatCurrency(cambioComoNueva.total_nuevo)}
+                </span>
+                . Acá se registra sólo la diferencia.
+              </div>
+              {ventaOrigQ.data && ventaOrigQ.data.items.length > 0 && (
+                <div className="mt-3">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-amber-800">
+                    Compra original ({formatDate(ventaOrigQ.data.fecha)})
+                  </div>
+                  <TablaItemsMin
+                    items={ventaOrigQ.data.items}
+                    productoInfo={(pid) => ({
+                      codigo: codigo(pid),
+                      nombre: nombre(pid),
+                    })}
+                  />
+                </div>
+              )}
+              {ncNuevaQ.data && ncNuevaQ.data.items.length > 0 && (
+                <div className="mt-3">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-amber-800">
+                    Productos devueltos
+                  </div>
+                  <TablaItemsMin
+                    items={ncNuevaQ.data.items}
+                    productoInfo={(pid) => ({
+                      codigo: codigo(pid),
+                      nombre: nombre(pid),
+                    })}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Tabla de productos vendidos */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -329,5 +591,58 @@ export function Ticket() {
         }
       `}</style>
     </>
+  );
+}
+
+/**
+ * Mini-tabla reutilizable para los banners de "cambio": productos
+ * devueltos, compra original, productos llevados. Compacta y sin
+ * overflow horizontal — dentro del banner ámbar, no debería crecer
+ * horizontalmente aunque haya nombres largos.
+ */
+function TablaItemsMin({
+  items,
+  productoInfo,
+}: {
+  items: Array<{ producto_id: string; cantidad: number; precio_unitario: number; subtotal?: number }>;
+  productoInfo: (pid: string) => { codigo: string; nombre: string };
+}) {
+  return (
+    <div className="overflow-x-auto rounded-md border border-amber-200 bg-white">
+      <table className="w-full text-xs">
+        <thead className="bg-amber-100/60 text-[10px] uppercase text-amber-800">
+          <tr>
+            <th className="px-2 py-1 text-left">Código</th>
+            <th className="px-2 py-1 text-left">Producto</th>
+            <th className="px-2 py-1 text-right">Cant.</th>
+            <th className="px-2 py-1 text-right">Precio</th>
+            <th className="px-2 py-1 text-right">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((it, i) => {
+            const info = productoInfo(it.producto_id);
+            const subtotal = it.subtotal ?? it.cantidad * it.precio_unitario;
+            return (
+              <tr key={i} className="border-t border-amber-100">
+                <td className="px-2 py-1 font-mono text-[10px] text-slate-600">
+                  {info.codigo}
+                </td>
+                <td className="px-2 py-1">{info.nombre}</td>
+                <td className="px-2 py-1 text-right tabular-nums">
+                  {it.cantidad}
+                </td>
+                <td className="px-2 py-1 text-right tabular-nums">
+                  {formatCurrency(it.precio_unitario)}
+                </td>
+                <td className="px-2 py-1 text-right font-medium tabular-nums">
+                  {formatCurrency(subtotal)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
