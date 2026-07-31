@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Relevamiento reportes contables · Turisteando</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --card: #ffffff;
+    --text: #111111;
+    --muted: #666666;
+    --border: #e0e0e0;
+    --field: #fbfbfb;
+    --accent: #E93BA1;
+    --wa: #25D366;
+    --btn-dark: #1f2937;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 16px 14px 120px;
+    line-height: 1.5;
+  }
+  .container { max-width: 720px; margin: 0 auto; }
+
+  header { text-align: center; padding: 20px 0 6px; }
+  header h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.01em; }
+  header .sub { color: var(--muted); font-size: 13px; }
+
+  .intro {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin: 16px 0;
+    font-size: 13.5px;
+    color: #333;
+  }
+  .intro b { color: var(--text); }
+  .intro .status {
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    font-size: 12px; color: var(--muted);
+  }
+
+  section.q {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin: 12px 0;
+  }
+  section.q h3 {
+    margin: 0 0 4px; font-size: 15px; font-weight: 600;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  section.q .num {
+    background: var(--btn-dark); color: white;
+    border-radius: 4px; padding: 2px 6px;
+    font-size: 12px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  section.q .sub {
+    color: var(--muted); font-size: 12px;
+    margin: 0 0 12px 32px;
+  }
+  section.q .options { display: flex; flex-direction: column; gap: 6px; margin-left: 32px; }
+  section.q label.opt {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 12px;
+    background: var(--field);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  section.q label.opt:active { background: #f0f0f0; }
+  section.q label.opt input[type="checkbox"],
+  section.q label.opt input[type="radio"] {
+    margin-top: 2px; accent-color: var(--accent);
+    width: 18px; height: 18px; flex-shrink: 0;
+  }
+  section.q label.opt.checked {
+    background: #fef3f8; border-color: var(--accent);
+  }
+  section.q input[type="text"], section.q textarea {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit; font-size: 14px;
+    background: var(--field);
+    margin-top: 6px;
+  }
+  section.q input[type="text"]:focus, section.q textarea:focus {
+    outline: none; border-color: var(--accent);
+  }
+  section.q textarea { min-height: 60px; resize: vertical; }
+
+  /* Barra inferior fija con acciones */
+  .bottom-bar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    padding: 12px 14px;
+    z-index: 100;
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.05);
+  }
+  .bottom-bar-inner {
+    max-width: 720px; margin: 0 auto;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 16px;
+    font-size: 15px; font-weight: 500;
+    color: var(--text); cursor: pointer; font-family: inherit;
+    width: 100%;
+  }
+  .btn:active { background: #f0f0f0; }
+  .btn.wa {
+    background: var(--wa); color: white; border-color: var(--wa);
+    font-weight: 600; font-size: 16px; padding: 14px 16px;
+  }
+  .btn.wa:active { background: #1fb857; }
+  .btn.small { padding: 8px 12px; font-size: 13px; }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .btn { flex: 1; }
+
+  .status-msg {
+    text-align: center; font-size: 12px; color: var(--muted);
+  }
+  .status-msg.ok { color: #16a34a; }
+
+  /* Modal simple para mostrar respuestas */
+  .modal-bg {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    padding: 20px;
+    overflow-y: auto;
+  }
+  .modal-bg.open { display: flex; align-items: flex-start; justify-content: center; }
+  .modal {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 640px; width: 100%;
+    margin-top: 40px;
+    max-height: 80vh;
+    display: flex; flex-direction: column;
+  }
+  .modal h2 { margin: 0 0 12px; font-size: 18px; }
+  .modal pre {
+    background: var(--field);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 50vh; overflow-y: auto;
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .modal .modal-actions {
+    display: flex; flex-direction: column; gap: 8px;
+    margin-top: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <h1>Relevamiento reportes contables</h1>
+    <div class="sub">Turisteando · para entender bien qué necesitás</div>
+  </header>
+
+  <div class="intro">
+    Hola Agus, para sumar los reportes tipo contador dentro del sistema
+    necesito entender bien qué es lo que necesitás específicamente. Son
+    <b>10 preguntas cortas</b>. Se guardan solas mientras respondés, podés
+    cerrar y volver cuando quieras. Al final apretás <b>Enviar por WhatsApp</b>
+    y me llegan las respuestas.
+    <div class="status" id="statusMsg">Autoguardado listo.</div>
+  </div>
+
+  <!-- Q1: Objetivo -->
+  <section class="q" data-q="1">
+    <h3><span class="num">1</span> ¿Qué querés lograr?</h3>
+    <p class="sub">Podés marcar más de una.</p>
+    <div class="options" data-multi>
+      <label class="opt"><input type="checkbox" name="q1" value="Reemplazar al contador" />
+        Reemplazar total o parcialmente al contador
+      </label>
+      <label class="opt"><input type="checkbox" name="q1" value="Facilitarle el trabajo al contador" />
+        Que el contador siga, pero le mando todo prolijo desde el sistema
+      </label>
+      <label class="opt"><input type="checkbox" name="q1" value="Ver info en tiempo real" />
+        Poder ver esta info yo mismo, sin depender del contador
+      </label>
+    </div>
+  </section>
+
+  <!-- Q2: Gastos principales -->
+  <section class="q" data-q="2">
+    <h3><span class="num">2</span> Gastos que tenés</h3>
+    <p class="sub">Marcá todos los que apliquen.</p>
+    <div class="options" data-multi>
+      <label class="opt"><input type="checkbox" name="q2" value="Alquiler" /> Alquiler</label>
+      <label class="opt"><input type="checkbox" name="q2" value="Sueldos" /> Sueldos / personal</label>
+      <label class="opt"><input type="checkbox" name="q2" value="Servicios" /> Servicios (luz, agua, internet, etc.)</label>
+      <label class="opt"><input type="checkbox" name="q2" value="Comisiones bancarias" /> Comisiones bancarias / MP</label>
+      <label class="opt"><input type="checkbox" name="q2" value="Impuestos" /> Monotributo / IIBB / Impuestos</label>
+      <label class="opt"><input type="checkbox" name="q2" value="Mercadería" /> Mercadería (compras a proveedor)</label>
+      <label class="opt"><input type="checkbox" name="q2" value="Mantenimiento" /> Mantenimiento / arreglos</label>
+    </div>
+    <input type="text" name="q2_otros" placeholder="Otros gastos (opcional)" data-save />
+  </section>
+
+  <!-- Q3: Frecuencia de carga -->
+  <section class="q" data-q="3">
+    <h3><span class="num">3</span> ¿Cada cuánto cargarías los gastos?</h3>
+    <div class="options" data-single>
+      <label class="opt"><input type="radio" name="q3" value="Día a día" /> A medida que pasan (día a día)</label>
+      <label class="opt"><input type="radio" name="q3" value="Semanal" /> Una vez por semana</label>
+      <label class="opt"><input type="radio" name="q3" value="Mensual" /> Una vez por mes</label>
+      <label class="opt"><input type="radio" name="q3" value="Lo hace el contador" /> Los sigo pasando al contador</label>
+    </div>
+  </section>
+
+  <!-- Q4: Quién carga -->
+  <section class="q" data-q="4">
+    <h3><span class="num">4</span> ¿Quién los cargaría?</h3>
+    <div class="options" data-multi>
+      <label class="opt"><input type="checkbox" name="q4" value="Agus" /> Yo (Agus)</label>
+      <label class="opt"><input type="checkbox" name="q4" value="Diego" /> Diego</label>
+      <label class="opt"><input type="checkbox" name="q4" value="Gregorio" /> Gregorio</label>
+    </div>
+    <input type="text" name="q4_otros" placeholder="Otra persona (opcional)" data-save />
+  </section>
+
+  <!-- Q5: Frecuencia reportes -->
+  <section class="q" data-q="5">
+    <h3><span class="num">5</span> ¿Cada cuánto mirarías los reportes?</h3>
+    <div class="options" data-single>
+      <label class="opt"><input type="radio" name="q5" value="Diario" /> Todos los días</label>
+      <label class="opt"><input type="radio" name="q5" value="Semanal" /> Cada semana</label>
+      <label class="opt"><input type="radio" name="q5" value="Mensual" /> Solo a fin de mes</label>
+      <label class="opt"><input type="radio" name="q5" value="Trimestral o anual" /> Cada 3 meses o al año</label>
+    </div>
+  </section>
+
+  <!-- Q6: Comprobantes -->
+  <section class="q" data-q="6">
+    <h3><span class="num">6</span> Comprobantes de gastos</h3>
+    <div class="options" data-single>
+      <label class="opt"><input type="radio" name="q6" value="Con foto de comprobante" />
+        Quiero poder subir foto de la factura/ticket junto al gasto
+      </label>
+      <label class="opt"><input type="radio" name="q6" value="Solo número" />
+        No hace falta, solo el número me alcanza
+      </label>
+    </div>
+  </section>
+
+  <!-- Q7: Costos actualizados -->
+  <section class="q" data-q="7">
+    <h3><span class="num">7</span> Costo de los productos</h3>
+    <p class="sub">Necesario para calcular la ganancia real. ¿Los costos cargados hoy están al día?</p>
+    <div class="options" data-single>
+      <label class="opt"><input type="radio" name="q7" value="Actualizados" /> Sí, están al día</label>
+      <label class="opt"><input type="radio" name="q7" value="Parcial" /> Algunos sí, otros no</label>
+      <label class="opt"><input type="radio" name="q7" value="Desactualizados" /> No, hay que actualizarlos</label>
+    </div>
+  </section>
+
+  <!-- Q8: Vista por local -->
+  <section class="q" data-q="8">
+    <h3><span class="num">8</span> Vista por local</h3>
+    <div class="options" data-single>
+      <label class="opt"><input type="radio" name="q8" value="Cada local separado" /> Cada local por separado</label>
+      <label class="opt"><input type="radio" name="q8" value="Consolidado" /> Los dos juntos consolidado</label>
+      <label class="opt"><input type="radio" name="q8" value="Ambas" /> Los dos: separado Y consolidado</label>
+    </div>
+  </section>
+
+  <!-- Q9: Sigue con contador -->
+  <section class="q" data-q="9">
+    <h3><span class="num">9</span> ¿Vas a seguir con el contador pase lo que pase?</h3>
+    <div class="options" data-single>
+      <label class="opt"><input type="radio" name="q9" value="Sí, siempre" /> Sí, siempre (por tema fiscal/DGI)</label>
+      <label class="opt"><input type="radio" name="q9" value="Depende" /> Si el sistema hace todo, lo puedo dejar</label>
+      <label class="opt"><input type="radio" name="q9" value="No sé" /> Todavía no sé</label>
+    </div>
+  </section>
+
+  <!-- Q10: Urgencia -->
+  <section class="q" data-q="10">
+    <h3><span class="num">10</span> Nivel de urgencia</h3>
+    <div class="options" data-single>
+      <label class="opt"><input type="radio" name="q10" value="Alta" /> Alta — lo necesito ya</label>
+      <label class="opt"><input type="radio" name="q10" value="Media" /> Media — para los próximos meses</label>
+      <label class="opt"><input type="radio" name="q10" value="Baja" /> Baja — si sale bien, y si no también</label>
+    </div>
+  </section>
+
+  <!-- Comentario libre opcional -->
+  <section class="q" data-q="11">
+    <h3><span class="num">+</span> Algo más que quieras agregar</h3>
+    <p class="sub">Opcional. Cualquier cosa que te haya quedado pendiente o dudas.</p>
+    <textarea name="q_extra" placeholder="Escribí acá si querés..." data-save></textarea>
+  </section>
+
+</div>
+
+<!-- Barra fija abajo -->
+<div class="bottom-bar">
+  <div class="bottom-bar-inner">
+    <button class="btn wa" id="btnWhatsApp">Enviar por WhatsApp</button>
+    <div class="btn-row">
+      <button class="btn small" id="btnCopiar">Copiar</button>
+      <button class="btn small" id="btnDescargar">Descargar</button>
+      <button class="btn small" id="btnLimpiar">Limpiar</button>
+    </div>
+    <div class="status-msg" id="miniStatus"></div>
+  </div>
+</div>
+
+<!-- Modal de vista previa -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h2>Tus respuestas</h2>
+    <pre id="modalContent"></pre>
+    <div class="modal-actions">
+      <button class="btn wa" id="modalWhatsApp">Enviar por WhatsApp</button>
+      <button class="btn" id="modalCopiar">Copiar al portapapeles</button>
+      <button class="btn" id="modalCerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = 'relevamiento-contable-turisteando';
+  const statusEl = document.getElementById('statusMsg');
+  const miniStatusEl = document.getElementById('miniStatus');
+
+  function guardar() {
+    const data = {};
+    document.querySelectorAll('input, textarea').forEach((el) => {
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        if (el.checked) {
+          const arr = data[el.name] || [];
+          arr.push(el.value);
+          data[el.name] = arr;
+        }
+      } else {
+        if (el.value) data[el.name] = el.value;
+      }
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    statusEl.textContent = 'Guardado automáticamente ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    statusEl.classList.add('ok');
+    // Actualizar visualmente los labels marcados
+    document.querySelectorAll('label.opt').forEach((lbl) => {
+      const input = lbl.querySelector('input');
+      if (input && input.checked) lbl.classList.add('checked');
+      else lbl.classList.remove('checked');
+    });
+  }
+
+  function restaurar() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      Object.entries(data).forEach(([name, val]) => {
+        const values = Array.isArray(val) ? val : [val];
+        document.querySelectorAll(`[name="${name}"]`).forEach((el) => {
+          if (el.type === 'checkbox' || el.type === 'radio') {
+            if (values.includes(el.value)) el.checked = true;
+          } else {
+            el.value = values[0];
+          }
+        });
+      });
+      // Actualizar visual
+      document.querySelectorAll('label.opt').forEach((lbl) => {
+        const input = lbl.querySelector('input');
+        if (input && input.checked) lbl.classList.add('checked');
+      });
+    } catch (_) { /* ignore */ }
+  }
+
+  const PREGUNTAS = {
+    q1: '1) OBJETIVO',
+    q2: '2) GASTOS',
+    q2_otros: '   Otros gastos',
+    q3: '3) FRECUENCIA DE CARGA',
+    q4: '4) QUIÉN CARGA',
+    q4_otros: '   Otra persona',
+    q5: '5) FRECUENCIA DE REPORTES',
+    q6: '6) COMPROBANTES',
+    q7: '7) COSTOS DE PRODUCTOS',
+    q8: '8) VISTA POR LOCAL',
+    q9: '9) SIGUE CON CONTADOR',
+    q10: '10) URGENCIA',
+    q_extra: 'COMENTARIO ADICIONAL',
+  };
+
+  function armarMensaje() {
+    const data = {};
+    document.querySelectorAll('input, textarea').forEach((el) => {
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        if (el.checked) {
+          const arr = data[el.name] || [];
+          arr.push(el.value);
+          data[el.name] = arr;
+        }
+      } else {
+        if (el.value.trim()) data[el.name] = el.value.trim();
+      }
+    });
+    const lineas = ['*Relevamiento reportes contables — Turisteando*', ''];
+    Object.entries(PREGUNTAS).forEach(([key, label]) => {
+      const val = data[key];
+      if (!val) return;
+      if (Array.isArray(val)) {
+        lineas.push(label);
+        val.forEach((v) => lineas.push('  - ' + v));
+      } else {
+        lineas.push(label + ': ' + val);
+      }
+      lineas.push('');
+    });
+    return lineas.join('\n');
+  }
+
+  function abrirModal() {
+    const msg = armarMensaje();
+    document.getElementById('modalContent').textContent = msg;
+    document.getElementById('modalBg').classList.add('open');
+  }
+  function cerrarModal() {
+    document.getElementById('modalBg').classList.remove('open');
+  }
+  function enviarWA() {
+    const msg = armarMensaje();
+    // wa.me sin número → WhatsApp permite elegir el contacto al abrir
+    const url = 'https://wa.me/?text=' + encodeURIComponent(msg);
+    window.open(url, '_blank');
+  }
+  function copiar() {
+    const msg = armarMensaje();
+    navigator.clipboard.writeText(msg).then(() => {
+      miniStatusEl.textContent = 'Copiado al portapapeles';
+      miniStatusEl.classList.add('ok');
+      setTimeout(() => { miniStatusEl.textContent = ''; miniStatusEl.classList.remove('ok'); }, 2500);
+    });
+  }
+  function descargar() {
+    const msg = armarMensaje();
+    const blob = new Blob([msg], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'relevamiento-contable-turisteando.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  function limpiar() {
+    if (!confirm('¿Borrar todas las respuestas cargadas?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    document.querySelectorAll('input, textarea').forEach((el) => {
+      if (el.type === 'checkbox' || el.type === 'radio') el.checked = false;
+      else el.value = '';
+    });
+    document.querySelectorAll('label.opt').forEach((lbl) => lbl.classList.remove('checked'));
+    miniStatusEl.textContent = 'Formulario limpio';
+    setTimeout(() => { miniStatusEl.textContent = ''; }, 2000);
+  }
+
+  // Listeners
+  document.addEventListener('input', guardar);
+  document.addEventListener('change', guardar);
+
+  document.getElementById('btnWhatsApp').addEventListener('click', abrirModal);
+  document.getElementById('btnCopiar').addEventListener('click', copiar);
+  document.getElementById('btnDescargar').addEventListener('click', descargar);
+  document.getElementById('btnLimpiar').addEventListener('click', limpiar);
+  document.getElementById('modalWhatsApp').addEventListener('click', enviarWA);
+  document.getElementById('modalCopiar').addEventListener('click', copiar);
+  document.getElementById('modalCerrar').addEventListener('click', cerrarModal);
+  document.getElementById('modalBg').addEventListener('click', (e) => {
+    if (e.target.id === 'modalBg') cerrarModal();
+  });
+
+  restaurar();
+</script>
+
+</body>
+</html>
