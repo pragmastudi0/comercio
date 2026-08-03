@@ -1,0 +1,43 @@
+name: Backup diario de Supabase → Google Drive
+
+on:
+  schedule:
+    # Todos los días a las 06:00 UTC (03:00 hora Argentina).
+    # Elegido para que corra fuera del horario comercial de los locales
+    # (nadie está usando el PoS activamente, no interfiere).
+    - cron: '0 6 * * *'
+  # Botón manual desde GitHub Actions → Run workflow para pruebas o
+  # backup on-demand antes de una migración crítica.
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Instalar postgresql-client (versión 15, matchea Supabase)
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-15
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar googleapis
+        run: npm install --no-save googleapis
+
+      - name: Correr backup
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          GDRIVE_CREDENTIALS: ${{ secrets.GDRIVE_CREDENTIALS }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+          RETENTION_COUNT: '30'
+        run: node scripts/backup-db.mjs
