@@ -692,7 +692,11 @@ function PanelProducto({
         codigo_interno: codigo,
         costo,
         categoria_id: categoriaId || undefined,
-        proveedor_id: proveedorId || undefined,
+        // null explícito (no undefined) para que si el user eligió
+        // "— Ninguno —" el UPDATE sí borre el proveedor asignado.
+        // Con undefined, PostgREST no incluye el campo en el UPDATE y
+        // el valor viejo persiste — el usuario ve que "no se guarda".
+        proveedor_id: proveedorId || null,
         activo,
         promo_texto: promoTexto.trim() || undefined,
         cuotas_sin_recargo: cuotasSinRecargo,
@@ -1702,7 +1706,10 @@ function PanelNuevoProducto({
         codigo_interno: codigo.trim(),
         nombre: nombre.trim(),
         categoria_id: categoriaId,
-        proveedor_id: proveedorId || undefined,
+        // null explícito: el producto se crea sin proveedor asignado.
+        // Requiere que productos.proveedor_id sea nullable en BD
+        // (migración scripts/migrations-proveedor-nullable.sql).
+        proveedor_id: proveedorId || null,
         costo,
         publicado_web: false,
         activo,
