@@ -330,3 +330,53 @@ Sesión larga de feedback diario del cliente. Múltiples PRs chicos (#15 al #26)
 - **Whitelist hardcoded > flag en BD** para acceso de emergencia (Pragma dev, super-admin). Sobrevive a resets, imports fallidos y datos rotos — que es exactamente cuando se necesita.
 - **Auditar ANTES de ejecutar acciones destructivas**. `eliminar sesión` loguea a `auditoria` antes de borrar; si falla el borrado, el log queda igual. Ayuda a reconstruir qué se intentó y cuándo.
 - Cliente reporta síntomas ("cerró la caja pero quedó abierta"), no causas. El primer instinto de leer el código del PoS estaba equivocado — el código estaba bien, el problema era la policy. Escuchar el síntoma, no diagnosticar por dónde parece.
+
+### 2026-08-03 — Iteración 3 (post go-live, mes 2)
+
+Sesión larga cubriendo bugs reales y features nuevas. Volumen: ~18 PRs mergeados en 3 semanas. El sistema está en operación estable con 2 locales activos, cliente reporta feedback diario.
+
+**Data layer — bug de PostgREST silencioso:**
+- **`/admin/ventas` mostraba "1000 ventas · Total: $16M"** y se creía que era el total. PostgREST corta silenciosamente a 1000 filas si no se pasa `.range()`. Con go-live del 1/7 y ~90 ventas/día, en 11 días llegaron al tope y las ventas 1001+ del rango filtrado quedaban invisibles. Los KPIs del dashboard, reportes y ganancias también estaban subestimados.
+- **Fix**: helper `paginarTodo(buildQuery, ctx)` en `packages/db/src/supabase/helpers.ts` que pagina de a 1000 hasta que un chunk venga incompleto. Aplicado a `ventas.list`, `notas_credito.list`, `transferencias.list`, `auditoria.list`. El de auditoría era el más grave (banners "Con cambio" y precio editado se perdían con >1000 logs en el rango).
+
+**PoS — bugs correctivos:**
+- **Precio dropdown ≠ precio carrito**: el dropdown del buscador tenía `staleTime: 5*60_000` (5 min de cache), y el agregar hacía llamada fresca a `preciosDe()`. Si Agus cambiaba un precio en admin, el cajero veía dos números distintos hasta que expiraba el cache. Fix: staleTime bajado a 30s y el agregar usa el mismo cache que el dropdown por construcción. Cambio de estructura: `Map<id, number>` → `Map<id, EscalaPrecio[]>` para pasar escalas completas al carrito desde el cache.
+- **Escalas mayoristas desordenadas** al agregar producto: Supabase no garantiza orden del array de escalas. `escalas[0]` sin ordenar podía traer la mayorista (desde=12) en vez de la minorista (desde=1). Fix defensivo en `pricing.ts precioPorCantidad` + `stores/venta.ts precioSegunEscala` — ordenan internamente por `desde` ASC. Cubre a todos los consumidores.
+- **Pantalla en blanco tras deploys** (bug reportado por Agus en B12): el service worker cacheaba `index.html`. Después de un deploy los chunks JS cambian de hash, pero el SW seguía sirviendo el HTML viejo que apuntaba a chunks borrados → 404 → pantalla blanca. Ctrl+F5 lo arreglaba porque bypaseaba el SW. Fix: HTML pasa por `NetworkFirst` con timeout 3s + `cleanupOutdatedCaches: true`. Chunks siguen precacheándose (offline first).
+- **Backspace borra productos del carrito**: cuando el buscador quedaba vacío y el cajero apretaba Backspace de más al tipear, borraba productos sin querer. Fix: Backspace ya no borra. Supr sigue borrando pero con banner de confirmación (Enter = borrar, Esc = cancelar).
+- **Toast tapaba botones del header**: `top-right` con duración 4s bloqueaba Cobrar/Anular/Ajustar caja. Movido a `bottom-right` con duración 2s. Aplica a todos los toasts.
+- **Selects Desde/Hacia del modal Transferencia vacíos** (bug urgente): la query de depósitos tenía `enabled: open` y en algún ciclo de mount/unmount rápido quedaba sin data. Fix: sacar `enabled`, agregar `staleTime: 5min` + `retry: 3` con backoff + `refetchOnWindowFocus`. Botón "Reintentar" visible si la lista viene vacía. Console log de la carga para debug futuro.
+- **Buscadores del PoS limitados a 6-8 resultados**: con búsquedas genéricas ("caja", "agenda") quedaban productos afuera del dropdown. Subido a 200 en los 3 buscadores (`BuscadorProducto`, `ModalTransferenciaStock`, `ModalCambio`). El dropdown scrollea con `max-h-80`.
+
+**PoS — features nuevas:**
+- **Saldo inicial sugerido = lo que dejó el cierre anterior**. Al abrir caja libre, el input viene pre-llenado con `saldo_final_declarado` de la última sesión cerrada de esa caja. Banner verde: *"El turno anterior dejó $10.000. Cierre de {nombre}. Lo cargamos por vos — ajustalo si el conteo físico da distinto."* Ignora cierres forzados por el dev (que quedan con `saldo_final_declarado = null`).
+- **Transferencias de stock multi-item**: rediseño del `ModalTransferenciaStock`. Origen/destino se eligen una vez arriba, buscador debajo agrega productos a una lista con cantidad editable + botón X. Un solo botón "Transferir N producto(s)" ejecuta todo. Si algún item falla, toast warning con detalles y la lista queda con los que fallaron para reintentar sin duplicar los ya movidos.
+- **Ticket con detalle del cambio**: cuando una venta participó de un cambio (como original o como diferencia cobrada), muestra banner ámbar arriba de la tabla con NC + venta relacionada + tablas de "Productos devueltos" y "Productos llevados" + link a la venta contraparte. Toda la lógica ya existía en admin/ventas, se porteó al PoS.
+
+**Admin — nuevas capacidades:**
+- **Modal Estadísticas de producto rediseñado**: ancho `max-w-xl` → `max-w-6xl`, KPIs en una fila de 5 (7d / 30d / 90d / Rotación / Facturado), historial con **una columna por depósito** (Central + B12 + C11) más la de Total. Snapshot completo por depósito después de cada mov. Resaltado azul fuerte en columnas afectadas por el mov. Matcheo tolerante de motivos (case-insensitive + sin tildes + por palabras clave, ignora conectores) para que "correccion inventario" cuente como "Corrección de inventario". Detección de patrón para auto-transfers ("Auto-transfer desde ..." = ingreso, "Auto-transfer a ..." = egreso). Columna "Cant." renombrada a "Movimiento" con tooltip.
+- **Bug del snapshot del Total desfasado**: antes el "Total" mostraba el saldo previo al mov mientras las columnas por depósito mostraban el saldo posterior. Fix: capturar el `totalActual` en el snapshot ANTES de aplicar el retroceso.
+- **Paginación UI en `/admin/ventas`**: default 100/página con selector 50/100/200/Todas. Nav abajo con primera/anterior/última/siguiente. Los KPIs del header siguen sumando el rango filtrado completo, no solo la página visible.
+- **Filtro por local en `/admin/reportes`**: selector "Local" (Ambos/B12/C11) al lado de las fechas. Filtra en memoria sobre las ventas ya traídas.
+- **Navegación por flechas ↑↓ en `/admin/productos`**: mueve la selección con scroll automático a la fila visible. Se desactiva si el foco está en un input o si hay un modal abierto.
+- **Detalle de caja simplificado**: fuera "Debería quedar en caja" (redundante) y "Sobró/Faltó/Cuadró exacto" (el resaltado de fila ya lo comunica).
+- **Motivos de egreso stock nuevos**: agregados `Vale mercadería`, `Corrección de mercadería` y `Uso interno` a `MOTIVOS_EGRESO_STOCK` en `@comercio/business/stock.ts`.
+
+**Sistema de backup automatizado — nuevo (RESTORE.md):**
+- **Workflow GitHub Actions** en `.github/workflows/backup-db.yml`, cron diario 06:00 UTC (03:00 Argentina). Trigger manual disponible con `workflow_dispatch`.
+- **Proceso**: instala `postgresql-client-17` (con ruta absoluta `/usr/lib/postgresql/17/bin/pg_dump` porque Ubuntu 24.04 trae Pg16 preinstalado que gana en el PATH), hace pg_dump + gzip, sanity check de tamaño mínimo (>10KB), clona el repo separado, aplica retención de últimos 30 backups, commit + push.
+- **Repo separado** `pragmastudi0/turisteando-backups` (privado) donde vive el histórico de dumps.
+- **Secrets requeridos**: `SUPABASE_DB_URL` (session pooler URI porque runners no soportan IPv6 direct) + `BACKUP_REPO_TOKEN` (PAT fine-grained con `contents:write` sobre el repo backup).
+- **Backup incluye schema `auth` completo** — usuarios de login y sesiones recuperables intactos al restaurar.
+- **RESTORE.md** con 3 escenarios (restaurar en Supabase actual / recrear en Supabase nueva / migrar a otro proveedor) + procedimiento de test cada 6 meses.
+- **Cobertura final** (regla 3-2-1 casi completa): Supabase interno (7 días) + GitHub externo (30 días) + código en `comercio`. Cero costo mensual.
+
+**Lecciones de esta iteración:**
+- **Cache stale en React Query es fuente de bugs sutiles**. Cuando el usuario dice "veo dos números distintos", 90% es cache stale, no bug de datos. El fix casi siempre es reducir `staleTime` + asegurar que las dos fuentes lean del mismo sitio.
+- **Service worker + PWA + deploys frecuentes = pantalla blanca** si el HTML se precachea. HTML siempre en `NetworkFirst`, chunks en cache-first. Documentado en `apps/pos/vite.config.ts`.
+- **Confirm-before-destroy es no negociable** para acciones fáciles de disparar por error (Backspace, botones grandes). El costo de un click extra es infinitamente menor que el costo de perder un dato.
+- **Ordenamientos y defaults defensivos > confiar en el proveedor**. Supabase no garantiza orden de arrays en JSONB, PostgREST no garantiza traer todas las filas. Cubrilo en el repo, no en cada call-site.
+- **Google Cloud service accounts en cuentas gratis no funcionan para uploads a Drive personal** desde 2024. Storage quota = 0. Alternativas: OAuth con refresh token (más setup) o mover el backup a otro storage (GitHub repo, R2, S3). Elegimos GitHub por simplicidad y cero costo.
+- **Ubuntu Actions runners traen postgresql-client viejo preinstalado**. Al instalar una versión nueva, hay que llamar al binario con ruta absoluta sino gana el viejo por PATH.
+- **Regla 3-2-1 sin pagar es posible**: Supabase automático + GitHub separado + (opcional) copia local semanal. Sin USD 100/mes de PITR ni USD 25/mes de servicios de backup.
+- **Precio ancla**: el sistema base se vendió barato como precio de lanzamiento (USD 780). Los módulos add-on se cotizan por su alcance propio (no como % del sistema base) para no reforzar el precio bajo. El primer add-on (reportes contables) cotizado en USD 280 + USD 20/mes suba.
