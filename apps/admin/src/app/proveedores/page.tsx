@@ -41,6 +41,11 @@ function ProveedoresPageInner() {
     onSuccess: () => {
       toast.success('Proveedor eliminado');
       qc.invalidateQueries({ queryKey: ['proveedores-admin'] });
+      // Los productos que tenían este proveedor asignado quedan con
+      // proveedor_id = null (FK ON DELETE SET NULL). Invalidamos su
+      // cache para que se refleje al abrir /productos.
+      qc.invalidateQueries({ queryKey: ['productos-admin'] });
+      qc.invalidateQueries({ queryKey: ['productos-all'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -144,12 +149,24 @@ function ProveedoresPageInner() {
             onCancel={close}
           />
         )}
-        canDelete={(r) => {
+        canDelete={() => true}
+        onDelete={(r) => {
+          // Warning si hay productos asignados — el borrado deja esos
+          // productos con proveedor "—" (FK ON DELETE SET NULL). No
+          // bloqueamos: la política del cliente es "el proveedor viejo
+          // ya no existe, sáquenlo aunque haya productos asociados".
           const cant = cantProductos(r.id);
-          if (cant > 0) return `No se puede eliminar: ${cant} producto(s) lo tienen asignado`;
-          return true;
+          if (cant > 0) {
+            const ok = window.confirm(
+              `Este proveedor tiene ${cant} producto(s) asignado(s).\n\n` +
+                `Al eliminarlo, esos productos van a quedar sin proveedor ` +
+                `(los podés reasignar después desde /productos si querés).\n\n` +
+                `¿Continuar?`,
+            );
+            if (!ok) return Promise.resolve();
+          }
+          return eliminarMut.mutateAsync(r.id);
         }}
-        onDelete={(r) => eliminarMut.mutateAsync(r.id)}
       />
     </div>
   );
