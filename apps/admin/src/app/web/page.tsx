@@ -74,22 +74,28 @@ function WebPageInner() {
     queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
   });
   // Precio CF por producto — base sobre la que se calcula el mayorista.
-  // Traemos TODAS las escalas de las 2 listas CF (UUID + legacy) en 2
-  // queries paginadas, en vez de hacer 1 query por producto (con 1907
-  // productos serializados eran ~3 minutos y mostraba $0 mientras cargaba).
+  // Traemos TODAS las escalas de las listas CF en queries paginadas, en
+  // vez de hacer 1 query por producto (eran ~3 minutos con 1907 productos).
+  //
+  // Usamos Promise.allSettled porque `lista_precio_id` es de tipo uuid en
+  // Postgres, y el id legacy 'lp_cf' del mock rompe el WHERE con error
+  // "invalid input syntax for type uuid". Si Promise.all fallara por eso,
+  // perderíamos también los precios del UUID canónico → todos aparecerían
+  // en $0.
   const preciosCfQ = useQuery({
     queryKey: ['precios-cf-web-admin'],
     queryFn: async () => {
-      const [uuidPrecios, legacyPrecios] = await Promise.all(
+      const resultados = await Promise.allSettled(
         LISTA_CF_IDS.map((id) => db.productos.preciosDeLista(id)),
       );
       const map = new Map<string, number>();
-      // Priorizamos el UUID canónico; si un producto solo tiene 'lp_cf',
-      // se toma ese.
-      for (const lp of [...(uuidPrecios ?? []), ...(legacyPrecios ?? [])]) {
-        if (map.has(lp.producto_id)) continue;
-        const escs = [...(lp.escalas ?? [])].sort((a, b) => a.desde - b.desde);
-        map.set(lp.producto_id, escs[0]?.precio ?? 0);
+      for (const r of resultados) {
+        if (r.status !== 'fulfilled') continue;
+        for (const lp of r.value) {
+          if (map.has(lp.producto_id)) continue;
+          const escs = [...(lp.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+          map.set(lp.producto_id, escs[0]?.precio ?? 0);
+        }
       }
       return map;
     },

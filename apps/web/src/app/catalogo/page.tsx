@@ -47,22 +47,26 @@ function CatalogoInner() {
   });
   // Precio Consumidor Final por producto — es la referencia sobre la que
   // se calcula el precio mayorista (aplicando el descuento configurado).
-  // Traemos TODAS las escalas de las 2 listas CF (UUID + legacy) en 2
-  // queries paginadas, en vez de 1 query por producto. Los importados
-  // desde Excel quedaron con 'lp_cf'; los nuevos con el UUID.
+  //
+  // Usamos Promise.allSettled porque `lista_precio_id` es de tipo uuid en
+  // Postgres, y el id legacy 'lp_cf' del mock rompe el WHERE con error
+  // "invalid input syntax for type uuid". Con Promise.all común, una
+  // query rota tiraba abajo también los precios válidos del UUID canónico.
   const preciosQ = useQuery({
     queryKey: ['precios-cf-web-catalogo'],
     queryFn: async () => {
       const CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
-      const listas = await Promise.all(
+      const resultados = await Promise.allSettled(
         CF_IDS.map((id) => db.productos.preciosDeLista(id)),
       );
       const map = new Map<string, number>();
-      // Prioriza el UUID canónico (primera entrada de CF_IDS).
-      for (const lp of listas.flat()) {
-        if (map.has(lp.producto_id)) continue;
-        const escs = [...(lp.escalas ?? [])].sort((a, b) => a.desde - b.desde);
-        map.set(lp.producto_id, escs[0]?.precio ?? 0);
+      for (const r of resultados) {
+        if (r.status !== 'fulfilled') continue;
+        for (const lp of r.value) {
+          if (map.has(lp.producto_id)) continue;
+          const escs = [...(lp.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+          map.set(lp.producto_id, escs[0]?.precio ?? 0);
+        }
       }
       return map;
     },
