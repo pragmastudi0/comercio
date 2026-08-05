@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -11,8 +11,6 @@ import {
   Pencil,
   Eye,
   EyeOff,
-  ChevronLeft,
-  ChevronRight,
   Percent,
   Layers,
   Save,
@@ -21,32 +19,24 @@ import {
 } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@comercio/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@comercio/ui/table';
 import { Button } from '@comercio/ui/button';
 import { Input } from '@comercio/ui/input';
 import { Label } from '@comercio/ui/label';
-import { Badge } from '@comercio/ui/badge';
 import { Skeleton } from '@comercio/ui/skeleton';
-import {
-  Dialog,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@comercio/ui/dialog';
+import { Dialog, DialogFooter, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
 import { formatCurrency } from '@comercio/ui/utils';
-import { PRESET_IDS, type EscalaMayorista, type FiltroProductos } from '@comercio/db';
+import {
+  PRESET_IDS,
+  type EscalaMayorista,
+  type FiltroProductos,
+  type Producto,
+} from '@comercio/db';
 import { calcularPrecioMayorista } from '@comercio/business';
-import { PaginaProtegida } from '@/lib/permisos';
+import { ImagenesProducto } from '@/components/imagenes-producto';
+import { PaginaProtegida, usePermiso } from '@/lib/permisos';
 
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'https://turisteando-web.vercel.app';
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 
 function WebPageInner() {
   const db = getDb();
@@ -54,6 +44,9 @@ function WebPageInner() {
   const [texto, setTexto] = useState('');
   const [filtro, setFiltro] = useState<'todos' | 'publicados' | 'ocultos'>('todos');
   const [page, setPage] = useState(0);
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null);
+  const filaSeleccionadaRef = useRef<HTMLTableRowElement | null>(null);
+  const puedeEditar = usePermiso('productos', 'publicar_ecommerce');
 
   useEffect(() => {
     setPage(0);
@@ -75,8 +68,7 @@ function WebPageInner() {
     queryKey: ['config'],
     queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
   });
-  // Precio CF de cada producto (primera escala de la lista Consumidor Final).
-  // El precio mayorista sale de aplicar el descuento sobre este número.
+  // Precio CF por producto — base sobre la que se calcula el mayorista.
   const preciosCfQ = useQuery({
     queryKey: ['precios-cf-web-admin', productosQ.data?.length],
     queryFn: async () => {
@@ -125,8 +117,6 @@ function WebPageInner() {
   const productos = productosQ.data ?? [];
   const publicados = productos.filter((p) => p.publicado_web);
   const ocultos = productos.filter((p) => !p.publicado_web);
-  const sinFoto = publicados.length; // TODO conectar con imagenesDeMuchos si hace falta afinar
-  void sinFoto;
 
   let visibles = productos;
   if (filtro === 'publicados') visibles = publicados;
@@ -141,24 +131,31 @@ function WebPageInner() {
   const totalVisibles = visibles.length;
   const totalPages = Math.max(1, Math.ceil(totalVisibles / PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages - 1);
-  const desde = pageSafe * PAGE_SIZE;
-  const hasta = Math.min(desde + PAGE_SIZE, totalVisibles);
-  const pagina = visibles.slice(desde, hasta);
+  const desdeIdx = pageSafe * PAGE_SIZE;
+  const hastaIdx = Math.min(desdeIdx + PAGE_SIZE, totalVisibles);
+  const pagina = visibles.slice(desdeIdx, hastaIdx);
 
   const categoriaNombre = (id: string) =>
     categoriasQ.data?.find((c) => c.id === id)?.nombre ?? '—';
 
+  // Cuando cambia la lista visible y el seleccionado no está, elegir el
+  // primero — mismo patrón que /admin/productos.
+  useEffect(() => {
+    if (!pagina.length) return;
+    if (!seleccionadoId || !pagina.some((p) => p.id === seleccionadoId)) {
+      setSeleccionadoId(pagina[0]!.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagina.map((p) => p.id).join(',')]);
+
   const [ajusteOpen, setAjusteOpen] = useState(false);
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Online
-          </div>
-          <h1 className="mt-1 text-2xl font-semibold sm:text-3xl">E-commerce mayorista</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl font-semibold sm:text-2xl">E-commerce mayorista</h1>
+          <p className="text-xs text-muted-foreground">
             Descuentos, escalas y publicación del catálogo web.
           </p>
         </div>
@@ -177,252 +174,263 @@ function WebPageInner() {
         loading={configQ.isLoading}
         descuentoGlobalPct={descuentoGlobalPct}
         escalasGlobales={escalasGlobales}
+        disabled={!puedeEditar}
         onSaved={() => qc.invalidateQueries({ queryKey: ['config'] })}
       />
 
-      {/* KPIs */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-3">
-        <KpiCard
-          titulo="Productos publicados"
+      {/* KPIs compactos */}
+      <div className="mb-4 grid gap-2 sm:grid-cols-3">
+        <KpiChip
+          titulo="Publicados"
           valor={publicados.length}
-          sub="visibles en la web"
           icon={Eye}
           accent
           loading={productosQ.isLoading}
         />
-        <KpiCard
-          titulo="Productos ocultos"
+        <KpiChip
+          titulo="Ocultos"
           valor={ocultos.length}
-          sub="cargados pero no visibles"
           icon={EyeOff}
           loading={productosQ.isLoading}
         />
-        <KpiCard
+        <KpiChip
           titulo="Total catálogo"
           valor={productos.length}
-          sub="productos activos en el sistema"
           icon={Globe}
           loading={productosQ.isLoading}
         />
       </div>
 
-      {/* Acciones rápidas */}
-      <Card className="mb-4">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Acciones rápidas</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={publicarTodosMut.isPending || publicados.length === productos.length}
-            onClick={() => {
-              if (confirm(`¿Publicar los ${ocultos.length} productos ocultos en la web?`))
-                publicarTodosMut.mutate(true);
-            }}
-          >
-            <Eye className="mr-1 h-3 w-3" />
-            Publicar todos
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={publicarTodosMut.isPending || ocultos.length === productos.length}
-            onClick={() => {
-              if (confirm(`¿Ocultar los ${publicados.length} productos publicados?`))
-                publicarTodosMut.mutate(false);
-            }}
-          >
-            <EyeOff className="mr-1 h-3 w-3" />
-            Ocultar todos
-          </Button>
-          <Button
-            size="sm"
-            variant="default"
-            onClick={() => setAjusteOpen(true)}
-            className="ml-auto"
-          >
-            <Percent className="mr-1 h-3 w-3" />
-            Ajuste masivo de descuento
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Layout tabla + panel detalle (estilo /admin/productos) */}
+      <div className="flex min-h-[600px] flex-col gap-3 lg:h-[calc(100vh-380px)] lg:flex-row">
+        {/* Tabla izquierda */}
+        <div className="flex min-h-0 flex-1 flex-col rounded border border-slate-300 bg-white shadow-sm lg:basis-[65%]">
+          {/* Toolbar */}
+          <div className="grid grid-cols-1 gap-2 border-b border-slate-200 bg-slate-50 p-2 sm:grid-cols-[1fr_auto_auto]">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Buscar por nombre o código"
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                className="h-8 pl-7 text-sm"
+              />
+            </div>
+            <div className="flex gap-1 rounded-md border border-slate-300 bg-white p-0.5 text-xs">
+              {(['todos', 'publicados', 'ocultos'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFiltro(f)}
+                  className={`rounded px-2 py-0.5 ${
+                    filtro === f
+                      ? 'bg-slate-800 text-white'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {f === 'todos' ? 'Todos' : f === 'publicados' ? 'Publicados' : 'Ocultos'}
+                </button>
+              ))}
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setAjusteOpen(true)}
+              disabled={!puedeEditar}
+              className="h-8 text-xs"
+            >
+              <Percent className="mr-1 h-3 w-3" />
+              Ajuste masivo
+            </Button>
+          </div>
 
-      {/* Tabla */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-base">
+          {/* Acciones rápidas — chicas, embebidas */}
+          <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 bg-white px-2 py-1.5 text-xs">
+            <button
+              disabled={
+                publicarTodosMut.isPending ||
+                publicados.length === productos.length ||
+                !puedeEditar
+              }
+              onClick={() => {
+                if (
+                  confirm(`¿Publicar los ${ocultos.length} productos ocultos en la web?`)
+                )
+                  publicarTodosMut.mutate(true);
+              }}
+              className="rounded border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-40"
+            >
+              <Eye className="mr-1 inline h-3 w-3" />
+              Publicar todos
+            </button>
+            <button
+              disabled={
+                publicarTodosMut.isPending ||
+                ocultos.length === productos.length ||
+                !puedeEditar
+              }
+              onClick={() => {
+                if (confirm(`¿Ocultar los ${publicados.length} productos publicados?`))
+                  publicarTodosMut.mutate(false);
+              }}
+              className="rounded border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-40"
+            >
+              <EyeOff className="mr-1 inline h-3 w-3" />
+              Ocultar todos
+            </button>
+            <span className="ml-auto text-slate-500">
               {totalVisibles === 0
                 ? `0 de ${productos.length}`
-                : `${desde + 1}–${hasta} de ${totalVisibles}`}
-            </CardTitle>
-            <div className="flex gap-1 rounded-md border bg-background p-0.5 text-xs">
-              <button
-                onClick={() => setFiltro('todos')}
-                className={`rounded px-2 py-1 ${filtro === 'todos' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'}`}
-              >
-                Todos
-              </button>
-              <button
-                onClick={() => setFiltro('publicados')}
-                className={`rounded px-2 py-1 ${filtro === 'publicados' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'}`}
-              >
-                Publicados
-              </button>
-              <button
-                onClick={() => setFiltro('ocultos')}
-                className={`rounded px-2 py-1 ${filtro === 'ocultos' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'}`}
-              >
-                Ocultos
-              </button>
-            </div>
-          </div>
-          <div className="relative w-64">
-            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              className="pl-8"
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {productosQ.isLoading ? (
-            <Skeleton className="h-40" />
-          ) : totalVisibles === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No hay productos que coincidan.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-16">Web</TableHead>
-                  <TableHead>Código</TableHead>
-                  <TableHead>Producto</TableHead>
-                  <TableHead>Categoría</TableHead>
-                  <TableHead className="text-right">Precio CF</TableHead>
-                  <TableHead className="text-right">% desc.</TableHead>
-                  <TableHead className="text-right">Precio mayorista</TableHead>
-                  <TableHead>Desc. larga</TableHead>
-                  <TableHead className="w-24 text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pagina.map((p) => {
-                  const cf = preciosCfQ.data?.get(p.id) ?? 0;
-                  const calc = calcularPrecioMayorista({
-                    precioCF: cf,
-                    descuentoOverridePct: p.descuento_mayorista_pct_override,
-                    descuentoGlobalPct: descuentoGlobalPct,
-                    cantidad: 1,
-                    redondeo: 'cent',
-                  });
-                  const usaOverride = calc.fuente === 'override';
-                  return (
-                    <TableRow key={p.id}>
-                      <TableCell>
-                        <ToggleSwitch
-                          checked={p.publicado_web}
-                          onChange={(v) =>
-                            togglePublicarMut.mutate({ id: p.id, publicar: v })
-                          }
-                          disabled={togglePublicarMut.isPending}
-                        />
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{p.codigo_interno}</TableCell>
-                      <TableCell className="font-medium">{p.nombre}</TableCell>
-                      <TableCell>{categoriaNombre(p.categoria_id)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-slate-600">
-                        {formatCurrency(cf)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        <span className={usaOverride ? 'font-semibold text-cyan-700' : ''}>
-                          {calc.pctAplicado}%
-                        </span>
-                        {usaOverride && (
-                          <span className="ml-1 text-[10px] uppercase text-cyan-600">
-                            override
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums font-semibold">
-                        {formatCurrency(calc.precio)}
-                      </TableCell>
-                      <TableCell>
-                        {p.descripcion_larga ? (
-                          <Badge variant="secondary">Sí</Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button asChild variant="ghost" size="icon" title="Editar producto">
-                            <Link href={`/productos/${p.id}`}>
-                              <Pencil className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                          {p.publicado_web && (
-                            <Button
-                              asChild
-                              variant="ghost"
-                              size="icon"
-                              title="Ver en la web"
-                            >
-                              <a
-                                href={`${WEB_URL}/catalogo/${p.id}`}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                              </a>
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-
-        {totalVisibles > PAGE_SIZE && (
-          <div className="flex flex-col items-center justify-between gap-3 border-t px-4 py-3 text-sm sm:flex-row">
-            <span className="text-muted-foreground">
-              Página {pageSafe + 1} de {totalPages}
+                : `${desdeIdx + 1}–${hastaIdx} de ${totalVisibles}`}
             </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={pageSafe === 0}
-              >
-                <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={pageSafe >= totalPages - 1}
-              >
-                Siguiente <ChevronRight className="ml-1 h-4 w-4" />
-              </Button>
-            </div>
           </div>
-        )}
-      </Card>
 
-      <p className="mt-4 text-xs text-muted-foreground">
-        Tip: el precio mayorista sale de aplicar el descuento sobre el CF. Podés
-        setear un override por producto en la sección "Más opciones (e-commerce)"
-        del detalle de producto.
-      </p>
+          {/* Tabla compacta estilo software viejo */}
+          <div className="flex-1 overflow-auto">
+            {productosQ.isLoading ? (
+              <Skeleton className="m-2 h-40" />
+            ) : totalVisibles === 0 ? (
+              <div className="p-8 text-center text-sm text-slate-500">
+                No hay productos que coincidan.
+              </div>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-slate-100 text-[10px] uppercase text-slate-600 shadow-sm">
+                  <tr>
+                    <th className="border-b border-r border-slate-300 px-2 py-1.5 text-center w-10">
+                      Web
+                    </th>
+                    <th className="border-b border-r border-slate-300 px-2 py-1.5 text-left">
+                      Artículo
+                    </th>
+                    <th className="border-b border-r border-slate-300 px-2 py-1.5 text-left w-20">
+                      Código
+                    </th>
+                    <th className="border-b border-r border-slate-300 px-2 py-1.5 text-left">
+                      Grupo
+                    </th>
+                    <th className="border-b border-r border-slate-300 px-2 py-1.5 text-right w-24">
+                      CF
+                    </th>
+                    <th className="border-b border-r border-slate-300 px-2 py-1.5 text-right w-14">
+                      %
+                    </th>
+                    <th className="border-b border-slate-300 px-2 py-1.5 text-right w-24">
+                      Mayorista
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagina.map((p) => {
+                    const cf = preciosCfQ.data?.get(p.id) ?? 0;
+                    const calc = calcularPrecioMayorista({
+                      precioCF: cf,
+                      descuentoOverridePct: p.descuento_mayorista_pct_override,
+                      descuentoGlobalPct,
+                      cantidad: 1,
+                      redondeo: 'cent',
+                    });
+                    const seleccionado = p.id === seleccionadoId;
+                    const usaOverride = calc.fuente === 'override';
+                    return (
+                      <tr
+                        key={p.id}
+                        ref={seleccionado ? filaSeleccionadaRef : undefined}
+                        onClick={() => setSeleccionadoId(p.id)}
+                        className={`cursor-pointer border-b border-slate-200 ${
+                          seleccionado
+                            ? 'bg-blue-100 font-medium'
+                            : 'hover:bg-blue-50/50'
+                        }`}
+                      >
+                        <td className="border-r border-slate-200 px-1 py-0.5 text-center">
+                          <ToggleSwitch
+                            checked={p.publicado_web}
+                            onChange={(v) => {
+                              togglePublicarMut.mutate({ id: p.id, publicar: v });
+                            }}
+                            disabled={togglePublicarMut.isPending || !puedeEditar}
+                          />
+                        </td>
+                        <td className="border-r border-slate-200 px-2 py-1">{p.nombre}</td>
+                        <td className="border-r border-slate-200 px-2 py-1 font-mono">
+                          {p.codigo_interno}
+                        </td>
+                        <td className="border-r border-slate-200 px-2 py-1 text-slate-600">
+                          {categoriaNombre(p.categoria_id)}
+                        </td>
+                        <td className="border-r border-slate-200 px-2 py-1 text-right tabular-nums text-slate-600">
+                          {formatCurrency(cf)}
+                        </td>
+                        <td className="border-r border-slate-200 px-2 py-1 text-right tabular-nums">
+                          <span className={usaOverride ? 'font-semibold text-cyan-700' : ''}>
+                            {calc.pctAplicado}%
+                          </span>
+                        </td>
+                        <td className="px-2 py-1 text-right tabular-nums font-semibold">
+                          {formatCurrency(calc.precio)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Footer paginación */}
+          {totalVisibles > PAGE_SIZE && (
+            <div className="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-2 py-1.5 text-xs">
+              <span className="text-slate-500">
+                Página {pageSafe + 1} de {totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={pageSafe === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  className="rounded-sm border border-slate-300 bg-white px-2 py-0.5 disabled:opacity-40"
+                >
+                  ← Anterior
+                </button>
+                <button
+                  disabled={pageSafe >= totalPages - 1}
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  className="rounded-sm border border-slate-300 bg-white px-2 py-0.5 disabled:opacity-40"
+                >
+                  Siguiente →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Panel detalle derecha */}
+        <div className="flex min-h-0 flex-1 flex-col rounded border border-slate-300 bg-white shadow-sm lg:basis-[35%]">
+          {seleccionadoId && productos.find((p) => p.id === seleccionadoId) ? (
+            <PanelDetalleWeb
+              producto={productos.find((p) => p.id === seleccionadoId)!}
+              precioCF={preciosCfQ.data?.get(seleccionadoId) ?? 0}
+              descuentoGlobalPct={descuentoGlobalPct}
+              escalasGlobales={escalasGlobales}
+              categoriaNombre={categoriaNombre(
+                productos.find((p) => p.id === seleccionadoId)!.categoria_id,
+              )}
+              proveedorNombre={
+                proveedoresQ.data?.find(
+                  (x) => x.id === productos.find((p) => p.id === seleccionadoId)!.proveedor_id,
+                )?.nombre ?? '—'
+              }
+              disabled={!puedeEditar}
+              onSaved={() => {
+                qc.invalidateQueries({ queryKey: ['productos-web-admin'] });
+                qc.invalidateQueries({ queryKey: ['producto-detalle'] });
+              }}
+            />
+          ) : (
+            <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-slate-500">
+              Elegí un producto de la lista para ver y editar sus datos de e-commerce.
+            </div>
+          )}
+        </div>
+      </div>
 
       {ajusteOpen && (
         <AjusteMasivoDialog
@@ -440,22 +448,439 @@ function WebPageInner() {
   );
 }
 
+/** Panel derecho — datos del producto ORIENTADOS A E-COMMERCE:
+ *  fotos, descripciones, precios calculados, margen sobre costo, override
+ *  y config de venta web (bulto/mínimo/incremento). */
+function PanelDetalleWeb({
+  producto,
+  precioCF,
+  descuentoGlobalPct,
+  escalasGlobales,
+  categoriaNombre,
+  proveedorNombre,
+  disabled,
+  onSaved,
+}: {
+  producto: Producto;
+  precioCF: number;
+  descuentoGlobalPct: number;
+  escalasGlobales: EscalaMayorista[];
+  categoriaNombre: string;
+  proveedorNombre: string;
+  disabled?: boolean;
+  onSaved: () => void;
+}) {
+  const db = getDb();
+  const verCosto = usePermiso('productos', 'ver_costo');
+
+  const [descripcion, setDescripcion] = useState(producto.descripcion ?? '');
+  const [descripcionLarga, setDescripcionLarga] = useState(
+    producto.descripcion_larga ?? '',
+  );
+  const [descMayoOverrideTxt, setDescMayoOverrideTxt] = useState(
+    producto.descuento_mayorista_pct_override != null
+      ? String(producto.descuento_mayorista_pct_override)
+      : '',
+  );
+  const [soloPorBulto, setSoloPorBulto] = useState(producto.solo_por_bulto ?? false);
+  const [cantidadMinimaTxt, setCantidadMinimaTxt] = useState(
+    producto.cantidad_minima_web != null ? String(producto.cantidad_minima_web) : '',
+  );
+  const [incrementoTxt, setIncrementoTxt] = useState(
+    producto.incremento_web != null ? String(producto.incremento_web) : '',
+  );
+
+  // Cuando cambia de producto, reset del state.
+  useEffect(() => {
+    setDescripcion(producto.descripcion ?? '');
+    setDescripcionLarga(producto.descripcion_larga ?? '');
+    setDescMayoOverrideTxt(
+      producto.descuento_mayorista_pct_override != null
+        ? String(producto.descuento_mayorista_pct_override)
+        : '',
+    );
+    setSoloPorBulto(producto.solo_por_bulto ?? false);
+    setCantidadMinimaTxt(
+      producto.cantidad_minima_web != null ? String(producto.cantidad_minima_web) : '',
+    );
+    setIncrementoTxt(
+      producto.incremento_web != null ? String(producto.incremento_web) : '',
+    );
+  }, [producto.id]);
+
+  const guardarMut = useMutation({
+    mutationFn: async () => {
+      const t = descMayoOverrideTxt.trim();
+      const overrideNum = t ? parseFloat(t) : NaN;
+      const override = t && Number.isFinite(overrideNum)
+        ? Math.max(0, Math.min(100, overrideNum))
+        : null;
+      const cantMin = parseInt(cantidadMinimaTxt, 10);
+      const incr = parseInt(incrementoTxt, 10);
+      await db.productos.update(producto.id, {
+        descripcion: descripcion.trim() || undefined,
+        descripcion_larga: descripcionLarga.trim() || undefined,
+        descuento_mayorista_pct_override: override,
+        solo_por_bulto: soloPorBulto,
+        cantidad_minima_web: Number.isFinite(cantMin) && cantMin > 0 ? cantMin : undefined,
+        incremento_web: Number.isFinite(incr) && incr > 1 ? incr : undefined,
+      } as Partial<Producto>);
+    },
+    onSuccess: () => {
+      toast.success('Datos e-commerce guardados');
+      onSaved();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const togglePublicarMut = useMutation({
+    mutationFn: () =>
+      db.productos.update(producto.id, { publicado_web: !producto.publicado_web }),
+    onSuccess: () => onSaved(),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // Cálculos con precisión
+  const overrideNum = descMayoOverrideTxt.trim()
+    ? parseFloat(descMayoOverrideTxt)
+    : NaN;
+  const overrideVal =
+    descMayoOverrideTxt.trim() && Number.isFinite(overrideNum)
+      ? Math.max(0, Math.min(100, overrideNum))
+      : null;
+  const calcUno = calcularPrecioMayorista({
+    precioCF,
+    descuentoOverridePct: overrideVal,
+    descuentoGlobalPct,
+    cantidad: 1,
+  });
+
+  // Preview por escalas globales de cantidad.
+  const previewEscalas = useMemo(() => {
+    const puntos = new Set<number>([1]);
+    for (const e of escalasGlobales) if (e.desde > 1) puntos.add(e.desde);
+    return Array.from(puntos)
+      .sort((a, b) => a - b)
+      .map((cant) => {
+        const r = calcularPrecioMayorista({
+          precioCF,
+          descuentoOverridePct: overrideVal,
+          descuentoGlobalPct,
+          escalas: escalasGlobales,
+          cantidad: cant,
+        });
+        return { cant, precio: r.precio, pct: r.pctAplicado };
+      });
+  }, [precioCF, overrideVal, descuentoGlobalPct, escalasGlobales]);
+
+  // Margen sobre COSTO al precio mayorista @1u. Sirve para ver si un descuento
+  // agresivo deja negativo.
+  const costo = producto.costo ?? 0;
+  const margenMonto = calcUno.precio - costo;
+  const margenPct = costo > 0 ? ((calcUno.precio - costo) / costo) * 100 : 0;
+  const margenNegativo = margenMonto < 0;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Header sticky con nombre + código + toggle publicar */}
+      <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-slate-800">
+              {producto.nombre}
+            </div>
+            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-600">
+              <span className="font-mono">#{producto.codigo_interno}</span>
+              <span>·</span>
+              <span>{categoriaNombre}</span>
+              {proveedorNombre && proveedorNombre !== '—' && (
+                <>
+                  <span>·</span>
+                  <span>{proveedorNombre}</span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              onClick={() => togglePublicarMut.mutate()}
+              disabled={togglePublicarMut.isPending || disabled}
+              className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium ${
+                producto.publicado_web
+                  ? 'border-green-300 bg-green-50 text-green-800 hover:bg-green-100'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              } disabled:opacity-50`}
+            >
+              {producto.publicado_web ? (
+                <>
+                  <Eye className="h-3 w-3" />
+                  Publicado
+                </>
+              ) : (
+                <>
+                  <EyeOff className="h-3 w-3" />
+                  Oculto
+                </>
+              )}
+            </button>
+            <Button asChild variant="outline" size="sm" className="h-6 px-2 text-[11px]">
+              <Link href={`/productos/${producto.id}`}>
+                <Pencil className="mr-1 h-3 w-3" />
+                Editar todo
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Cuerpo scroll */}
+      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+        {/* Precio calculado — headline */}
+        <div className="rounded border border-cyan-200 bg-cyan-50/40 p-2">
+          <div className="mb-1 text-[10px] uppercase text-cyan-800">
+            Precio mayorista @ 1 unidad
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold tabular-nums text-cyan-900">
+              {formatCurrency(calcUno.precio)}
+            </span>
+            <span className="text-xs text-slate-600">
+              ({calcUno.pctAplicado}% off ·{' '}
+              {calcUno.fuente === 'override'
+                ? 'override propio'
+                : calcUno.fuente === 'global'
+                  ? `global ${descuentoGlobalPct}%`
+                  : 'sin descuento'}
+              )
+            </span>
+          </div>
+          <div className="mt-0.5 text-[11px] text-slate-600">
+            Precio CF ref.: <span className="tabular-nums">{formatCurrency(precioCF)}</span>
+            {precioCF === 0 && (
+              <span className="ml-2 text-amber-700">— sin precio CF cargado</span>
+            )}
+          </div>
+        </div>
+
+        {/* Preview por escalas de cantidad */}
+        {previewEscalas.length > 1 && (
+          <div className="rounded border border-slate-200 bg-slate-50/60 p-2">
+            <div className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+              <Layers className="h-3 w-3" />
+              Por cantidad (escalas globales)
+            </div>
+            <div className="flex flex-wrap gap-1.5 text-[11px]">
+              {previewEscalas.map((r) => (
+                <span
+                  key={r.cant}
+                  className="rounded border border-slate-300 bg-white px-1.5 py-0.5 tabular-nums"
+                >
+                  {r.cant}u → <strong>{formatCurrency(r.precio)}</strong>
+                  <span className="ml-1 text-slate-500">({r.pct}%)</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Margen sobre costo — solo si tiene permiso ver_costo */}
+        {verCosto && costo > 0 && (
+          <div
+            className={`rounded border p-2 ${
+              margenNegativo
+                ? 'border-red-300 bg-red-50'
+                : 'border-slate-200 bg-slate-50/60'
+            }`}
+          >
+            <div className="mb-1 text-[10px] uppercase text-slate-600">
+              Margen sobre costo (al precio mayorista @1u)
+            </div>
+            <div className="flex items-baseline justify-between gap-2 text-sm">
+              <div>
+                <span className="text-slate-600">Costo:</span>{' '}
+                <span className="tabular-nums">{formatCurrency(costo)}</span>
+              </div>
+              <div>
+                <span className="text-slate-600">Ganás:</span>{' '}
+                <span
+                  className={`font-semibold tabular-nums ${
+                    margenNegativo ? 'text-red-700' : 'text-emerald-700'
+                  }`}
+                >
+                  {formatCurrency(margenMonto)}{' '}
+                  {costo > 0 && (
+                    <span className="text-xs">
+                      ({margenPct >= 0 ? '+' : ''}
+                      {margenPct.toFixed(0)}%)
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+            {margenNegativo && (
+              <div className="mt-1 text-[11px] font-medium text-red-700">
+                ⚠ Estás vendiendo a pérdida — el descuento es mayor al margen.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Override del descuento */}
+        <div>
+          <Label className="mb-1 block text-[10px] uppercase text-slate-600">
+            Descuento mayorista override (%)
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              placeholder={`vacío = ${descuentoGlobalPct}% global`}
+              value={descMayoOverrideTxt}
+              onChange={(e) => setDescMayoOverrideTxt(e.target.value)}
+              disabled={disabled}
+              className="h-7 w-32 text-sm"
+            />
+            <span className="text-xs text-slate-600">%</span>
+            {descMayoOverrideTxt && (
+              <button
+                onClick={() => setDescMayoOverrideTxt('')}
+                disabled={disabled}
+                className="text-[11px] text-slate-500 underline hover:text-slate-700"
+              >
+                limpiar
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Fotos */}
+        <div>
+          <Label className="mb-1 block text-[10px] uppercase text-slate-600">Fotos</Label>
+          <ImagenesProducto productoId={producto.id} />
+        </div>
+
+        {/* Descripción corta */}
+        <div>
+          <Label className="mb-1 block text-[10px] uppercase text-slate-600">
+            Descripción (una línea)
+          </Label>
+          <Input
+            value={descripcion}
+            onChange={(e) => setDescripcion(e.target.value)}
+            disabled={disabled}
+            className="h-7 text-sm"
+          />
+        </div>
+
+        {/* Descripción larga */}
+        <div>
+          <Label className="mb-1 block text-[10px] uppercase text-slate-600">
+            Descripción larga (para la web)
+          </Label>
+          <textarea
+            value={descripcionLarga}
+            onChange={(e) => setDescripcionLarga(e.target.value)}
+            disabled={disabled}
+            rows={4}
+            className="w-full rounded-sm border border-slate-300 bg-white px-2 py-1 text-sm"
+          />
+        </div>
+
+        {/* Reglas de venta web */}
+        <div className="rounded border border-slate-200 bg-slate-50/60 p-2">
+          <div className="mb-1 text-[10px] uppercase text-slate-600">Reglas de venta web</div>
+          <label className="flex items-center gap-1.5 text-xs">
+            <input
+              type="checkbox"
+              checked={soloPorBulto}
+              onChange={(e) => setSoloPorBulto(e.target.checked)}
+              disabled={disabled}
+              className="h-3.5 w-3.5"
+            />
+            Se vende solo por bulto
+          </label>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div>
+              <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">
+                Compra mínima (u)
+              </Label>
+              <Input
+                type="number"
+                min="0"
+                placeholder="sin mínimo"
+                value={cantidadMinimaTxt}
+                onChange={(e) => setCantidadMinimaTxt(e.target.value)}
+                disabled={disabled}
+                className="h-7 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">
+                Incremento (u)
+              </Label>
+              <Input
+                type="number"
+                min="1"
+                placeholder="1 = unidad"
+                value={incrementoTxt}
+                onChange={(e) => setIncrementoTxt(e.target.value)}
+                disabled={disabled}
+                className="h-7 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer sticky con guardar */}
+      <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          {producto.publicado_web && (
+            <Button asChild variant="ghost" size="sm" className="h-7 text-[11px]">
+              <a
+                href={`${WEB_URL}/catalogo/${producto.id}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink className="mr-1 h-3 w-3" />
+                Ver en la web
+              </a>
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={() => guardarMut.mutate()}
+            disabled={guardarMut.isPending || disabled}
+            className="ml-auto"
+          >
+            <Save className="mr-1 h-3.5 w-3.5" />
+            Guardar
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ConfigMayorista({
   loading,
   descuentoGlobalPct,
   escalasGlobales,
+  disabled,
   onSaved,
 }: {
   loading: boolean;
   descuentoGlobalPct: number;
   escalasGlobales: EscalaMayorista[];
+  disabled?: boolean;
   onSaved: () => void;
 }) {
   const db = getDb();
   const [pctTxt, setPctTxt] = useState(String(descuentoGlobalPct));
   const [escalas, setEscalas] = useState<EscalaMayorista[]>(escalasGlobales);
 
-  // Re-sincronizar cuando la query trae datos frescos.
   useEffect(() => {
     setPctTxt(String(descuentoGlobalPct));
     setEscalas(escalasGlobales);
@@ -500,27 +925,26 @@ function ConfigMayorista({
 
   if (loading) {
     return (
-      <Card className="mb-6">
-        <CardContent className="p-4">
-          <Skeleton className="h-24" />
+      <Card className="mb-4">
+        <CardContent className="p-3">
+          <Skeleton className="h-20" />
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="mb-6 border-cyan-200 bg-cyan-50/30">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
+    <Card className="mb-4 border-cyan-200 bg-cyan-50/30">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
           <Percent className="h-4 w-4 text-cyan-700" />
           Configuración mayorista
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Descuento global */}
+      <CardContent className="space-y-3">
         <div className="grid gap-3 md:grid-cols-[220px_1fr]">
           <div>
-            <Label className="mb-1 block text-xs uppercase text-slate-600">
+            <Label className="mb-1 block text-[10px] uppercase text-slate-600">
               Descuento global (%)
             </Label>
             <div className="flex items-center gap-2">
@@ -531,29 +955,29 @@ function ConfigMayorista({
                 step="0.5"
                 value={pctTxt}
                 onChange={(e) => setPctTxt(e.target.value)}
-                className="h-8 w-24 text-sm"
+                disabled={disabled}
+                className="h-7 w-24 text-sm"
               />
               <span className="text-xs text-slate-600">% sobre CF</span>
             </div>
             <p className="mt-1 text-[10px] text-slate-600">
-              Se aplica a todos los productos publicados sin override propio.
+              Aplica a todo lo publicado sin override propio.
             </p>
           </div>
 
-          {/* Escalas por cantidad */}
           <div>
-            <Label className="mb-1 block text-xs uppercase text-slate-600">
+            <Label className="mb-1 block text-[10px] uppercase text-slate-600">
               Escalas por cantidad (opcional)
             </Label>
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               {escalas.length === 0 && (
-                <p className="text-xs text-slate-500">
+                <p className="text-[11px] text-slate-500">
                   Sin escalas — solo aplica el descuento global.
                 </p>
               )}
               {escalas.map((e, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm">
-                  <span className="w-14 text-xs text-slate-600">Desde</span>
+                <div key={i} className="flex items-center gap-1.5 text-xs">
+                  <span className="w-12 text-slate-600">Desde</span>
                   <Input
                     type="number"
                     min="1"
@@ -564,9 +988,10 @@ function ConfigMayorista({
                         arr.map((x, j) => (j === i ? { ...x, desde } : x)),
                       );
                     }}
-                    className="h-7 w-20 text-sm"
+                    disabled={disabled}
+                    className="h-6 w-16 text-xs"
                   />
-                  <span className="text-xs text-slate-600">unidades →</span>
+                  <span className="text-slate-600">u →</span>
                   <Input
                     type="number"
                     min="0"
@@ -579,53 +1004,48 @@ function ConfigMayorista({
                         arr.map((x, j) => (j === i ? { ...x, pct } : x)),
                       );
                     }}
-                    className="h-7 w-20 text-sm"
+                    disabled={disabled}
+                    className="h-6 w-16 text-xs"
                   />
-                  <span className="text-xs text-slate-600">% off</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      setEscalas((arr) => arr.filter((_, j) => j !== i))
-                    }
-                    className="h-7 w-7 text-red-600 hover:bg-red-50"
+                  <span className="text-slate-600">% off</span>
+                  <button
+                    onClick={() => setEscalas((arr) => arr.filter((_, j) => j !== i))}
+                    disabled={disabled}
+                    className="rounded p-0.5 text-red-600 hover:bg-red-50 disabled:opacity-40"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                    <Trash2 className="h-3 w-3" />
+                  </button>
                 </div>
               ))}
-              <Button
-                variant="outline"
-                size="sm"
+              <button
                 onClick={() =>
                   setEscalas((arr) => [
                     ...arr,
                     { desde: arr.length ? (arr[arr.length - 1]!.desde || 0) + 10 : 10, pct: 0 },
                   ])
                 }
-                className="h-7 text-xs"
+                disabled={disabled}
+                className="mt-1 flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] hover:bg-slate-50 disabled:opacity-40"
               >
-                <Plus className="mr-1 h-3 w-3" />
+                <Plus className="h-3 w-3" />
                 Agregar escala
-              </Button>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Preview */}
         <div className="rounded border border-cyan-200 bg-white/60 p-2">
-          <div className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
-            <Layers className="h-3 w-3" />
-            Preview con precio CF $1.000
+          <div className="mb-1 text-[10px] uppercase text-slate-600">
+            Preview con CF $1.000
           </div>
-          <div className="flex flex-wrap gap-2 text-xs">
+          <div className="flex flex-wrap gap-1.5 text-[11px]">
             {preview.map((r) => (
               <span
                 key={r.cant}
-                className="rounded bg-slate-100 px-2 py-0.5 tabular-nums"
+                className="rounded bg-slate-100 px-1.5 py-0.5 tabular-nums"
               >
                 {r.cant}u → {formatCurrency(r.precio)}{' '}
-                <span className="text-slate-500">({r.pct}% off)</span>
+                <span className="text-slate-500">({r.pct}%)</span>
               </span>
             ))}
           </div>
@@ -635,10 +1055,11 @@ function ConfigMayorista({
           <Button
             size="sm"
             onClick={() => guardarMut.mutate()}
-            disabled={guardarMut.isPending}
+            disabled={guardarMut.isPending || disabled}
+            className="h-7 text-xs"
           >
-            <Save className="mr-1 h-3.5 w-3.5" />
-            Guardar cambios
+            <Save className="mr-1 h-3 w-3" />
+            Guardar
           </Button>
         </div>
       </CardContent>
@@ -835,53 +1256,53 @@ function ToggleSwitch({
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={() => onChange(!checked)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange(!checked);
+      }}
       disabled={disabled}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition disabled:opacity-50 ${
-        checked ? 'bg-primary' : 'bg-muted'
+      className={`relative inline-flex h-4 w-7 items-center rounded-full transition disabled:opacity-50 ${
+        checked ? 'bg-emerald-500' : 'bg-slate-300'
       }`}
     >
       <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-          checked ? 'translate-x-4' : 'translate-x-0.5'
+        className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition ${
+          checked ? 'translate-x-3.5' : 'translate-x-0.5'
         }`}
       />
     </button>
   );
 }
 
-function KpiCard({
+function KpiChip({
   titulo,
   valor,
-  sub,
   icon: Icon,
   accent,
   loading,
 }: {
   titulo: string;
   valor: number;
-  sub: string;
   icon: typeof Globe;
   accent?: boolean;
   loading?: boolean;
 }) {
   return (
-    <Card className={accent ? 'border-primary/30 bg-primary/5' : ''}>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">{titulo}</CardTitle>
-          <Icon className="h-4 w-4 text-muted-foreground" />
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <Skeleton className="h-7 w-16" />
-        ) : (
-          <div className="text-2xl font-bold tabular-nums sm:text-3xl">{valor}</div>
-        )}
-        <p className="text-xs text-muted-foreground">{sub}</p>
-      </CardContent>
-    </Card>
+    <div
+      className={`flex items-center justify-between rounded border px-3 py-1.5 ${
+        accent ? 'border-cyan-300 bg-cyan-50/50' : 'border-slate-300 bg-white'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-slate-500" />
+        <span className="text-xs text-slate-600">{titulo}</span>
+      </div>
+      {loading ? (
+        <Skeleton className="h-5 w-8" />
+      ) : (
+        <span className="text-lg font-bold tabular-nums">{valor}</span>
+      )}
+    </div>
   );
 }
 
