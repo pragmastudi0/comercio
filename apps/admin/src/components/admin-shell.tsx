@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   CreditCard,
   ArrowLeftRight,
+  Store,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PRESET_IDS } from '@comercio/db';
@@ -91,7 +92,10 @@ const MENU: MenuItem[] = [
       { href: '/roles', label: 'Roles y permisos', requiere: req('roles', 'ver') },
       { href: '/configuracion', label: 'Configuración general', requiere: req('configuracion', 'ver') },
       { href: '/backup', label: 'Backup', requiere: req('configuracion', 'backup_restore') },
-      { href: '/web', label: 'E-commerce', requiere: req('productos', 'publicar_ecommerce') },
+      // "/web" (E-commerce) se movió al TOOLBAR de íconos grandes,
+      // al lado de Cobrar. Es una sección que Agus toca seguido
+      // (publicar productos, editar descripciones, subir fotos)
+      // y estaba escondido en el dropdown Sistema.
     ],
   },
 ];
@@ -126,6 +130,10 @@ const TOOLBAR: ToolbarAction[] = [
   // Sin permiso requerido: lo ven todos los roles que pueden entrar
   // al admin (cajeros ya están bloqueados arriba).
   { type: 'link', href: POS_URL, label: 'Cobrar', icon: CreditCard, color: 'bg-rose-100 text-rose-700', external: true },
+  // Ecommerce → publicación de productos, fotos, descripciones. Antes
+  // estaba en el dropdown "Sistema" pero Agus lo toca seguido; acá al
+  // lado de Cobrar queda accesible de un click.
+  { type: 'link', href: '/web', label: 'Ecommerce', icon: Store, color: 'bg-cyan-100 text-cyan-700', requiere: req('productos', 'publicar_ecommerce') },
 ];
 
 /**

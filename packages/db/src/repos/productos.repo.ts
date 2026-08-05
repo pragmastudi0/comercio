@@ -42,6 +42,13 @@ export type ProductosRepo = {
   update(id: ID, patch: Partial<Producto>): Promise<Producto>;
   delete(id: ID): Promise<void>;
   aumentoMasivo(filtro: FiltroProductos, porcentaje: number, listaPrecioId: ID): Promise<number>;
+  /**
+   * Setea el override de descuento mayorista sobre todos los productos que
+   * matchean el filtro. `pct = null` limpia el override → el producto pasa
+   * a usar el global de la empresa. Devuelve la cantidad de filas afectadas.
+   * Usado por el modal Ajuste masivo en /admin/web.
+   */
+  setDescuentoMayoristaMasivo(filtro: FiltroProductos, pct: number | null): Promise<number>;
 
   // Variantes
   variantes(productoId: ID): Promise<Variante[]>;

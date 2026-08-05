@@ -18,10 +18,12 @@ import {
 } from 'lucide-react';
 import { ModalEstadisticasProducto } from '@/components/modal-estadisticas-producto';
 import { MotivoAjusteDialog, type DeltaAjuste } from '@/components/motivo-ajuste-dialog';
+import { ImagenesProducto } from '@/components/imagenes-producto';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
 import { PRESET_IDS, type Producto } from '@comercio/db';
+import { previewPrecioMayorista } from '@comercio/business';
 import { Button } from '@comercio/ui/button';
 import { Dialog, DialogFooter, DialogHeader, DialogTitle } from '@comercio/ui/dialog';
 import { Input } from '@comercio/ui/input';
@@ -485,6 +487,13 @@ function PanelProducto({
     queryKey: ['proveedores'],
     queryFn: () => db.proveedores.list(),
   });
+  // Descuento mayorista global de la empresa (config) — se usa como
+  // fallback cuando el override del producto está vacío. Solo para el
+  // preview en la sección e-commerce.
+  const configQ = useQuery({
+    queryKey: ['config'],
+    queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
+  });
 
   const LISTA_CF_ID = PRESET_IDS.listas.consumidorFinal;
   // Ordenar por `desde` ASC porque Supabase no garantiza orden y
@@ -537,6 +546,10 @@ function PanelProducto({
   const [ecommerceAbierto, setEcommerceAbierto] = useState(false);
   const [publicadoWeb, setPublicadoWeb] = useState(false);
   const [descripcionLarga, setDescripcionLarga] = useState('');
+  // Override de descuento mayorista (opcional). Vacío = usar el global de
+  // la config. 0-100. Solo afecta al catálogo web público — el PoS y admin
+  // siguen mostrando CF.
+  const [descMayoOverrideTxt, setDescMayoOverrideTxt] = useState('');
   // Deltas de stock pendientes por local (string para soportar vacío
   // y signos). Se aplican al apretar "Guardar cambios" — además los
   // botones +/- inline de cada local también disparan ajustes directos.
@@ -582,6 +595,11 @@ function PanelProducto({
       );
       setPublicadoWeb(productoQ.data.publicado_web ?? false);
       setDescripcionLarga(productoQ.data.descripcion_larga ?? '');
+      setDescMayoOverrideTxt(
+        productoQ.data.descuento_mayorista_pct_override != null
+          ? String(productoQ.data.descuento_mayorista_pct_override)
+          : '',
+      );
       // Re-lockear el código al cambiar de producto: si Agus salta de
       // un producto a otro, tiene que confirmar el aviso antes de tocar.
       setCodigoDesbloqueado(false);
@@ -703,6 +721,15 @@ function PanelProducto({
         ...patchPromo,
         publicado_web: publicadoWeb,
         descripcion_larga: descripcionLarga.trim() || undefined,
+        // null explícito para LIMPIAR el override en Supabase cuando el
+        // input queda vacío. Undefined dejaría el valor viejo en la BD.
+        descuento_mayorista_pct_override: (() => {
+          const t = descMayoOverrideTxt.trim();
+          if (!t) return null;
+          const n = parseFloat(t);
+          if (!Number.isFinite(n)) return null;
+          return Math.max(0, Math.min(100, n));
+        })(),
       } as unknown as Partial<Producto>;
       await db.productos.update(productoId, patch);
       // Update de las escalas de la lista CF: primera escala = precio
@@ -1373,10 +1400,65 @@ function PanelProducto({
                   className="w-full rounded-sm border border-slate-300 bg-white px-2 py-1 text-sm"
                 />
               </div>
-              <p className="text-[10px] text-slate-500">
-                Fotos, escalas de precio por cantidad y otras opciones avanzadas se
-                gestionan desde la vista completa de e-commerce (menú Sistema → E-commerce).
-              </p>
+              {/* Fotos del producto — gestionadas inline sin salir de
+                  /admin/productos (Etapa 2 e-commerce). El componente
+                  usa Supabase Storage y guarda los cambios al toque
+                  (sin depender del botón "Guardar" del form principal). */}
+              <div>
+                <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                  Fotos (para la web)
+                </Label>
+                <ImagenesProducto productoId={productoId} />
+              </div>
+              {/* Descuento propio del producto para la tienda web (opcional).
+                  Vacío = usa el % general configurado en /admin/web. */}
+              {(() => {
+                const globalPct = configQ.data?.descuento_mayorista_pct ?? 0;
+                const propioNum = parseFloat(descMayoOverrideTxt);
+                const propioVal =
+                  descMayoOverrideTxt.trim() && Number.isFinite(propioNum)
+                    ? Math.max(0, Math.min(100, propioNum))
+                    : null;
+                const preview = previewPrecioMayorista(precioCf, propioVal, globalPct);
+                const usaPropio = propioVal != null && propioVal > 0;
+                return (
+                  <div className="rounded-sm border border-cyan-200 bg-cyan-50/60 p-2">
+                    <Label className="mb-1 block text-[10px] uppercase text-cyan-800">
+                      Descuento propio para la tienda web (%)
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        placeholder={`vacío = usa el general (${globalPct}%)`}
+                        value={descMayoOverrideTxt}
+                        onChange={(e) => setDescMayoOverrideTxt(e.target.value)}
+                        disabled={!puedeEditar}
+                        className="h-7 w-32 text-sm"
+                      />
+                      <span className="text-xs text-slate-600">%</span>
+                      {precioCf > 0 && (
+                        <span className="ml-auto text-xs text-slate-700">
+                          Precio en la web:{' '}
+                          <strong className="text-cyan-800">
+                            {formatCurrency(preview.precio)}
+                          </strong>{' '}
+                          <span className="text-slate-500">
+                            ({preview.pctAplicado}% desc. ·{' '}
+                            {usaPropio ? 'propio' : globalPct > 0 ? 'general' : 'sin descuento'})
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[10px] text-slate-600">
+                      Solo afecta al precio en la tienda web mayorista. Dejalo vacío
+                      para usar el descuento general configurado en Ecommerce.
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

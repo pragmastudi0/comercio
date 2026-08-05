@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Package } from 'lucide-react';
 import { getDb } from '@/lib/db';
-import { SITE } from '@/lib/config';
+import { PRESET_IDS } from '@comercio/db';
+import { calcularPrecioMayorista } from '@comercio/business';
 import { Card, CardContent } from '@comercio/ui/card';
 import { Input } from '@comercio/ui/input';
 import { Badge } from '@comercio/ui/badge';
@@ -44,18 +45,27 @@ function CatalogoInner() {
         texto: texto || undefined,
       }),
   });
+  // Precio Consumidor Final por producto — es la referencia sobre la que
+  // se calcula el precio mayorista (aplicando el descuento configurado).
   const preciosQ = useQuery({
-    queryKey: ['precios-web', SITE.listaPrecioId, productosQ.data?.map((p) => p.id).join(',')],
+    queryKey: ['precios-cf-web', productosQ.data?.map((p) => p.id).join(',')],
     queryFn: async () => {
-      const map = new Map<string, { desde: number; precio: number }[]>();
+      const map = new Map<string, number>();
       for (const p of productosQ.data ?? []) {
         const lp = await db.productos.preciosDe(p.id);
-        const lista = lp.find((x) => x.lista_precio_id === SITE.listaPrecioId);
-        map.set(p.id, lista?.escalas ?? []);
+        const cf = lp.find((x) => x.lista_precio_id === PRESET_IDS.listas.consumidorFinal);
+        const escs = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+        map.set(p.id, escs[0]?.precio ?? 0);
       }
       return map;
     },
     enabled: !!productosQ.data,
+  });
+  // Configuración mayorista global (descuento + escalas por cantidad).
+  const configQ = useQuery({
+    queryKey: ['config-mayorista'],
+    queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
+    staleTime: 5 * 60_000,
   });
   // Imágenes principales (orden 0) de todos los productos visibles, en UN
   // solo query batch.
@@ -99,9 +109,22 @@ function CatalogoInner() {
     router.push(url);
   }
 
-  function precioUnitario(productoId: string): number {
-    const escalas = preciosQ.data?.get(productoId) ?? [];
-    return escalas[0]?.precio ?? 0;
+  const descuentoGlobalPct = configQ.data?.descuento_mayorista_pct ?? 0;
+  const escalasMayoristas = configQ.data?.escalas_mayorista_cantidad ?? [];
+
+  function precioUnitario(producto: {
+    id: string;
+    descuento_mayorista_pct_override?: number | null;
+  }): { precio: number; pctAplicado: number; precioCF: number } {
+    const cf = preciosQ.data?.get(producto.id) ?? 0;
+    const r = calcularPrecioMayorista({
+      precioCF: cf,
+      descuentoOverridePct: producto.descuento_mayorista_pct_override,
+      descuentoGlobalPct,
+      cantidad: 1,
+      redondeo: 'cent',
+    });
+    return { precio: r.precio, pctAplicado: r.pctAplicado, precioCF: cf };
   }
   function categoriaNombre(id: string) {
     return categorias.find((c) => c.id === id)?.nombre ?? '';
@@ -186,9 +209,22 @@ function CatalogoInner() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {productos.map((p) => {
-            const escalas = preciosQ.data?.get(p.id) ?? [];
-            const tieneEscala = escalas.length > 1;
+            const precioInfo = precioUnitario(p);
+            const primeraEscala = [...escalasMayoristas]
+              .sort((a, b) => a.desde - b.desde)
+              .find((e) => e.pct > precioInfo.pctAplicado);
+            const precioConEscala = primeraEscala
+              ? calcularPrecioMayorista({
+                  precioCF: precioInfo.precioCF,
+                  descuentoOverridePct: p.descuento_mayorista_pct_override,
+                  descuentoGlobalPct,
+                  escalas: escalasMayoristas,
+                  cantidad: primeraEscala.desde,
+                  redondeo: 'cent',
+                }).precio
+              : null;
             const imgUrl = imagenesPrincipalesQ.data?.get(p.id);
+            const nombreMostrado = p.nombre_web?.trim() || p.nombre;
             return (
               <Link key={p.id} href={`/catalogo/${p.id}`}>
                 <Card className="h-full overflow-hidden transition hover:border-foreground">
@@ -197,7 +233,7 @@ function CatalogoInner() {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={imgUrl}
-                        alt={p.nombre}
+                        alt={nombreMostrado}
                         loading="lazy"
                         className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
                       />
@@ -207,25 +243,25 @@ function CatalogoInner() {
                     <div
                       className={`flex aspect-square items-center justify-center text-6xl ${visualDeCategoria(p.categoria_id).bg}`}
                     >
-                      <span aria-hidden>{emojiProducto(p.nombre, p.categoria_id)}</span>
+                      <span aria-hidden>{emojiProducto(nombreMostrado, p.categoria_id)}</span>
                     </div>
                   )}
                   <CardContent className="space-y-1 p-4">
                     <Badge variant="secondary" className="mb-1">
                       {categoriaNombre(p.categoria_id)}
                     </Badge>
-                    <h3 className="line-clamp-2 font-medium leading-tight">{p.nombre}</h3>
+                    <h3 className="line-clamp-2 font-medium leading-tight">{nombreMostrado}</h3>
                     <div className="font-mono text-xs text-muted-foreground">
                       Cód {p.codigo_interno}
                     </div>
                     <div className="pt-1">
                       <div className="text-lg font-semibold tabular-nums">
-                        {formatCurrency(precioUnitario(p.id))}
+                        {formatCurrency(precioInfo.precio)}
                       </div>
-                      {tieneEscala && (
+                      {precioConEscala != null && primeraEscala && (
                         <div className="text-xs text-muted-foreground">
-                          desde {escalas[1]!.desde}u:{' '}
-                          {formatCurrency(escalas[1]!.precio)} c/u
+                          desde {primeraEscala.desde}u:{' '}
+                          {formatCurrency(precioConEscala)} c/u
                         </div>
                       )}
                     </div>

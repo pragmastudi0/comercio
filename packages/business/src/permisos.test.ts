@@ -28,11 +28,15 @@ describe('PERMISOS_PRESET', () => {
     expect(PERMISOS_PRESET.encargado.configuracion).toBeUndefined();
   });
 
-  it('catálogo se enfoca en productos y categorías', () => {
+  it('catálogo se enfoca en productos y categorías (con acceso a Cobrar desde toolbar admin)', () => {
     expect(PERMISOS_PRESET.catalogo.productos?.crear).toBe(true);
     expect(PERMISOS_PRESET.catalogo.productos?.gestionar_atributos).toBe(true);
-    expect(PERMISOS_PRESET.catalogo.ventas).toBeUndefined();
-    expect(PERMISOS_PRESET.catalogo.caja).toBeUndefined();
+    // Ventas.crear + caja.abrir habilitados para poder usar el PoS via toolbar admin
+    // (agregado post go-live iteración 1). Reportes/configuración siguen bloqueados.
+    expect(PERMISOS_PRESET.catalogo.ventas?.crear).toBe(true);
+    expect(PERMISOS_PRESET.catalogo.caja?.abrir).toBe(true);
+    expect(PERMISOS_PRESET.catalogo.reportes).toBeUndefined();
+    expect(PERMISOS_PRESET.catalogo.configuracion).toBeUndefined();
   });
 });
 

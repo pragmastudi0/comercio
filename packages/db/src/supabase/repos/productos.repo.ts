@@ -267,6 +267,63 @@ export function makeProductosRepo(sb: SupabaseClient): ProductosRepo {
       }
       return actualizados;
     },
+    async setDescuentoMayoristaMasivo(filtro, pct) {
+      // Reutiliza la misma estrategia de aumentoMasivo: si hay filtro, traer
+      // ids que matchean paginado, después update in-memory. Si no hay filtro,
+      // update directo sobre todos los productos activos.
+      const filtroVacio =
+        !filtro.categoria_id &&
+        !filtro.proveedor_id &&
+        !filtro.texto &&
+        filtro.publicado_web === undefined &&
+        filtro.activo === undefined;
+
+      const value = pct == null ? null : Math.max(0, Math.min(100, pct));
+
+      if (filtroVacio) {
+        // Update masivo sin filtro — afecta a todos los productos.
+        // Necesitamos un WHERE para que PostgREST acepte el update sin
+        // requerir `?prefer=` especial. Usamos "activo IS NOT NULL" que
+        // matchea todo.
+        const { data, error } = await sb
+          .from('productos')
+          .update({ descuento_mayorista_pct_override: value })
+          .not('id', 'is', null)
+          .select('id');
+        if (error) throw new Error(`productos.setDescuentoMayoristaMasivo: ${error.message}`);
+        return (data ?? []).length;
+      }
+
+      // Con filtro: traer ids paginados.
+      const idsFiltro = new Set<string>();
+      const PAGE = 1000;
+      let from = 0;
+      while (true) {
+        let q = sb.from('productos').select('id').range(from, from + PAGE - 1);
+        q = aplicarFiltro(q, filtro);
+        const chunk = okList<{ id: string }>(await q, 'productos.setDescuentoMayoristaMasivo (list)');
+        for (const p of chunk) idsFiltro.add(p.id);
+        if (chunk.length < PAGE) break;
+        from += PAGE;
+      }
+      if (idsFiltro.size === 0) return 0;
+
+      // Update por lotes de 200 ids (evita URL demasiado larga en el .in()).
+      const ids = Array.from(idsFiltro);
+      const CHUNK = 200;
+      let actualizados = 0;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK);
+        const { data, error } = await sb
+          .from('productos')
+          .update({ descuento_mayorista_pct_override: value })
+          .in('id', slice)
+          .select('id');
+        if (error) throw new Error(`productos.setDescuentoMayoristaMasivo (update): ${error.message}`);
+        actualizados += (data ?? []).length;
+      }
+      return actualizados;
+    },
     async variantes(productoId) {
       return okList<Variante>(
         await sb.from('variantes').select('*').eq('producto_id', productoId),
