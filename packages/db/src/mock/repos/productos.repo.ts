@@ -92,6 +92,14 @@ export function makeProductosRepo(store: Store): ProductosRepo {
       }
       return actualizados;
     },
+    async setDescuentoMayoristaMasivo(filtro, pct) {
+      const value = pct == null ? null : Math.max(0, Math.min(100, pct));
+      const productos = store.productos.filter((p) => match(p, filtro));
+      for (const p of productos) {
+        p.descuento_mayorista_pct_override = value;
+      }
+      return productos.length;
+    },
     async variantes(productoId) {
       return clone(store.variantes.filter((v) => v.producto_id === productoId));
     },

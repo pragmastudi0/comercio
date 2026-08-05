@@ -85,6 +85,16 @@ export type EscalaPrecio = {
   precio: number;
 };
 
+/** Escala de descuento por cantidad para catálogo mayorista (e-commerce).
+ *  Ej: [{desde:10, pct:35}, {desde:30, pct:40}] → 1-9u aplica el descuento
+ *  mayorista base, 10-29u aplica 35% off sobre CF, 30+ aplica 40% off. */
+export type EscalaMayorista = {
+  /** Cantidad mínima desde la que aplica este pct. */
+  desde: number;
+  /** % de descuento sobre CF (0-100). */
+  pct: number;
+};
+
 export type ListaPrecio = {
   id: ID;
   nombre: string;
@@ -170,6 +180,10 @@ export type Producto = {
    *  carrito que no tenga la marca. Se ve un pill "Sin recargo cuotas"
    *  en la línea del PoS. */
   cuotas_sin_recargo?: boolean;
+  /** Override del % de descuento mayorista para este producto en el catálogo
+   *  web. Si es null/undefined, se usa `configuracion_empresa.descuento_mayorista_pct`.
+   *  Sirve para productos con margen distinto (marcas exclusivas, saldos). */
+  descuento_mayorista_pct_override?: number | null;
   activo: boolean;
   creado_en: ISODate;
 };
@@ -356,6 +370,16 @@ export type ConfiguracionEmpresa = {
    *  {cliente.cuit}, {cliente.email}, {cliente.direccion}, {items}, {total},
    *  {metodoPago}, {entrega}, {notas}. */
   mensaje_wa_template?: string;
+  /** % de descuento sobre CF que aplica por default a todos los productos
+   *  publicados en la web (catálogo mayorista). Ej: 30 = 30% off. Se puede
+   *  overridear por producto con `descuento_mayorista_pct_override`. Solo
+   *  afecta a la web pública — el PoS y admin siguen mostrando CF. */
+  descuento_mayorista_pct?: number;
+  /** Escalas de descuento adicionales por cantidad en el carrito web.
+   *  Formato: [{desde:10, pct:35}, {desde:30, pct:40}]. Se toma la mayor
+   *  `desde` alcanzada por la cantidad del ítem. Vacío/undefined = solo
+   *  se aplica el descuento base sin escalonar. */
+  escalas_mayorista_cantidad?: EscalaMayorista[];
   /**
    * "Saldo inicial" del comercio previo al arranque del sistema. Lo carga
    * el admin para no partir los reportes mensuales cuando se arranca con

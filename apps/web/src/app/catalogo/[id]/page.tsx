@@ -7,7 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Minus, Plus, Package, ShoppingBag } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
-import { SITE } from '@/lib/config';
+import { PRESET_IDS } from '@comercio/db';
+import { calcularPrecioMayorista } from '@comercio/business';
 import { useCarrito, precioPorCantidad } from '@/stores/carrito';
 import { Card, CardContent } from '@comercio/ui/card';
 import { Badge } from '@comercio/ui/badge';
@@ -25,13 +26,20 @@ export default function ProductoPage() {
   const agregar = useCarrito((s) => s.agregar);
 
   const productoQ = useQuery({ queryKey: ['producto-web', id], queryFn: () => db.productos.get(id) });
-  const preciosQ = useQuery({
-    queryKey: ['precios-web', SITE.listaPrecioId, id],
+  // Precio CF del producto — base sobre la que se aplica el descuento mayorista.
+  const precioCfQ = useQuery({
+    queryKey: ['precio-cf-web', id],
     queryFn: async () => {
       const lp = await db.productos.preciosDe(id);
-      const lista = lp.find((x) => x.lista_precio_id === SITE.listaPrecioId);
-      return lista?.escalas ?? [];
+      const cf = lp.find((x) => x.lista_precio_id === PRESET_IDS.listas.consumidorFinal);
+      const escs = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+      return escs[0]?.precio ?? 0;
     },
+  });
+  const configQ = useQuery({
+    queryKey: ['config-mayorista'],
+    queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
+    staleTime: 5 * 60_000,
   });
   const categoriasQ = useQuery({ queryKey: ['categorias'], queryFn: () => db.categorias.list() });
   const imagenesQ = useQuery({
@@ -72,8 +80,34 @@ export default function ProductoPage() {
   }
 
   const p = productoQ.data;
-  const escalas = preciosQ.data ?? [];
   const cat = categoriasQ.data?.find((c) => c.id === p.categoria_id);
+  const precioCF = precioCfQ.data ?? 0;
+  const descuentoGlobalPct = configQ.data?.descuento_mayorista_pct ?? 0;
+  const escalasMayoristas = configQ.data?.escalas_mayorista_cantidad ?? [];
+
+  // Construyo el listado de "escalas de precio mayorista" que ve el cliente
+  // y que se guarda snapshot en el carrito. Cada escala usa el precio
+  // calculado con el helper (override producto > global > 0 + escala).
+  const puntosCantidad: number[] = [1];
+  for (const e of escalasMayoristas) {
+    if (e.desde > 1 && !puntosCantidad.includes(e.desde)) puntosCantidad.push(e.desde);
+  }
+  puntosCantidad.sort((a, b) => a - b);
+  const escalas = puntosCantidad
+    .map((desde) => {
+      const r = calcularPrecioMayorista({
+        precioCF,
+        descuentoOverridePct: p.descuento_mayorista_pct_override,
+        descuentoGlobalPct,
+        escalas: escalasMayoristas,
+        cantidad: desde,
+        redondeo: 'cent',
+      });
+      return { desde, precio: r.precio };
+    })
+    // Solo mantengo escalas que efectivamente bajen el precio (evita
+    // listar rangos con el mismo precio que la anterior).
+    .filter((e, i, arr) => i === 0 || e.precio < arr[i - 1]!.precio);
   const precioActual = precioPorCantidad(escalas, cantidad);
   const subtotal = cantidad * precioActual;
 

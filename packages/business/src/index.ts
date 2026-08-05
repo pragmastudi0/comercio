@@ -5,3 +5,4 @@ export * from './caja';
 export * from './validators';
 export * from './brand';
 export * from './dev-access';
+export * from './mayorista';
