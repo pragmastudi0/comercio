@@ -111,9 +111,17 @@ export default function ProductoPage() {
   const precioActual = precioPorCantidad(escalas, cantidad);
   const subtotal = cantidad * precioActual;
 
+  const nombreMostrado = p.nombre_web?.trim() || p.nombre;
+
   function onAgregar() {
-    agregar({ id: p.id, codigo_interno: p.codigo_interno, nombre: p.nombre }, escalas, cantidad);
-    toast.success(`Agregado al carrito: ${cantidad}× ${p.nombre}`, {
+    // Guardo el nombre-web en el carrito para que el mensaje de WhatsApp
+    // también use el nombre "público" en vez del interno.
+    agregar(
+      { id: p.id, codigo_interno: p.codigo_interno, nombre: nombreMostrado },
+      escalas,
+      cantidad,
+    );
+    toast.success(`Agregado al carrito: ${cantidad}× ${nombreMostrado}`, {
       action: {
         label: 'Ver carrito',
         onClick: () => router.push('/carrito'),
@@ -138,14 +146,14 @@ export default function ProductoPage() {
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={imagenesQ.data![imgActiva]?.url ?? imagenesQ.data![0]!.url}
-                alt={p.nombre}
+                alt={nombreMostrado}
                 className="aspect-square w-full object-cover"
               />
             ) : (
               <div
                 className={`flex aspect-square items-center justify-center text-[10rem] ${visualDeCategoria(p.categoria_id).bg}`}
               >
-                <span aria-hidden>{emojiProducto(p.nombre, p.categoria_id)}</span>
+                <span aria-hidden>{emojiProducto(nombreMostrado, p.categoria_id)}</span>
               </div>
             )}
           </Card>
@@ -171,7 +179,7 @@ export default function ProductoPage() {
 
         <div>
           {cat && <Badge variant="secondary">{cat.nombre}</Badge>}
-          <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">{p.nombre}</h1>
+          <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">{nombreMostrado}</h1>
           <div className="mt-1 font-mono text-sm text-muted-foreground">
             Código {p.codigo_interno}
           </div>

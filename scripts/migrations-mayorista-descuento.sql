@@ -38,6 +38,13 @@ ALTER TABLE public.configuracion_empresa
 ALTER TABLE public.productos
   ADD COLUMN IF NOT EXISTS descuento_mayorista_pct_override numeric;
 
+-- 3.b) Nombre alternativo para mostrar en la tienda web (opcional).
+--     Sirve cuando internamente Agus usa un nombre raro para diferenciar
+--     ("Valija PLC 20 rosa CH3" en el sistema pero "Valija cabina rosa"
+--     en la web). Si está null, la web usa `nombre`.
+ALTER TABLE public.productos
+  ADD COLUMN IF NOT EXISTS nombre_web text;
+
 -- 4) Constraint sanity: los % deben estar entre 0 y 100
 ALTER TABLE public.productos
   DROP CONSTRAINT IF EXISTS productos_descuento_mayorista_override_range;

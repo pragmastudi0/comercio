@@ -33,6 +33,7 @@ import {
 } from '@comercio/db';
 import { calcularPrecioMayorista } from '@comercio/business';
 import { ImagenesProducto } from '@/components/imagenes-producto';
+import { InfoTip } from '@/components/info-tip';
 import { PaginaProtegida, usePermiso } from '@/lib/permisos';
 
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'https://turisteando-web.vercel.app';
@@ -308,13 +309,15 @@ function WebPageInner() {
                       Grupo
                     </th>
                     <th className="border-b border-r border-slate-300 px-2 py-1.5 text-right w-24">
-                      CF
+                      Precio local{' '}
+                      <InfoTip text="Precio Consumidor Final del sistema (lo que se cobra en el local). Es la base sobre la que se aplica el descuento mayorista." />
                     </th>
                     <th className="border-b border-r border-slate-300 px-2 py-1.5 text-right w-14">
-                      %
+                      Desc.
                     </th>
-                    <th className="border-b border-slate-300 px-2 py-1.5 text-right w-24">
-                      Mayorista
+                    <th className="border-b border-slate-300 px-2 py-1.5 text-right w-28">
+                      Precio web{' '}
+                      <InfoTip text="Precio final que ve el cliente mayorista en la tienda web. Se calcula: precio local menos el % de descuento." />
                     </th>
                   </tr>
                 </thead>
@@ -473,11 +476,12 @@ function PanelDetalleWeb({
   const db = getDb();
   const verCosto = usePermiso('productos', 'ver_costo');
 
+  const [nombreWeb, setNombreWeb] = useState(producto.nombre_web ?? '');
   const [descripcion, setDescripcion] = useState(producto.descripcion ?? '');
   const [descripcionLarga, setDescripcionLarga] = useState(
     producto.descripcion_larga ?? '',
   );
-  const [descMayoOverrideTxt, setDescMayoOverrideTxt] = useState(
+  const [descuentoPropioTxt, setDescuentoPropioTxt] = useState(
     producto.descuento_mayorista_pct_override != null
       ? String(producto.descuento_mayorista_pct_override)
       : '',
@@ -492,9 +496,10 @@ function PanelDetalleWeb({
 
   // Cuando cambia de producto, reset del state.
   useEffect(() => {
+    setNombreWeb(producto.nombre_web ?? '');
     setDescripcion(producto.descripcion ?? '');
     setDescripcionLarga(producto.descripcion_larga ?? '');
-    setDescMayoOverrideTxt(
+    setDescuentoPropioTxt(
       producto.descuento_mayorista_pct_override != null
         ? String(producto.descuento_mayorista_pct_override)
         : '',
@@ -510,24 +515,25 @@ function PanelDetalleWeb({
 
   const guardarMut = useMutation({
     mutationFn: async () => {
-      const t = descMayoOverrideTxt.trim();
-      const overrideNum = t ? parseFloat(t) : NaN;
-      const override = t && Number.isFinite(overrideNum)
-        ? Math.max(0, Math.min(100, overrideNum))
+      const t = descuentoPropioTxt.trim();
+      const propioNum = t ? parseFloat(t) : NaN;
+      const descuentoPropio = t && Number.isFinite(propioNum)
+        ? Math.max(0, Math.min(100, propioNum))
         : null;
       const cantMin = parseInt(cantidadMinimaTxt, 10);
       const incr = parseInt(incrementoTxt, 10);
       await db.productos.update(producto.id, {
+        nombre_web: nombreWeb.trim() || null,
         descripcion: descripcion.trim() || undefined,
         descripcion_larga: descripcionLarga.trim() || undefined,
-        descuento_mayorista_pct_override: override,
+        descuento_mayorista_pct_override: descuentoPropio,
         solo_por_bulto: soloPorBulto,
         cantidad_minima_web: Number.isFinite(cantMin) && cantMin > 0 ? cantMin : undefined,
         incremento_web: Number.isFinite(incr) && incr > 1 ? incr : undefined,
       } as Partial<Producto>);
     },
     onSuccess: () => {
-      toast.success('Datos e-commerce guardados');
+      toast.success('Datos guardados');
       onSaved();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -540,17 +546,17 @@ function PanelDetalleWeb({
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // Cálculos con precisión
-  const overrideNum = descMayoOverrideTxt.trim()
-    ? parseFloat(descMayoOverrideTxt)
+  // Cálculos con precisión — usa el descuento propio si lo hay, sino el general.
+  const propioNum = descuentoPropioTxt.trim()
+    ? parseFloat(descuentoPropioTxt)
     : NaN;
-  const overrideVal =
-    descMayoOverrideTxt.trim() && Number.isFinite(overrideNum)
-      ? Math.max(0, Math.min(100, overrideNum))
+  const descuentoPropio =
+    descuentoPropioTxt.trim() && Number.isFinite(propioNum)
+      ? Math.max(0, Math.min(100, propioNum))
       : null;
   const calcUno = calcularPrecioMayorista({
     precioCF,
-    descuentoOverridePct: overrideVal,
+    descuentoOverridePct: descuentoPropio,
     descuentoGlobalPct,
     cantidad: 1,
   });
@@ -564,14 +570,14 @@ function PanelDetalleWeb({
       .map((cant) => {
         const r = calcularPrecioMayorista({
           precioCF,
-          descuentoOverridePct: overrideVal,
+          descuentoOverridePct: descuentoPropio,
           descuentoGlobalPct,
           escalas: escalasGlobales,
           cantidad: cant,
         });
         return { cant, precio: r.precio, pct: r.pctAplicado };
       });
-  }, [precioCF, overrideVal, descuentoGlobalPct, escalasGlobales]);
+  }, [precioCF, descuentoPropio, descuentoGlobalPct, escalasGlobales]);
 
   // Margen sobre COSTO al precio mayorista @1u. Sirve para ver si un descuento
   // agresivo deja negativo.
@@ -635,39 +641,42 @@ function PanelDetalleWeb({
 
       {/* Cuerpo scroll */}
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
-        {/* Precio calculado — headline */}
+        {/* Precio final para el cliente — headline */}
         <div className="rounded border border-cyan-200 bg-cyan-50/40 p-2">
-          <div className="mb-1 text-[10px] uppercase text-cyan-800">
-            Precio mayorista @ 1 unidad
+          <div className="mb-1 flex items-center gap-1 text-[10px] uppercase text-cyan-800">
+            Precio final en la tienda (1 unidad){' '}
+            <InfoTip text="Es lo que ve el cliente en la web mayorista al comprar 1 unidad. Sale de restarle el descuento al precio del local." />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold tabular-nums text-cyan-900">
               {formatCurrency(calcUno.precio)}
             </span>
             <span className="text-xs text-slate-600">
-              ({calcUno.pctAplicado}% off ·{' '}
+              ({calcUno.pctAplicado}% de descuento ·{' '}
               {calcUno.fuente === 'override'
-                ? 'override propio'
+                ? 'propio de este producto'
                 : calcUno.fuente === 'global'
-                  ? `global ${descuentoGlobalPct}%`
+                  ? `general ${descuentoGlobalPct}%`
                   : 'sin descuento'}
               )
             </span>
           </div>
           <div className="mt-0.5 text-[11px] text-slate-600">
-            Precio CF ref.: <span className="tabular-nums">{formatCurrency(precioCF)}</span>
+            Precio en el local:{' '}
+            <span className="tabular-nums">{formatCurrency(precioCF)}</span>
             {precioCF === 0 && (
-              <span className="ml-2 text-amber-700">— sin precio CF cargado</span>
+              <span className="ml-2 text-amber-700">— este producto no tiene precio cargado</span>
             )}
           </div>
         </div>
 
-        {/* Preview por escalas de cantidad */}
+        {/* Preview por cantidades */}
         {previewEscalas.length > 1 && (
           <div className="rounded border border-slate-200 bg-slate-50/60 p-2">
             <div className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
               <Layers className="h-3 w-3" />
-              Por cantidad (escalas globales)
+              Precio por cantidad{' '}
+              <InfoTip text="Si configuraste rebajas por cantidad en la sección de arriba, acá se ve cómo baja el precio cuando el cliente compra más unidades." />
             </div>
             <div className="flex flex-wrap gap-1.5 text-[11px]">
               {previewEscalas.map((r) => (
@@ -692,12 +701,13 @@ function PanelDetalleWeb({
                 : 'border-slate-200 bg-slate-50/60'
             }`}
           >
-            <div className="mb-1 text-[10px] uppercase text-slate-600">
-              Margen sobre costo (al precio mayorista @1u)
+            <div className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+              Ganancia sobre el costo (vendiendo 1 unidad en la web){' '}
+              <InfoTip text="Cuánto ganás por vender esta unidad al precio de la tienda web. Si te sale rojo, el descuento es tan alto que estás perdiendo plata." />
             </div>
             <div className="flex items-baseline justify-between gap-2 text-sm">
               <div>
-                <span className="text-slate-600">Costo:</span>{' '}
+                <span className="text-slate-600">Te cuesta:</span>{' '}
                 <span className="tabular-nums">{formatCurrency(costo)}</span>
               </div>
               <div>
@@ -719,16 +729,32 @@ function PanelDetalleWeb({
             </div>
             {margenNegativo && (
               <div className="mt-1 text-[11px] font-medium text-red-700">
-                ⚠ Estás vendiendo a pérdida — el descuento es mayor al margen.
+                ⚠ Estás vendiendo a pérdida — el descuento es más grande que la ganancia.
               </div>
             )}
           </div>
         )}
 
-        {/* Override del descuento */}
+        {/* Nombre para la tienda */}
         <div>
-          <Label className="mb-1 block text-[10px] uppercase text-slate-600">
-            Descuento mayorista override (%)
+          <Label className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+            Nombre para la tienda web (opcional){' '}
+            <InfoTip text="Si internamente le pusiste un nombre raro (con códigos, apodos, etc.) podés poner acá otro más claro solo para que vea el cliente. Si lo dejás vacío, se muestra el mismo nombre del sistema." />
+          </Label>
+          <Input
+            placeholder={producto.nombre}
+            value={nombreWeb}
+            onChange={(e) => setNombreWeb(e.target.value)}
+            disabled={disabled}
+            className="h-7 text-sm"
+          />
+        </div>
+
+        {/* Descuento propio del producto */}
+        <div>
+          <Label className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+            Descuento propio de este producto (%){' '}
+            <InfoTip text="Si este producto va a tener un descuento distinto al general de la tienda, ponelo acá. Ej: si el descuento general es 30% pero este producto lo querés al 45%, escribí 45. Si lo dejás vacío, usa el general." />
           </Label>
           <div className="flex items-center gap-2">
             <Input
@@ -736,20 +762,21 @@ function PanelDetalleWeb({
               min="0"
               max="100"
               step="0.5"
-              placeholder={`vacío = ${descuentoGlobalPct}% global`}
-              value={descMayoOverrideTxt}
-              onChange={(e) => setDescMayoOverrideTxt(e.target.value)}
+              placeholder={`vacío = usa el general (${descuentoGlobalPct}%)`}
+              value={descuentoPropioTxt}
+              onChange={(e) => setDescuentoPropioTxt(e.target.value)}
               disabled={disabled}
               className="h-7 w-32 text-sm"
             />
             <span className="text-xs text-slate-600">%</span>
-            {descMayoOverrideTxt && (
+            {descuentoPropioTxt && (
               <button
-                onClick={() => setDescMayoOverrideTxt('')}
+                onClick={() => setDescuentoPropioTxt('')}
                 disabled={disabled}
                 className="text-[11px] text-slate-500 underline hover:text-slate-700"
+                title="Volver a usar el descuento general"
               >
-                limpiar
+                borrar
               </button>
             )}
           </div>
@@ -757,14 +784,18 @@ function PanelDetalleWeb({
 
         {/* Fotos */}
         <div>
-          <Label className="mb-1 block text-[10px] uppercase text-slate-600">Fotos</Label>
+          <Label className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+            Fotos del producto{' '}
+            <InfoTip text="Las fotos aparecen en la tienda web. La primera es la principal (la que se ve en el listado). Podés agregar varias y reordenarlas." />
+          </Label>
           <ImagenesProducto productoId={producto.id} />
         </div>
 
         {/* Descripción corta */}
         <div>
-          <Label className="mb-1 block text-[10px] uppercase text-slate-600">
-            Descripción (una línea)
+          <Label className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+            Descripción corta{' '}
+            <InfoTip text="Una línea de texto que aparece bajo el nombre del producto en la web. Ej: 'Set de 4 vasos térmicos con tapa'." />
           </Label>
           <Input
             value={descripcion}
@@ -776,8 +807,9 @@ function PanelDetalleWeb({
 
         {/* Descripción larga */}
         <div>
-          <Label className="mb-1 block text-[10px] uppercase text-slate-600">
-            Descripción larga (para la web)
+          <Label className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+            Descripción larga{' '}
+            <InfoTip text="Texto más completo que aparece en la página del producto: materiales, medidas, colores, usos, etc." />
           </Label>
           <textarea
             value={descripcionLarga}
@@ -790,7 +822,10 @@ function PanelDetalleWeb({
 
         {/* Reglas de venta web */}
         <div className="rounded border border-slate-200 bg-slate-50/60 p-2">
-          <div className="mb-1 text-[10px] uppercase text-slate-600">Reglas de venta web</div>
+          <div className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+            Cómo se vende en la web{' '}
+            <InfoTip text="Reglas para el cliente al comprar por la tienda web. No afectan al PoS ni a la venta en el local." />
+          </div>
           <label className="flex items-center gap-1.5 text-xs">
             <input
               type="checkbox"
@@ -799,12 +834,13 @@ function PanelDetalleWeb({
               disabled={disabled}
               className="h-3.5 w-3.5"
             />
-            Se vende solo por bulto
+            Solo se vende de a bulto (no se puede pedir 1 sola unidad)
           </label>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div>
-              <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">
-                Compra mínima (u)
+              <Label className="mb-0.5 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+                Compra mínima{' '}
+                <InfoTip text="Cantidad mínima de unidades que puede pedir el cliente. Dejalo vacío si no hay mínimo." />
               </Label>
               <Input
                 type="number"
@@ -817,8 +853,9 @@ function PanelDetalleWeb({
               />
             </div>
             <div>
-              <Label className="mb-0.5 block text-[10px] uppercase text-slate-600">
-                Incremento (u)
+              <Label className="mb-0.5 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+                Se pide de a{' '}
+                <InfoTip text="Cada cuántas unidades se incrementa. Ej: 6 → el cliente solo puede pedir 6, 12, 18... 1 = unidad suelta." />
               </Label>
               <Input
                 type="number"
@@ -938,14 +975,19 @@ function ConfigMayorista({
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Percent className="h-4 w-4 text-cyan-700" />
-          Configuración mayorista
+          Precios de la tienda web
+          <InfoTip
+            className="text-cyan-700 hover:text-cyan-900"
+            text="Configurá el descuento que aplica a TODOS los productos publicados en la tienda web mayorista. También podés dar rebajas extra si el cliente compra grandes cantidades. Esto no cambia los precios del PoS ni del local."
+          />
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid gap-3 md:grid-cols-[220px_1fr]">
           <div>
-            <Label className="mb-1 block text-[10px] uppercase text-slate-600">
-              Descuento global (%)
+            <Label className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+              Descuento general (%){' '}
+              <InfoTip text="% de descuento sobre el precio del local que se aplica por defecto a todos los productos publicados en la tienda. Ej: 30 significa 30% menos que el precio del local." />
             </Label>
             <div className="flex items-center gap-2">
               <Input
@@ -958,21 +1000,23 @@ function ConfigMayorista({
                 disabled={disabled}
                 className="h-7 w-24 text-sm"
               />
-              <span className="text-xs text-slate-600">% sobre CF</span>
+              <span className="text-xs text-slate-600">% menos que el local</span>
             </div>
             <p className="mt-1 text-[10px] text-slate-600">
-              Aplica a todo lo publicado sin override propio.
+              Se aplica a todo lo publicado, salvo productos que tengan su
+              propio descuento distinto.
             </p>
           </div>
 
           <div>
-            <Label className="mb-1 block text-[10px] uppercase text-slate-600">
-              Escalas por cantidad (opcional)
+            <Label className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+              Rebajas por cantidad (opcional){' '}
+              <InfoTip text="Descuentos extra cuando el cliente compra más unidades. Ej: 'Desde 10u → 35% off', 'Desde 100u → 45% off'. Estas rebajas GANAN sobre el descuento general si dan más porcentaje." />
             </Label>
             <div className="space-y-1">
               {escalas.length === 0 && (
                 <p className="text-[11px] text-slate-500">
-                  Sin escalas — solo aplica el descuento global.
+                  Sin rebajas por cantidad — solo aplica el descuento general.
                 </p>
               )}
               {escalas.map((e, i) => (
@@ -1035,8 +1079,9 @@ function ConfigMayorista({
         </div>
 
         <div className="rounded border border-cyan-200 bg-white/60 p-2">
-          <div className="mb-1 text-[10px] uppercase text-slate-600">
-            Preview con CF $1.000
+          <div className="mb-1 flex items-center gap-1 text-[10px] uppercase text-slate-600">
+            Ejemplo (para un producto que en el local vale $1.000){' '}
+            <InfoTip text="Simulación de cómo queda el precio final para el cliente en la web según la cantidad que pida, usando esta configuración." />
           </div>
           <div className="flex flex-wrap gap-1.5 text-[11px]">
             {preview.map((r) => (
@@ -1109,8 +1154,8 @@ function AjusteMasivoDialog({
     onSuccess: (n) => {
       toast.success(
         modo === 'limpiar'
-          ? `${n} producto(s) volvieron al descuento global (${descuentoGlobalPct}%)`
-          : `${n} producto(s) actualizados a ${pctTxt}% off`,
+          ? `${n} producto(s) volvieron al descuento general (${descuentoGlobalPct}%)`
+          : `${n} producto(s) actualizados a ${pctTxt}% de descuento`,
       );
       onDone();
       onClose();
@@ -1121,7 +1166,7 @@ function AjusteMasivoDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogHeader>
-        <DialogTitle>Ajuste masivo de descuento mayorista</DialogTitle>
+        <DialogTitle>Cambiar descuento de muchos productos a la vez</DialogTitle>
       </DialogHeader>
 
       <div className="space-y-4 p-2">
@@ -1187,7 +1232,7 @@ function AjusteMasivoDialog({
                 checked={modo === 'setear'}
                 onChange={() => setModo('setear')}
               />
-              Setear override
+              Ponerles un descuento propio de
               <Input
                 type="number"
                 min="0"
@@ -1199,7 +1244,7 @@ function AjusteMasivoDialog({
                 className="ml-1 h-7 w-24 text-sm"
                 disabled={modo !== 'setear'}
               />
-              <span className="text-xs">% off sobre CF</span>
+              <span className="text-xs">%</span>
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -1208,14 +1253,15 @@ function AjusteMasivoDialog({
                 checked={modo === 'limpiar'}
                 onChange={() => setModo('limpiar')}
               />
-              Limpiar override → usar el global ({descuentoGlobalPct}%)
+              Sacarles el descuento propio (que vuelvan a usar el general del {descuentoGlobalPct}%)
             </label>
           </div>
         </div>
 
         <p className="rounded bg-amber-50 p-2 text-xs text-amber-900">
-          Esta acción afecta a muchos productos a la vez y no tiene deshacer masivo.
-          Podés revertir por producto desde el detalle en /productos.
+          Esto cambia muchos productos a la vez y no se puede deshacer todo junto.
+          Podés cambiar producto por producto desde el panel de la derecha si te
+          equivocás.
         </p>
       </div>
 

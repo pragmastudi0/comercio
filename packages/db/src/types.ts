@@ -184,6 +184,10 @@ export type Producto = {
    *  web. Si es null/undefined, se usa `configuracion_empresa.descuento_mayorista_pct`.
    *  Sirve para productos con margen distinto (marcas exclusivas, saldos). */
   descuento_mayorista_pct_override?: number | null;
+  /** Nombre alternativo para mostrar en el catálogo web. Si está vacío/null,
+   *  se usa `nombre`. Sirve cuando el nombre interno no sirve para la web
+   *  (código raro, apodos del dueño, etc.). */
+  nombre_web?: string | null;
   activo: boolean;
   creado_en: ISODate;
 };

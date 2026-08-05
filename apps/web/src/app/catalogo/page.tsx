@@ -224,6 +224,7 @@ function CatalogoInner() {
                 }).precio
               : null;
             const imgUrl = imagenesPrincipalesQ.data?.get(p.id);
+            const nombreMostrado = p.nombre_web?.trim() || p.nombre;
             return (
               <Link key={p.id} href={`/catalogo/${p.id}`}>
                 <Card className="h-full overflow-hidden transition hover:border-foreground">
@@ -232,7 +233,7 @@ function CatalogoInner() {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={imgUrl}
-                        alt={p.nombre}
+                        alt={nombreMostrado}
                         loading="lazy"
                         className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
                       />
@@ -242,14 +243,14 @@ function CatalogoInner() {
                     <div
                       className={`flex aspect-square items-center justify-center text-6xl ${visualDeCategoria(p.categoria_id).bg}`}
                     >
-                      <span aria-hidden>{emojiProducto(p.nombre, p.categoria_id)}</span>
+                      <span aria-hidden>{emojiProducto(nombreMostrado, p.categoria_id)}</span>
                     </div>
                   )}
                   <CardContent className="space-y-1 p-4">
                     <Badge variant="secondary" className="mb-1">
                       {categoriaNombre(p.categoria_id)}
                     </Badge>
-                    <h3 className="line-clamp-2 font-medium leading-tight">{p.nombre}</h3>
+                    <h3 className="line-clamp-2 font-medium leading-tight">{nombreMostrado}</h3>
                     <div className="font-mono text-xs text-muted-foreground">
                       Cód {p.codigo_interno}
                     </div>

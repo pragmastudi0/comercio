@@ -1410,21 +1410,21 @@ function PanelProducto({
                 </Label>
                 <ImagenesProducto productoId={productoId} />
               </div>
-              {/* Descuento mayorista — override individual (opcional).
-                  Vacío = usa el % global configurado en /admin/web. */}
+              {/* Descuento propio del producto para la tienda web (opcional).
+                  Vacío = usa el % general configurado en /admin/web. */}
               {(() => {
                 const globalPct = configQ.data?.descuento_mayorista_pct ?? 0;
-                const overrideNum = parseFloat(descMayoOverrideTxt);
-                const overrideVal =
-                  descMayoOverrideTxt.trim() && Number.isFinite(overrideNum)
-                    ? Math.max(0, Math.min(100, overrideNum))
+                const propioNum = parseFloat(descMayoOverrideTxt);
+                const propioVal =
+                  descMayoOverrideTxt.trim() && Number.isFinite(propioNum)
+                    ? Math.max(0, Math.min(100, propioNum))
                     : null;
-                const preview = previewPrecioMayorista(precioCf, overrideVal, globalPct);
-                const usaOverride = overrideVal != null && overrideVal > 0;
+                const preview = previewPrecioMayorista(precioCf, propioVal, globalPct);
+                const usaPropio = propioVal != null && propioVal > 0;
                 return (
                   <div className="rounded-sm border border-cyan-200 bg-cyan-50/60 p-2">
                     <Label className="mb-1 block text-[10px] uppercase text-cyan-800">
-                      Descuento mayorista (%) — override para este producto
+                      Descuento propio para la tienda web (%)
                     </Label>
                     <div className="flex items-center gap-2">
                       <Input
@@ -1432,7 +1432,7 @@ function PanelProducto({
                         min="0"
                         max="100"
                         step="0.5"
-                        placeholder={`vacío = usa ${globalPct}% global`}
+                        placeholder={`vacío = usa el general (${globalPct}%)`}
                         value={descMayoOverrideTxt}
                         onChange={(e) => setDescMayoOverrideTxt(e.target.value)}
                         disabled={!puedeEditar}
@@ -1441,20 +1441,20 @@ function PanelProducto({
                       <span className="text-xs text-slate-600">%</span>
                       {precioCf > 0 && (
                         <span className="ml-auto text-xs text-slate-700">
-                          Precio mayorista:{' '}
+                          Precio en la web:{' '}
                           <strong className="text-cyan-800">
                             {formatCurrency(preview.precio)}
                           </strong>{' '}
                           <span className="text-slate-500">
-                            ({preview.pctAplicado}% off ·{' '}
-                            {usaOverride ? 'override' : globalPct > 0 ? 'global' : 'sin %'})
+                            ({preview.pctAplicado}% desc. ·{' '}
+                            {usaPropio ? 'propio' : globalPct > 0 ? 'general' : 'sin descuento'})
                           </span>
                         </span>
                       )}
                     </div>
                     <p className="mt-1 text-[10px] text-slate-600">
-                      Solo se aplica en el catálogo mayorista (web). Dejalo vacío para
-                      usar el descuento global de la empresa.
+                      Solo afecta al precio en la tienda web mayorista. Dejalo vacío
+                      para usar el descuento general configurado en Ecommerce.
                     </p>
                   </div>
                 );
