@@ -74,19 +74,26 @@ function WebPageInner() {
     queryFn: () => db.configuracion.get(PRESET_IDS.empresa),
   });
   // Precio CF por producto — base sobre la que se calcula el mayorista.
+  // Traemos TODAS las escalas de las 2 listas CF (UUID + legacy) en 2
+  // queries paginadas, en vez de hacer 1 query por producto (con 1907
+  // productos serializados eran ~3 minutos y mostraba $0 mientras cargaba).
   const preciosCfQ = useQuery({
-    queryKey: ['precios-cf-web-admin', productosQ.data?.length],
+    queryKey: ['precios-cf-web-admin'],
     queryFn: async () => {
+      const [uuidPrecios, legacyPrecios] = await Promise.all(
+        LISTA_CF_IDS.map((id) => db.productos.preciosDeLista(id)),
+      );
       const map = new Map<string, number>();
-      for (const p of productosQ.data ?? []) {
-        const lp = await db.productos.preciosDe(p.id);
-        const cf = lp.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
-        const escs = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
-        map.set(p.id, escs[0]?.precio ?? 0);
+      // Priorizamos el UUID canónico; si un producto solo tiene 'lp_cf',
+      // se toma ese.
+      for (const lp of [...(uuidPrecios ?? []), ...(legacyPrecios ?? [])]) {
+        if (map.has(lp.producto_id)) continue;
+        const escs = [...(lp.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+        map.set(lp.producto_id, escs[0]?.precio ?? 0);
       }
       return map;
     },
-    enabled: !!productosQ.data,
+    staleTime: 60_000,
   });
 
   const togglePublicarMut = useMutation({

@@ -47,22 +47,26 @@ function CatalogoInner() {
   });
   // Precio Consumidor Final por producto — es la referencia sobre la que
   // se calcula el precio mayorista (aplicando el descuento configurado).
-  // Los productos importados desde Excel al arrancar quedaron con la lista
-  // legacy 'lp_cf'; los nuevos con el UUID. Buscamos por ambos.
+  // Traemos TODAS las escalas de las 2 listas CF (UUID + legacy) en 2
+  // queries paginadas, en vez de 1 query por producto. Los importados
+  // desde Excel quedaron con 'lp_cf'; los nuevos con el UUID.
   const preciosQ = useQuery({
-    queryKey: ['precios-cf-web', productosQ.data?.map((p) => p.id).join(',')],
+    queryKey: ['precios-cf-web-catalogo'],
     queryFn: async () => {
       const CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
+      const listas = await Promise.all(
+        CF_IDS.map((id) => db.productos.preciosDeLista(id)),
+      );
       const map = new Map<string, number>();
-      for (const p of productosQ.data ?? []) {
-        const lp = await db.productos.preciosDe(p.id);
-        const cf = lp.find((x) => CF_IDS.includes(x.lista_precio_id));
-        const escs = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
-        map.set(p.id, escs[0]?.precio ?? 0);
+      // Prioriza el UUID canónico (primera entrada de CF_IDS).
+      for (const lp of listas.flat()) {
+        if (map.has(lp.producto_id)) continue;
+        const escs = [...(lp.escalas ?? [])].sort((a, b) => a.desde - b.desde);
+        map.set(lp.producto_id, escs[0]?.precio ?? 0);
       }
       return map;
     },
-    enabled: !!productosQ.data,
+    staleTime: 60_000,
   });
   // Configuración mayorista global (descuento + escalas por cantidad).
   const configQ = useQuery({
