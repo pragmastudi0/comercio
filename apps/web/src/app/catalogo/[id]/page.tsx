@@ -27,11 +27,14 @@ export default function ProductoPage() {
 
   const productoQ = useQuery({ queryKey: ['producto-web', id], queryFn: () => db.productos.get(id) });
   // Precio CF del producto — base sobre la que se aplica el descuento mayorista.
+  // Los productos importados desde Excel al arrancar quedaron con la lista
+  // legacy 'lp_cf'; los nuevos con el UUID. Buscamos por ambos.
   const precioCfQ = useQuery({
     queryKey: ['precio-cf-web', id],
     queryFn: async () => {
+      const CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
       const lp = await db.productos.preciosDe(id);
-      const cf = lp.find((x) => x.lista_precio_id === PRESET_IDS.listas.consumidorFinal);
+      const cf = lp.find((x) => CF_IDS.includes(x.lista_precio_id));
       const escs = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
       return escs[0]?.precio ?? 0;
     },

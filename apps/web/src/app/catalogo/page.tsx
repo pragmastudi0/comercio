@@ -47,13 +47,16 @@ function CatalogoInner() {
   });
   // Precio Consumidor Final por producto — es la referencia sobre la que
   // se calcula el precio mayorista (aplicando el descuento configurado).
+  // Los productos importados desde Excel al arrancar quedaron con la lista
+  // legacy 'lp_cf'; los nuevos con el UUID. Buscamos por ambos.
   const preciosQ = useQuery({
     queryKey: ['precios-cf-web', productosQ.data?.map((p) => p.id).join(',')],
     queryFn: async () => {
+      const CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
       const map = new Map<string, number>();
       for (const p of productosQ.data ?? []) {
         const lp = await db.productos.preciosDe(p.id);
-        const cf = lp.find((x) => x.lista_precio_id === PRESET_IDS.listas.consumidorFinal);
+        const cf = lp.find((x) => CF_IDS.includes(x.lista_precio_id));
         const escs = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
         map.set(p.id, escs[0]?.precio ?? 0);
       }

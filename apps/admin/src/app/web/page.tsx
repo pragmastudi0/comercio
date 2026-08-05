@@ -38,6 +38,10 @@ import { PaginaProtegida, usePermiso } from '@/lib/permisos';
 
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'https://turisteando-web.vercel.app';
 const PAGE_SIZE = 100;
+// Los productos importados desde Excel al arrancar quedaron con la lista
+// legacy 'lp_cf'; los nuevos usan el UUID. Buscamos por ambos para no
+// perder precios de productos viejos.
+const LISTA_CF_IDS = [PRESET_IDS.listas.consumidorFinal, 'lp_cf'];
 
 function WebPageInner() {
   const db = getDb();
@@ -76,7 +80,7 @@ function WebPageInner() {
       const map = new Map<string, number>();
       for (const p of productosQ.data ?? []) {
         const lp = await db.productos.preciosDe(p.id);
-        const cf = lp.find((x) => x.lista_precio_id === PRESET_IDS.listas.consumidorFinal);
+        const cf = lp.find((x) => LISTA_CF_IDS.includes(x.lista_precio_id));
         const escs = [...(cf?.escalas ?? [])].sort((a, b) => a.desde - b.desde);
         map.set(p.id, escs[0]?.precio ?? 0);
       }
