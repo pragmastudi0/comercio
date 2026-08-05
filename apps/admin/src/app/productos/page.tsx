@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ModalEstadisticasProducto } from '@/components/modal-estadisticas-producto';
 import { MotivoAjusteDialog, type DeltaAjuste } from '@/components/motivo-ajuste-dialog';
+import { ImagenesProducto } from '@/components/imagenes-producto';
 import { toast } from 'sonner';
 import { getDb } from '@/lib/db';
 import { useSesion } from '@/stores/sesion';
@@ -1373,10 +1374,16 @@ function PanelProducto({
                   className="w-full rounded-sm border border-slate-300 bg-white px-2 py-1 text-sm"
                 />
               </div>
-              <p className="text-[10px] text-slate-500">
-                Fotos, escalas de precio por cantidad y otras opciones avanzadas se
-                gestionan desde la vista completa de e-commerce (menú Sistema → E-commerce).
-              </p>
+              {/* Fotos del producto — gestionadas inline sin salir de
+                  /admin/productos (Etapa 2 e-commerce). El componente
+                  usa Supabase Storage y guarda los cambios al toque
+                  (sin depender del botón "Guardar" del form principal). */}
+              <div>
+                <Label className="mb-0 block text-[10px] uppercase text-slate-600">
+                  Fotos (para la web)
+                </Label>
+                <ImagenesProducto productoId={productoId} />
+              </div>
             </div>
           )}
         </div>
