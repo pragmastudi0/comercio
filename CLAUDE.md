@@ -380,3 +380,75 @@ Sesión larga cubriendo bugs reales y features nuevas. Volumen: ~18 PRs mergeado
 - **Ubuntu Actions runners traen postgresql-client viejo preinstalado**. Al instalar una versión nueva, hay que llamar al binario con ruta absoluta sino gana el viejo por PATH.
 - **Regla 3-2-1 sin pagar es posible**: Supabase automático + GitHub separado + (opcional) copia local semanal. Sin USD 100/mes de PITR ni USD 25/mes de servicios de backup.
 - **Precio ancla**: el sistema base se vendió barato como precio de lanzamiento (USD 780). Los módulos add-on se cotizan por su alcance propio (no como % del sistema base) para no reforzar el precio bajo. El primer add-on (reportes contables) cotizado en USD 280 + USD 20/mes suba.
+
+### 2026-08-06 — Etapa 2 e-commerce (PR #46 mergeado)
+
+Rama `feat/ecommerce-etapa-2` mergeada a `main` con squash. Sistema listo para que Agus empiece a cargar fotos y publicar productos en la web mayorista (`turisteando-web.vercel.app/catalogo`).
+
+**El PoS y toda la administración de cajas/ventas/stock siguen intactos. Todo lo agregado es solo para el catálogo web.**
+
+**Modelo de precios mayorista — reemplazo de la lista `lp_may`:**
+- Antes: había que mantener una lista de precios "mayorista" paralela producto por producto (que en producción quedó vacía).
+- Ahora: el precio mostrado en la web sale de aplicar un % de descuento sobre el precio CF (el mismo que se cobra en el local). El % se resuelve por precedencia:
+  1. `productos.descuento_mayorista_pct_override` (opcional por producto)
+  2. `configuracion_empresa.descuento_mayorista_pct` (global de la empresa)
+  3. 0 → precio web = precio local (default seguro, no sale gratis)
+- Rebajas por cantidad opcionales: `configuracion_empresa.escalas_mayorista_cantidad` (jsonb con `[{desde, pct}, ...]`). Se aplican en el carrito de la web y ganan sobre el pct base si dan más descuento.
+
+**Migración SQL** (`scripts/migrations-mayorista-descuento.sql`, ya corrida):
+- `configuracion_empresa.descuento_mayorista_pct` (numeric, default 0)
+- `configuracion_empresa.escalas_mayorista_cantidad` (jsonb, opcional)
+- `productos.descuento_mayorista_pct_override` (numeric nullable)
+- `productos.nombre_web` (text nullable — nombre alternativo para la tienda, si el interno tiene códigos raros)
+
+**Business layer:**
+- `packages/business/src/mayorista.ts`: helper `calcularPrecioMayorista({precioCF, descuentoOverridePct, descuentoGlobalPct, escalas, cantidad, redondeo})` con precedencia + 13 tests unitarios (65 tests totales en el package).
+- `packages/db`: método `productos.setDescuentoMayoristaMasivo(filtro, pct|null)` (mock + supabase) para el modal Ajuste masivo.
+
+**Admin — Fase 1 y 2 previas (fotos inline + botón Ecommerce en toolbar):**
+- Botón "Ecommerce" movido al toolbar principal del admin.
+- Componente `ImagenesProducto` embebido en el desplegable "Más opciones (e-commerce)" del detalle de producto (`/admin/productos`).
+
+**Admin — `/admin/web` rediseñado:**
+- Layout de 2 columnas estilo `/admin/productos` (tabla 65% + panel detalle 35%). Tabla compacta: `text-xs`, `py-1`, header sticky, borders `slate-200/300`, hover azul, selección `bg-blue-100`.
+- Sección arriba **"Precios de la tienda web"**: descuento general + rebajas por cantidad + preview con producto de $1000 para probar cómo queda.
+- Tabla con columnas: Toggle Web · Artículo · Código · Grupo · **Precio local** · **Desc.** · **Precio web**. Toggle inline por fila (stopPropagation para no romper la selección).
+- **Panel detalle derecho** al clickear una fila — datos ORIENTADOS al ecommerce:
+  - Header con toggle Publicado/Oculto + link "Editar todo →" a `/productos/[id]`.
+  - Precio final en la tienda @1u destacado + preview por escalas de cantidad.
+  - **Ganancia sobre el costo** al precio mayorista (alerta roja si el descuento lo deja negativo). Respeta permiso `productos.ver_costo`.
+  - **Nombre para la tienda** (nombre_web) — opcional, permite mostrar en la web un nombre distinto al interno.
+  - Descuento propio del producto (%) con botón "borrar" para volver al general.
+  - Fotos (mismo componente ImagenesProducto).
+  - Descripción corta y larga.
+  - Reglas de venta web (solo por bulto / compra mínima / incremento).
+- Modal **Ajuste masivo** con filtros (publicados / todos / categoría / proveedor) para setear o limpiar descuentos propios en muchos productos a la vez.
+
+**Terminología humana + tooltips (para Agus, no dev):**
+- Reemplazos: "override" → "descuento propio", "global" → "general", "escalas" → "rebajas por cantidad", "CF" → "precio local", "mayorista" → "precio final en la tienda", "margen sobre costo" → "ganancia sobre el costo".
+- Componente `<InfoTip text="..." />` (`apps/admin/src/components/info-tip.tsx`) con tooltip vía **portal a `document.body` + `position: fixed`** al lado de labels complejos. Iteración importante: primera versión usaba `title` HTML nativo (delay 1s, no aparecía); segunda usaba `absolute` (quedaba clipeado por el `overflow-y: auto` del panel derecho); versión final va por portal + coordenadas calculadas desde `getBoundingClientRect` para no clipearse por ningún contenedor, con auto-flip vertical/horizontal según espacio disponible. Incluye `normal-case tracking-normal` para no heredar el `uppercase` de los labels.
+
+**apps/web (catálogo público):**
+- Catálogo y ficha de producto leen CF + configuración y calculan el precio mayorista dinámicamente con el helper.
+- Escalas por cantidad se resuelven al agregar al carrito (snapshot en el store).
+- Usa `nombre_web ?? nombre` en catálogo, detalle, alt de imágenes y en el nombre que va al carrito → mensaje WhatsApp.
+
+**Bugs corregidos post-merge (mismo día):**
+- **Precios en $0 en toda la tabla de `/admin/web`** — combinación de 3 causas encadenadas:
+  1. Mi query buscaba solo por UUID canónico, ignorando el id legacy `'lp_cf'` que usa el PoS por compatibilidad con el mock. Fix: buscar por `[UUID, 'lp_cf']`.
+  2. Hacía `preciosDe(p.id)` en un for → 1907 requests en serie ~3 min, mostraba $0 mientras cargaba. Fix: usar `preciosDeLista(id)` que ya está paginado internamente + `Promise.allSettled` + `staleTime: 60s`. **Solo 2 queries en paralelo.**
+  3. La columna `producto_lista_precio.lista_precio_id` es tipo `uuid`. El id legacy `'lp_cf'` rompía el WHERE con `invalid input syntax for type uuid`. Con `Promise.all` común, esa query rota tiraba abajo también la del UUID canónico → todos los precios en $0. Fix: `Promise.allSettled` para descartar la que falla y quedarse con la que funcionó.
+- Verificado con SQL diagnóstico en producción: los precios están cargados con el UUID canónico `00000000-0000-0000-0000-000000000020` (el script de import los grabó ahí). El `'lp_cf'` es un vestigio del mock de dev que no existe en BD real.
+
+**Storage de fotos:**
+- Ya existía la compresión client-side: `1200px máx × JPEG calidad 0.82` → 150-300 KB por foto (vs 3-5 MB del original).
+- Bucket `producto-imagenes` con policies OK (migración `0004`).
+- Capacidad: Supabase free = 1 GB. Con 3 fotos/producto y ~500 productos publicados = ~375 MB (cómodo). Empezar a monitorear cuando lleguen a ~1200 fotos.
+
+**Lecciones de esta iteración:**
+- **Verificar la BD antes de asumir**. Los tres bugs de precios se hubieran diagnosticado en 30 segundos corriendo un SELECT diagnóstico en Supabase en vez de asumir en base al código. El SQL fue lo que destrabó el problema — mostró que los datos SÍ estaban con el UUID canónico, así que el problema era del código y no de la data.
+- **`Promise.all` es peligroso cuando cada promesa puede fallar por su cuenta**. `Promise.allSettled` es el default más seguro cuando querés "traer lo que se pueda". El fallback silencioso vale más que la corrección estricta cuando el que falla es opcional.
+- **1 query en un for = latencia × N**. Para cualquier fetch por-item con N > 10 productos, verificar si existe un método bulk paginado (`preciosDeLista`, `imagenesDeMuchos`, etc). Con >100 productos, un for con await se convierte en decenas de segundos.
+- **Los tooltips HTML nativos (`title`) son inútiles en producción**. Delay de ~1s y a veces no aparecen. Y los tooltips con `position: absolute` se clipean con cualquier contenedor scrollable. Solución para ambos problemas: portal + position fixed calculada.
+- **Terminología con jerga rompe el software cuando el usuario final no es dev**. "Override" no significa nada para Agus. Ni "escalas". Ni "CF". Cada label es una decisión de UX. Los tooltips info son el complemento para las cosas que no se pueden simplificar sin perder precisión.
+- **Migraciones no-destructivas + código que tolera columnas ausentes** te permite mergear sin coordinar el timing exacto de la migración SQL. Todos los campos nuevos usan `ADD COLUMN IF NOT EXISTS` con defaults sanos, y el código lee con `?? 0` / `?? undefined`. La única cosa que rompe si no está la migración es un UPDATE que incluya los campos nuevos — toast de error, no pérdida de datos.
