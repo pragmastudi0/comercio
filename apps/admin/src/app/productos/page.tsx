@@ -206,8 +206,8 @@ function ProductosPageInner() {
     });
   }, [seleccionadoId]);
 
-  const categoriaNombre = (id: string) =>
-    categoriasQ.data?.find((c) => c.id === id)?.nombre ?? '—';
+  const categoriaNombre = (id: string | null | undefined) =>
+    (id && categoriasQ.data?.find((c) => c.id === id)?.nombre) || '—';
 
   return (
     <div className="flex h-[calc(100vh-180px)] flex-col gap-2 px-3 py-2 lg:flex-row">
@@ -709,11 +709,13 @@ function PanelProducto({
         nombre,
         codigo_interno: codigo,
         costo,
-        categoria_id: categoriaId || undefined,
         // null explícito (no undefined) para que si el user eligió
-        // "— Ninguno —" el UPDATE sí borre el proveedor asignado.
-        // Con undefined, PostgREST no incluye el campo en el UPDATE y
-        // el valor viejo persiste — el usuario ve que "no se guarda".
+        // "— Ninguna —" / "— Ninguno —" el UPDATE sí borre el valor
+        // asignado. Con undefined, PostgREST no incluye el campo y el
+        // valor viejo persiste — el usuario ve que "no se guarda".
+        // Requiere que la columna sea nullable en BD (migraciones
+        // scripts/migrations-categoria-nullable.sql y proveedor-nullable).
+        categoria_id: categoriaId || null,
         proveedor_id: proveedorId || null,
         activo,
         promo_texto: promoTexto.trim() || undefined,
@@ -1787,10 +1789,11 @@ function PanelNuevoProducto({
       const p = await db.productos.create({
         codigo_interno: codigo.trim(),
         nombre: nombre.trim(),
-        categoria_id: categoriaId,
-        // null explícito: el producto se crea sin proveedor asignado.
-        // Requiere que productos.proveedor_id sea nullable en BD
-        // (migración scripts/migrations-proveedor-nullable.sql).
+        // El form marca categoría como obligatoria (asterisco rojo +
+        // validación del botón), pero por defensa mandamos null en vez
+        // de string vacío si de alguna forma llega vacío — evita error
+        // "invalid input syntax for type uuid" desde PostgREST.
+        categoria_id: categoriaId || null,
         proveedor_id: proveedorId || null,
         costo,
         publicado_web: false,

@@ -49,7 +49,7 @@ export function productoToForm(p: Producto): ProductoFormValues {
     nombre: p.nombre,
     descripcion: p.descripcion ?? '',
     descripcion_larga: p.descripcion_larga ?? '',
-    categoria_id: p.categoria_id,
+    categoria_id: p.categoria_id ?? '',
     proveedor_id: p.proveedor_id ?? '',
     costo: p.costo,
     publicado_web: p.publicado_web,

@@ -80,8 +80,11 @@ export default function EditarProductoPage() {
         nombre: values.nombre,
         descripcion: values.descripcion || undefined,
         descripcion_larga: values.descripcion_larga || undefined,
-        categoria_id: values.categoria_id,
-        proveedor_id: values.proveedor_id || undefined,
+        // null explícito para que "— Ninguna —" / "— Ninguno —" borren
+        // el valor asignado. Con undefined PostgREST omite la columna
+        // y el valor viejo persiste.
+        categoria_id: values.categoria_id || null,
+        proveedor_id: values.proveedor_id || null,
         costo: values.costo,
         publicado_web: values.publicado_web,
         activo: values.activo,

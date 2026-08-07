@@ -105,6 +105,9 @@ function CatalogoInner() {
   const categoriasConProductos = useMemo(() => {
     const conteo = new Map<string, number>();
     for (const p of todosPublicadosQ.data ?? []) {
+      // Los productos sin categoría (categoria_id null) no cuentan para
+      // el selector de categorías del catálogo.
+      if (!p.categoria_id) continue;
       conteo.set(p.categoria_id, (conteo.get(p.categoria_id) ?? 0) + 1);
     }
     return categorias
@@ -137,7 +140,8 @@ function CatalogoInner() {
     });
     return { precio: r.precio, pctAplicado: r.pctAplicado, precioCF: cf };
   }
-  function categoriaNombre(id: string) {
+  function categoriaNombre(id: string | null | undefined) {
+    if (!id) return '';
     return categorias.find((c) => c.id === id)?.nombre ?? '';
   }
 

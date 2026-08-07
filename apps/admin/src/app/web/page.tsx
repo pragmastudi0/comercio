@@ -153,8 +153,8 @@ function WebPageInner() {
   const hastaIdx = Math.min(desdeIdx + PAGE_SIZE, totalVisibles);
   const pagina = visibles.slice(desdeIdx, hastaIdx);
 
-  const categoriaNombre = (id: string) =>
-    categoriasQ.data?.find((c) => c.id === id)?.nombre ?? '—';
+  const categoriaNombre = (id: string | null | undefined) =>
+    (id && categoriasQ.data?.find((c) => c.id === id)?.nombre) || '—';
 
   // Cuando cambia la lista visible y el seleccionado no está, elegir el
   // primero — mismo patrón que /admin/productos.

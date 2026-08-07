@@ -125,12 +125,13 @@ export type Producto = {
   nombre: string;
   descripcion?: string;
   descripcion_larga?: string;
-  categoria_id: ID;
-  // null explícito además de undefined: al desasignar un proveedor
+  // null explícito además de undefined: al desasignar la categoría
   // desde el admin el UPDATE manda null (no omitir la columna) para
   // que sí borre el valor en BD. La FK tiene ON DELETE SET NULL así
-  // que al borrar un proveedor los productos que lo tenían quedan
+  // que al borrar una categoría los productos que la tenían quedan
   // acá como null automáticamente.
+  categoria_id?: ID | null;
+  // Mismo tratamiento que categoría — nullable con ON DELETE SET NULL.
   proveedor_id?: ID | null;
   costo: number;
   /** Última vez que se modificó el costo. Mantenido por trigger en DB

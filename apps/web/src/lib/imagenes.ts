@@ -41,14 +41,16 @@ export const CATEGORIA_VISUAL: Record<string, CategoriaVisual> = {
   },
 };
 
-export function visualDeCategoria(categoriaId: string): CategoriaVisual {
-  return (
-    CATEGORIA_VISUAL[categoriaId] ?? {
-      bg: 'bg-muted/40',
-      emojiPrincipal: '📦',
-      emojis: ['📦'],
-    }
-  );
+export function visualDeCategoria(
+  categoriaId: string | null | undefined,
+): CategoriaVisual {
+  const fallback: CategoriaVisual = {
+    bg: 'bg-muted/40',
+    emojiPrincipal: '📦',
+    emojis: ['📦'],
+  };
+  if (!categoriaId) return fallback;
+  return CATEGORIA_VISUAL[categoriaId] ?? fallback;
 }
 
 /** Mapeo de palabras clave → emoji para productos individuales. */
@@ -103,7 +105,10 @@ const KEYWORD_TO_EMOJI: Array<[RegExp, string]> = [
   [/candado/i, '🔒'],
 ];
 
-export function emojiProducto(nombre: string, categoriaId?: string): string {
+export function emojiProducto(
+  nombre: string,
+  categoriaId?: string | null,
+): string {
   for (const [re, emoji] of KEYWORD_TO_EMOJI) {
     if (re.test(nombre)) return emoji;
   }
